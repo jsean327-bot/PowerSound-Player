@@ -28,10 +28,9 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        // 32-bit float output path: decoded audio is not squeezed down to 16-bit.
-        @Suppress("DEPRECATION")
+        // Plain 16-bit PCM output: float output made some FLAC files distort on some phones.
         val renderers = DefaultRenderersFactory(this)
-            .setEnableAudioFloatOutput(true)
+            .setEnableAudioFloatOutput(false)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
 
         val player = ExoPlayer.Builder(this, renderers)
