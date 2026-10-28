@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -63,6 +65,7 @@ fun NowPlayingScreen(
     Box(
         Modifier
             .fillMaxSize()
+            .background(colors.background)
             .background(
                 Brush.verticalGradient(
                     listOf(colors.primary.copy(alpha = 0.22f), colors.background, colors.background)
@@ -72,12 +75,14 @@ fun NowPlayingScreen(
         Column(
             Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Close", modifier = Modifier.size(32.dp))
+                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Close", tint = colors.onBackground, modifier = Modifier.size(32.dp))
                 }
                 Text(
                     "Now Playing",
@@ -104,6 +109,7 @@ fun NowPlayingScreen(
 
             Text(
                 np?.title ?: "",
+                color = colors.onBackground,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 maxLines = 2,
@@ -169,7 +175,7 @@ fun NowPlayingScreen(
                     )
                 }
                 IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) {
-                    Icon(Icons.Rounded.SkipPrevious, contentDescription = "Previous", modifier = Modifier.size(40.dp))
+                    Icon(Icons.Rounded.SkipPrevious, contentDescription = "Previous", tint = colors.onBackground, modifier = Modifier.size(40.dp))
                 }
                 FilledIconButton(
                     onClick = onTogglePlay,
@@ -187,7 +193,7 @@ fun NowPlayingScreen(
                     )
                 }
                 IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {
-                    Icon(Icons.Rounded.SkipNext, contentDescription = "Next", modifier = Modifier.size(40.dp))
+                    Icon(Icons.Rounded.SkipNext, contentDescription = "Next", tint = colors.onBackground, modifier = Modifier.size(40.dp))
                 }
                 IconButton(onClick = onRepeat) {
                     Icon(
