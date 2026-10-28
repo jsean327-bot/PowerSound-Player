@@ -8,9 +8,16 @@ import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.RenderersFactory
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import com.powersound.player.audio.AudioEngine
+import com.powersound.player.audio.PowerSoundProcessor
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.Futures
@@ -28,10 +35,20 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        // Plain 16-bit PCM output: float output made some FLAC files distort on some phones.
-        val renderers = DefaultRenderersFactory(this)
-            .setEnableAudioFloatOutput(false)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        AudioEngine.init(this)
+
+        // Audio chain: decoder -> PowerSound DSP (EQ, bass/treble, preamp, limiter) -> 16-bit output.
+        // 16-bit PCM output kept on purpose: float output made some FLAC files distort on some phones.
+        val renderers = RenderersFactory { handler, _, audioListener, _, _ ->
+            @Suppress("DEPRECATION")
+            val sink = DefaultAudioSink.Builder()
+                .setEnableFloatOutput(false)
+                .setAudioProcessors(arrayOf<AudioProcessor>(PowerSoundProcessor()))
+                .build()
+            arrayOf<Renderer>(
+                MediaCodecAudioRenderer(this, MediaCodecSelector.DEFAULT, handler, audioListener, sink)
+            )
+        }
 
         val player = ExoPlayer.Builder(this, renderers)
             .setAudioAttributes(

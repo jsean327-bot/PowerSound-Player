@@ -72,6 +72,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init {
+        com.powersound.player.audio.AudioEngine.init(app)
         connect()
         viewModelScope.launch {
             while (isActive) {

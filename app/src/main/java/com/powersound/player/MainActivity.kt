@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
@@ -53,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.powersound.player.data.Detail
 import com.powersound.player.ui.DetailScreen
+import com.powersound.player.ui.EqualizerScreen
 import com.powersound.player.ui.LibraryScreen
 import com.powersound.player.ui.MiniPlayer
 import com.powersound.player.ui.NowPlayingScreen
@@ -108,9 +110,11 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     val player by vm.player.collectAsStateWithLifecycle()
     var detail by remember { mutableStateOf<Detail?>(null) }
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
+    var showEq by rememberSaveable { mutableStateOf(false) }
 
-    BackHandler(enabled = detail != null && !showNowPlaying) { detail = null }
-    BackHandler(enabled = showNowPlaying) { showNowPlaying = false }
+    BackHandler(enabled = detail != null && !showNowPlaying && !showEq) { detail = null }
+    BackHandler(enabled = showNowPlaying && !showEq) { showNowPlaying = false }
+    BackHandler(enabled = showEq) { showEq = false }
 
     val currentId = player.nowPlaying?.songId
 
@@ -140,6 +144,13 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                         }
                     },
                     actions = {
+                        IconButton(onClick = { showEq = true }) {
+                            Icon(
+                                Icons.Rounded.Equalizer,
+                                contentDescription = "Equalizer",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                         if (detail == null) {
                             IconButton(onClick = { vm.loadLibrary(force = true) }) {
                                 Icon(Icons.Rounded.Refresh, contentDescription = "Rescan library")
@@ -191,8 +202,17 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 onPrevious = vm::previous,
                 onSeek = vm::seekTo,
                 onShuffle = vm::toggleShuffle,
-                onRepeat = vm::cycleRepeat
+                onRepeat = vm::cycleRepeat,
+                onOpenEq = { showEq = true }
             )
+        }
+
+        AnimatedVisibility(
+            visible = showEq,
+            enter = slideInVertically { it },
+            exit = slideOutVertically { it }
+        ) {
+            EqualizerScreen(onClose = { showEq = false })
         }
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -57,7 +58,8 @@ fun NowPlayingScreen(
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
     onShuffle: () -> Unit,
-    onRepeat: () -> Unit
+    onRepeat: () -> Unit,
+    onOpenEq: () -> Unit
 ) {
     val np = state.nowPlaying
     val colors = MaterialTheme.colorScheme
@@ -91,7 +93,9 @@ fun NowPlayingScreen(
                     style = MaterialTheme.typography.titleSmall,
                     color = colors.onSurfaceVariant
                 )
-                Spacer(Modifier.size(48.dp))
+                IconButton(onClick = onOpenEq) {
+                    Icon(Icons.Rounded.Equalizer, contentDescription = "Equalizer", tint = colors.primary)
+                }
             }
 
             Spacer(Modifier.weight(0.5f))
