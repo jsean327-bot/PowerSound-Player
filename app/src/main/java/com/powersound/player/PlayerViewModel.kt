@@ -24,6 +24,8 @@ import com.powersound.player.data.MusicRepository
 import com.powersound.player.data.Song
 import com.powersound.player.data.Stats
 import com.powersound.player.data.StatsStore
+import com.powersound.player.data.Updater
+import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -83,6 +85,16 @@ data class LibraryState(
 
 enum class Tab { LIBRARY, EQ, SEARCH }
 
+sealed class UpdateState {
+    data object Idle : UpdateState()
+    data object Checking : UpdateState()
+    data object UpToDate : UpdateState()
+    data class Available(val info: Updater.UpdateInfo) : UpdateState()
+    data class Downloading(val info: Updater.UpdateInfo, val progress: Float) : UpdateState()
+    data class Ready(val info: Updater.UpdateInfo, val file: File, val needsPermission: Boolean) : UpdateState()
+    data class Failed(val message: String) : UpdateState()
+}
+
 /** Pages of the Library tab, kept as a back stack. */
 sealed class Screen(val id: String) {
     data object Home : Screen("home")
@@ -98,6 +110,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _player = MutableStateFlow(PlayerUiState())
     val player: StateFlow<PlayerUiState> = _player.asStateFlow()
+
+    private val _update = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    val update: StateFlow<UpdateState> = _update.asStateFlow()
 
     private val _position = MutableStateFlow(PlaybackPos())
     val position: StateFlow<PlaybackPos> = _position.asStateFlow()
@@ -128,6 +143,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         AudioEngine.init(app)
         StatsStore.init(app)
         connect()
+        checkForUpdate(manual = false)
         viewModelScope.launch {
             while (isActive) {
                 val c = controller
@@ -361,6 +377,66 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             controller?.pause()
             _player.value = _player.value.copy(sleepEndsAt = null)
         }
+    }
+
+    // ---- in-app updates ----
+
+    /** Automatic check when the app opens (silent if nothing new), or from the menu. */
+    fun checkForUpdate(manual: Boolean) {
+        val cur = _update.value
+        if (cur is UpdateState.Checking || cur is UpdateState.Downloading) return
+        if (manual) _update.value = UpdateState.Checking
+        viewModelScope.launch {
+            val result = runCatching { Updater.check(getApplication()) }
+            _update.value = when {
+                result.isFailure -> if (manual) UpdateState.Failed(
+                    "Couldn't reach GitHub. Check your internet connection and try again."
+                ) else UpdateState.Idle
+                result.getOrNull() != null -> UpdateState.Available(result.getOrNull()!!)
+                manual -> UpdateState.UpToDate
+                else -> UpdateState.Idle
+            }
+        }
+    }
+
+    fun downloadUpdate() {
+        val info = when (val cur = _update.value) {
+            is UpdateState.Available -> cur.info
+            is UpdateState.Ready -> cur.info
+            else -> return
+        }
+        _update.value = UpdateState.Downloading(info, 0f)
+        viewModelScope.launch {
+            try {
+                var last = -1
+                val file = Updater.download(getApplication(), info) { p ->
+                    val pct = (p * 100).toInt()
+                    if (pct != last) {
+                        last = pct
+                        _update.value = UpdateState.Downloading(info, p)
+                    }
+                }
+                _update.value = UpdateState.Ready(info, file, needsPermission = false)
+                installUpdate()
+            } catch (e: Exception) {
+                _update.value = UpdateState.Failed("Download failed: ${e.message ?: "unknown error"}")
+            }
+        }
+    }
+
+    fun installUpdate() {
+        val cur = _update.value as? UpdateState.Ready ?: return
+        val started = try {
+            Updater.install(getApplication(), cur.file)
+        } catch (e: Exception) {
+            _update.value = UpdateState.Failed("Couldn't open the installer: ${e.message ?: ""}")
+            return
+        }
+        _update.value = cur.copy(needsPermission = !started)
+    }
+
+    fun dismissUpdate() {
+        if (_update.value !is UpdateState.Downloading) _update.value = UpdateState.Idle
     }
 
     // ---- state ----

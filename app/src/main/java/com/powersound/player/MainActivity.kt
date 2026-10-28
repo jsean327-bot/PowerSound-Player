@@ -80,6 +80,7 @@ import com.powersound.player.ui.SleepTimerDialog
 import com.powersound.player.ui.SongActionsSheet
 import com.powersound.player.ui.SongListScreen
 import com.powersound.player.ui.TreeScreen
+import com.powersound.player.ui.UpdateDialog
 import com.powersound.player.ui.color
 import com.powersound.player.ui.icon
 import kotlin.coroutines.cancellation.CancellationException
@@ -136,6 +137,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     val library by vm.library.collectAsStateWithLifecycle()
     val player by vm.player.collectAsStateWithLifecycle()
     val stats by vm.stats.collectAsStateWithLifecycle()
+    val update by vm.update.collectAsStateWithLifecycle()
 
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -248,6 +250,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             onRescan = { vm.loadLibrary(force = true) },
             onSleep = { showSleep = true },
             onEqualizer = { showNowPlaying = false; vm.tab = Tab.EQ },
+            onCheckUpdate = { vm.checkForUpdate(manual = true) },
             sleepLabel = left?.let { "$it min left" }
         )
     }
@@ -269,6 +272,12 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             onDismiss = { showSleep = false }
         )
     }
+    UpdateDialog(
+        state = update,
+        onDownload = vm::downloadUpdate,
+        onInstall = vm::installUpdate,
+        onDismiss = vm::dismissUpdate
+    )
     songMenu?.let { s ->
         SongActionsSheet(
             song = s,

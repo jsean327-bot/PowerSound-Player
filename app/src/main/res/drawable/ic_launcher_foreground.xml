@@ -1,16 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Equalizer bars: the PowerSound mark -->
+<!-- PowerSound icon: black disc with a blue halo and a treble clef -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path android:fillColor="@color/accent_light"
-        android:pathData="M31,50 h6 a3,3 0 0 1 3,3 v12 a3,3 0 0 1 -3,3 h-6 a3,3 0 0 1 -3,-3 v-12 a3,3 0 0 1 3,-3 z" />
-    <path android:fillColor="@color/accent"
-        android:pathData="M43,38 h6 a3,3 0 0 1 3,3 v32 a3,3 0 0 1 -3,3 h-6 a3,3 0 0 1 -3,-3 v-32 a3,3 0 0 1 3,-3 z" />
-    <path android:fillColor="@color/accent_light"
-        android:pathData="M55,30 h6 a3,3 0 0 1 3,3 v44 a3,3 0 0 1 -3,3 h-6 a3,3 0 0 1 -3,-3 v-44 a3,3 0 0 1 3,-3 z" />
-    <path android:fillColor="@color/accent"
-        android:pathData="M67,42 h6 a3,3 0 0 1 3,3 v24 a3,3 0 0 1 -3,3 h-6 a3,3 0 0 1 -3,-3 v-24 a3,3 0 0 1 3,-3 z" />
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M54,20.5 a33.5,33.5 0 1,1 0,67.0 a33.5,33.5 0 1,1 0,-67.0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="54" android:centerY="54" android:gradientRadius="33.5">
+                <item android:offset="0.78" android:color="#008EB8F5"/>
+                <item android:offset="0.87" android:color="#F29CC4FF"/>
+                <item android:offset="1" android:color="#006E9BE0"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M54,25.0 a29.0,29.0 0 1,1 0,58.0 a29.0,29.0 0 1,1 0,-58.0z"
+        android:strokeColor="#D9B8D4FF" android:strokeWidth="0.6">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="54" android:startY="25" android:endX="54" android:endY="83">
+                <item android:offset="0" android:color="#FF000000"/>
+                <item android:offset="1" android:color="#FF1C1C1F"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M40.25,36.75 A20.50,20.50 0 1,1 48.71,74.92 M39.25,35.01 A22.50,22.50 0 1,1 48.54,76.91 M38.25,33.28 A24.50,24.50 0 1,1 48.36,78.91 M37.25,31.55 A26.50,26.50 0 1,1 48.19,80.90" android:strokeColor="#73FFFFFF" android:strokeWidth="0.45" android:strokeLineCap="round"/>
+    <path android:pathData="M36.00,38.80 L36.54,40.25 L38.09,40.32 L36.88,41.29 L37.29,42.78 L36.00,41.92 L34.71,42.78 L35.12,41.29 L33.91,40.32 L35.46,40.25 Z M41.00,35.70 L41.32,36.56 L42.24,36.60 L41.52,37.17 L41.76,38.05 L41.00,37.55 L40.24,38.05 L40.48,37.17 L39.76,36.60 L40.68,36.56 Z M67.00,38.40 L67.39,39.46 L68.52,39.51 L67.64,40.21 L67.94,41.29 L67.00,40.67 L66.06,41.29 L66.36,40.21 L65.48,39.51 L66.61,39.46 Z M35.00,55.50 L35.37,56.49 L36.43,56.54 L35.60,57.19 L35.88,58.21 L35.00,57.63 L34.12,58.21 L34.40,57.19 L33.57,56.54 L34.63,56.49 Z M72.00,50.80 L72.30,51.59 L73.14,51.63 L72.48,52.16 L72.71,52.97 L72.00,52.50 L71.29,52.97 L71.52,52.16 L70.86,51.63 L71.70,51.59 Z M66.00,60.20 L66.44,61.39 L67.71,61.44 L66.72,62.23 L67.06,63.46 L66.00,62.76 L64.94,63.46 L65.28,62.23 L64.29,61.44 L65.56,61.39 Z M38.00,68.90 L38.27,69.63 L39.05,69.66 L38.44,70.14 L38.65,70.89 L38.00,70.46 L37.35,70.89 L37.56,70.14 L36.95,69.66 L37.73,69.63 Z" android:fillColor="#D9FFFFFF"/>
+    <path android:pathData="M56.81 65.68Q57.91 69.55 57.91 72.03Q57.91 73.99 56.55 75.24Q55.18 76.5 53.22 76.5Q51.37 76.5 50.01 75.41Q48.64 74.32 48.64 72.77Q48.64 71.66 49.4 70.68Q50.16 69.7 51.25 69.7Q52.34 69.7 53.02 70.5Q53.7 71.29 53.7 72.33Q53.7 74.62 51.12 74.62Q51.78 75.65 53.26 75.65Q53.81 75.65 54.39 75.48Q54.96 75.32 55.59 74.91Q56.21 74.51 56.6 73.64Q56.99 72.77 56.99 71.55Q56.99 70.77 55.96 65.97Q55.14 66.19 53.92 66.19Q50.34 66.19 47.77 63.53Q45.2 60.87 45.2 57.18Q45.2 55.89 45.63 54.56Q46.05 53.23 46.59 52.21Q47.13 51.19 48.18 49.92Q49.23 48.64 49.95 47.89Q50.67 47.13 51.97 45.84Q51.12 42.81 51.12 40.3Q51.12 36.97 52.34 34.74Q53.55 32.5 54.77 32.5Q55.14 32.5 55.6 32.98Q56.07 33.46 56.51 34.31Q56.95 35.16 57.27 36.55Q57.58 37.93 57.58 39.52Q57.58 45.39 53.41 49.24L54.37 53.59Q54.96 53.48 55.44 53.48Q57.69 53.48 59.24 55.31Q60.8 57.14 60.8 59.76Q60.8 64.12 56.81 65.68ZM56.51 38.19Q56.51 36.16 55.33 36.16Q54 36.16 53.07 38.12Q52.15 40.07 52.15 42.47Q52.15 44.03 52.63 45.17Q54.03 44.32 55.27 42.12Q56.51 39.93 56.51 38.19ZM59.17 61.02Q59.17 58.99 57.99 57.77Q56.81 56.55 54.92 56.55L56.58 64.9Q59.17 63.83 59.17 61.02ZM55.81 65.12 54.11 56.62Q53.11 56.85 52.28 57.84Q51.45 58.84 51.45 59.91Q51.45 60.47 51.67 61Q51.89 61.54 52.21 61.91Q52.52 62.28 52.85 62.57Q53.18 62.87 53.41 63Q53.63 63.13 53.63 63.13L53.33 63.31Q52.11 62.98 51.02 61.83Q49.93 60.69 49.93 58.95Q49.93 57.22 51.02 55.76Q52.11 54.3 53.44 53.82L52.78 49.86Q46.98 54.7 46.98 59.21Q46.98 61.91 49.01 63.72Q51.04 65.53 53.63 65.53Q54.26 65.53 55.81 65.12Z" android:fillColor="#FFFFFFFF"/>
 </vector>

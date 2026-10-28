@@ -11,8 +11,11 @@ android {
         applicationId = "com.powersound.player"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2.0"
+        // GitHub Actions passes its run number, so every build is a new, higher version
+        // and the in-app updater can compare it with the latest GitHub release.
+        val buildNumber = (project.findProperty("buildNumber") as String?)?.toIntOrNull() ?: 0
+        versionCode = 100 + buildNumber
+        versionName = "1.$buildNumber"
     }
 
     // Fixed signing key: every new build installs over the previous one

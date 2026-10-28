@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -99,6 +100,7 @@ fun MenuSheet(
     onRescan: () -> Unit,
     onSleep: () -> Unit,
     onEqualizer: () -> Unit,
+    onCheckUpdate: () -> Unit,
     sleepLabel: String?
 ) {
     val context = LocalContext.current
@@ -114,6 +116,7 @@ fun MenuSheet(
             SheetItem(Icons.Rounded.Equalizer, "Equalizer") { onDismiss(); onEqualizer() }
             SheetItem(Icons.Rounded.Timer, if (sleepLabel != null) "Sleep timer ($sleepLabel)" else "Sleep timer") { onDismiss(); onSleep() }
             SheetItem(Icons.Rounded.Refresh, "Rescan library") { onDismiss(); onRescan() }
+            SheetItem(Icons.Rounded.SystemUpdate, "Check for updates") { onDismiss(); onCheckUpdate() }
         }
     }
 }
