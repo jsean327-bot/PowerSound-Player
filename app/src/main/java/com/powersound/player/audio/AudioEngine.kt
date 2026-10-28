@@ -106,13 +106,13 @@ object AudioEngine {
 
     fun filtersFor(s: EqSettings, fs: Double): List<BiquadCoeffs> {
         val list = ArrayList<BiquadCoeffs>()
-        if (kotlin.math.abs(s.bassDb) > 0.01) {
+        if (s.toneEnabled && kotlin.math.abs(s.bassDb) > 0.01) {
             list.add(Biquad.design(BandType.LOW_SHELF, fs, BASS_FREQ, s.bassDb, SHELF_Q))
         }
         for (b in s.bands) {
             if (kotlin.math.abs(b.gainDb) > 0.01) list.add(Biquad.design(b.type, fs, b.freq, b.gainDb, b.q))
         }
-        if (kotlin.math.abs(s.trebleDb) > 0.01) {
+        if (s.toneEnabled && kotlin.math.abs(s.trebleDb) > 0.01) {
             list.add(Biquad.design(BandType.HIGH_SHELF, fs, TREBLE_FREQ, s.trebleDb, SHELF_Q))
         }
         return list

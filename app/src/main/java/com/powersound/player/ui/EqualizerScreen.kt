@@ -2,237 +2,292 @@ package com.powersound.player.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.powersound.player.audio.AudioEngine
 import com.powersound.player.audio.BUILT_IN_PRESETS
 import com.powersound.player.audio.BandType
 import com.powersound.player.audio.EqBand
-import com.powersound.player.audio.EqPreset
 import com.powersound.player.audio.EqSettings
 import com.powersound.player.audio.MAX_GAIN_DB
+import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.sin
+
+private val Panel = Color(0xFF16161D).copy(alpha = 0.92f)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EqualizerScreen(onClose: () -> Unit) {
+fun EqualizerScreen(bottomInset: Dp) {
     val settings by AudioEngine.settings.collectAsState()
-    val custom by AudioEngine.customPresets.collectAsState()
-    val colors = MaterialTheme.colorScheme
-    var expandedBand by remember { mutableStateOf(-1) }
+    var editBand by remember { mutableIntStateOf(-1) }
+    var showPresets by remember { mutableStateOf(false) }
     var showSave by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
 
     fun edit(change: (EqSettings) -> EqSettings) = AudioEngine.update(change)
-    fun editBand(i: Int, change: (EqBand) -> EqBand) = edit { s ->
-        s.copy(
-            bands = s.bands.mapIndexed { idx, b -> if (idx == i) change(b) else b },
-            presetName = "Custom"
+    fun editBandAt(i: Int, change: (EqBand) -> EqBand) = edit { s ->
+        s.copy(bands = s.bands.mapIndexed { idx, b -> if (idx == i) change(b) else b }, presetName = "Custom")
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .statusBarsPadding()
+            .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = bottomInset + 10.dp)
+    ) {
+        // ---- sliders panel ----
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(Panel)
+                .padding(vertical = 12.dp)
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(250.dp)
+                    .padding(horizontal = 4.dp)
+            ) {
+                SliderColumn(
+                    label = "Preamp",
+                    value = settings.preampDb,
+                    enabled = settings.enabled,
+                    onLabel = null,
+                    onChange = { v -> edit { it.copy(preampDb = v) } },
+                    modifier = Modifier.weight(1.25f)
+                )
+                Box(
+                    Modifier
+                        .padding(vertical = 8.dp)
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(Color.White.copy(alpha = 0.12f))
+                )
+                settings.bands.forEachIndexed { i, band ->
+                    SliderColumn(
+                        label = freqLabel(band.freq),
+                        value = band.gainDb,
+                        enabled = settings.enabled,
+                        onLabel = { editBand = i },
+                        onChange = { v -> editBandAt(i) { it.copy(gainDb = v) } },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            ResponseCurve(settings)
+            Text(
+                statusLine(settings),
+                color = Color.White.copy(alpha = 0.75f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // ---- controls: toggles | preset + knobs ----
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(Panel)
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ToggleChip("Equ", settings.enabled) { edit { it.copy(enabled = !it.enabled) } }
+                ToggleChip("Tone", settings.toneEnabled) { edit { it.copy(toneEnabled = !it.toneEnabled) } }
+                ToggleChip("Limit", settings.limiter) { edit { it.copy(limiter = !it.limiter) } }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(50))
+                            .border(1.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(50))
+                            .clickable { showPresets = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (settings.presetName == "Flat") "Preset" else settings.presetName,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                    Box {
+                        IconButton(onClick = { menu = true }) {
+                            Icon(Icons.Rounded.MoreVert, contentDescription = "More", tint = Color.White)
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Auto headroom") },
+                                leadingIcon = { Checkbox(checked = settings.autoHeadroom, onCheckedChange = null) },
+                                onClick = { edit { it.copy(autoHeadroom = !it.autoHeadroom) } }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Save as preset") },
+                                onClick = { menu = false; showSave = true }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Reset to flat") },
+                                onClick = { menu = false; AudioEngine.resetAll() }
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
+                    Knob("Bass", settings.bassDb, settings.enabled && settings.toneEnabled) { v -> edit { it.copy(bassDb = v) } }
+                    Knob("Treble", settings.trebleDb, settings.enabled && settings.toneEnabled) { v -> edit { it.copy(trebleDb = v) } }
+                }
+            }
+        }
+
+        Text(
+            "Drag a slider up or down • double-tap to reset • tap a frequency to change its type, frequency and width",
+            color = Color.White.copy(alpha = 0.45f),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp)
         )
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(colors.background)
-    ) {
-        LazyColumn(
-            Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding(),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
-            // ---- header ----
-            item {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = colors.onBackground)
-                    }
-                    Text(
-                        "Equalizer",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.onBackground,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        if (settings.enabled) "ON" else "OFF",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (settings.enabled) colors.primary else colors.onSurfaceVariant
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Switch(
-                        checked = settings.enabled,
-                        onCheckedChange = { on -> edit { it.copy(enabled = on) } },
-                        colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                }
-            }
+    // ---- band editor ----
+    if (editBand in settings.bands.indices) {
+        val i = editBand
+        val band = settings.bands[i]
+        AlertDialog(
+            onDismissRequest = { editBand = -1 },
+            containerColor = Color(0xFF17171F),
+            title = { Text("Band ${i + 1} • ${freqLabel(band.freq)} Hz", color = Color.White) },
+            text = { BandEditor(band) { change -> editBandAt(i, change) } },
+            confirmButton = { TextButton(onClick = { editBand = -1 }) { Text("Done") } }
+        )
+    }
 
-            // ---- response curve ----
-            item {
-                ResponseCurve(settings)
-                val headroom = AudioEngine.headroomDb
-                Text(
-                    buildString {
-                        append("Preset: ${settings.presetName}")
-                        if (settings.enabled && headroom < -0.05) append("   •   Auto headroom %.1f dB".format(headroom))
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
-                )
-            }
-
-            // ---- presets ----
-            item {
-                val all: List<EqPreset> = BUILT_IN_PRESETS + custom
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    item {
-                        FilterChip(
-                            selected = false,
-                            onClick = { showSave = true },
-                            label = { Text("Save") },
-                            leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null) }
-                        )
-                    }
-                    items(all, key = { (if (it.builtIn) "b:" else "c:") + it.name }) { p ->
-                        FilterChip(
-                            selected = settings.presetName == p.name,
-                            onClick = { AudioEngine.applyPreset(p) },
-                            label = { Text(p.name) },
-                            leadingIcon = if (settings.presetName == p.name) {
-                                { Icon(Icons.Rounded.Check, contentDescription = null) }
-                            } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = colors.primary,
-                                selectedLabelColor = colors.onPrimary,
-                                selectedLeadingIconColor = colors.onPrimary
-                            )
-                        )
+    // ---- presets ----
+    if (showPresets) {
+        val custom by AudioEngine.customPresets.collectAsState()
+        ModalBottomSheet(onDismissRequest = { showPresets = false }, containerColor = Color(0xFF17171F)) {
+            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                item {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { showPresets = false; showSave = true }
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Rounded.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(14.dp))
+                        Text("Save current sound as preset", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
                 }
-                val selectedCustom = custom.firstOrNull { it.name == settings.presetName }
-                if (selectedCustom != null) {
-                    TextButton(
-                        onClick = { AudioEngine.deleteCustomPreset(selectedCustom.name) },
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    ) { Text("Delete preset \"${selectedCustom.name}\"") }
-                }
-            }
-
-            // ---- bass & treble ----
-            item { SectionTitle("Bass & Treble") }
-            item {
-                GainRow("Bass", settings.bassDb) { v -> edit { it.copy(bassDb = v) } }
-                GainRow("Treble", settings.trebleDb) { v -> edit { it.copy(trebleDb = v) } }
-            }
-
-            // ---- bands ----
-            item {
-                SectionTitle("Parametric EQ")
-                Text(
-                    "Tap a frequency to change its type, frequency and Q.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp)
-                )
-            }
-            settings.bands.forEachIndexed { i, band ->
-                item(key = "band$i") {
-                    Column {
-                        GainRow(
-                            label = freqLabel(band.freq),
-                            value = band.gainDb,
-                            highlight = expandedBand == i,
-                            onLabelClick = { expandedBand = if (expandedBand == i) -1 else i }
-                        ) { v -> editBand(i) { it.copy(gainDb = v) } }
-                        if (expandedBand == i) BandEditor(band) { change -> editBand(i, change) }
+                items(BUILT_IN_PRESETS + custom, key = { (if (it.builtIn) "b:" else "c:") + it.name }) { p ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { AudioEngine.applyPreset(p); showPresets = false }
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(Modifier.width(38.dp)) {
+                            if (settings.presetName == p.name) {
+                                Icon(Icons.Rounded.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        Text(p.name, color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        if (!p.builtIn) {
+                            IconButton(onClick = { AudioEngine.deleteCustomPreset(p.name) }) {
+                                Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = Color.White.copy(alpha = 0.6f))
+                            }
+                        }
                     }
                 }
-            }
-
-            // ---- output ----
-            item { SectionTitle("Output") }
-            item {
-                GainRow("Preamp", settings.preampDb) { v -> edit { it.copy(preampDb = v) } }
-                ToggleRow(
-                    "Auto headroom",
-                    "Lowers the volume by the largest boost so the EQ never clips.",
-                    settings.autoHeadroom
-                ) { on -> edit { it.copy(autoHeadroom = on) } }
-                ToggleRow(
-                    "Limiter",
-                    "Catches any remaining peaks before they distort.",
-                    settings.limiter
-                ) { on -> edit { it.copy(limiter = on) } }
-                Spacer(Modifier.height(8.dp))
-                TextButton(
-                    onClick = { AudioEngine.resetAll(); expandedBand = -1 },
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                ) { Text("Reset everything to flat") }
             }
         }
     }
@@ -241,7 +296,8 @@ fun EqualizerScreen(onClose: () -> Unit) {
         var name by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showSave = false },
-            title = { Text("Save preset") },
+            containerColor = Color(0xFF17171F),
+            title = { Text("Save preset", color = Color.White) },
             text = {
                 OutlinedTextField(
                     value = name,
@@ -251,219 +307,299 @@ fun EqualizerScreen(onClose: () -> Unit) {
                 )
             },
             confirmButton = {
-                TextButton(
-                    enabled = name.isNotBlank(),
-                    onClick = { AudioEngine.saveCustomPreset(name); showSave = false }
-                ) { Text("Save") }
+                TextButton(enabled = name.isNotBlank(), onClick = { AudioEngine.saveCustomPreset(name); showSave = false }) { Text("Save") }
             },
-            dismissButton = {
-                TextButton(onClick = { showSave = false }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(onClick = { showSave = false }) { Text("Cancel") } }
         )
     }
 }
 
+private fun statusLine(s: EqSettings): String {
+    if (!s.enabled) return "EQ OFF • BIT-PERFECT PASS-THROUGH"
+    val parts = ArrayList<String>()
+    parts.add("EQ ${s.bands.size}")
+    if (s.toneEnabled) parts.add("TONE")
+    if (s.limiter) parts.add("LMT")
+    val hr = AudioEngine.headroomDb
+    if (s.autoHeadroom && hr < -0.05) parts.add("HEADROOM %.1f dB".format(hr))
+    return parts.joinToString("  •  ")
+}
+
 @Composable
-private fun SectionTitle(title: String) {
-    Column {
-        Spacer(Modifier.height(14.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-        Text(
-            title,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp)
-        )
+private fun ToggleChip(text: String, on: Boolean, onClick: () -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+    Box(
+        Modifier
+            .width(64.dp)
+            .height(34.dp)
+            .clip(RoundedCornerShape(50))
+            .background(if (on) primary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
+            .border(1.dp, if (on) primary else Color.Transparent, RoundedCornerShape(50))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, color = if (on) primary else Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold, fontSize = 13.sp)
     }
 }
 
 @Composable
-private fun GainRow(
+private fun SliderColumn(
     label: String,
     value: Double,
-    highlight: Boolean = false,
-    onLabelClick: (() -> Unit)? = null,
-    onChange: (Double) -> Unit
+    enabled: Boolean,
+    onLabel: (() -> Unit)?,
+    onChange: (Double) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Column(modifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+        VerticalGainSlider(value, enabled, onChange, Modifier.weight(1f).fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
         Text(
             label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (highlight) colors.primary else colors.onBackground,
-            fontWeight = if (highlight) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier
-                .width(64.dp)
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            modifier = if (onLabel != null) Modifier
                 .clip(RoundedCornerShape(6.dp))
-                .then(if (onLabelClick != null) Modifier.clickable(onClick = onLabelClick) else Modifier)
-                .padding(horizontal = 6.dp, vertical = 8.dp)
-        )
-        Slider(
-            value = value.toFloat(),
-            onValueChange = { onChange((it * 10).roundToInt() / 10.0) },
-            valueRange = (-MAX_GAIN_DB).toFloat()..MAX_GAIN_DB.toFloat(),
-            modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(
-                thumbColor = colors.primary,
-                activeTrackColor = colors.primary,
-                inactiveTrackColor = colors.outline
-            )
+                .clickable(onClick = onLabel)
+                .padding(horizontal = 2.dp, vertical = 2.dp) else Modifier.padding(vertical = 2.dp)
         )
         Text(
-            dbLabel(value),
-            style = MaterialTheme.typography.labelMedium,
-            color = if (value == 0.0) colors.onSurfaceVariant else colors.primary,
-            modifier = Modifier
-                .width(64.dp)
-                .padding(start = 6.dp)
+            "%.1f".format(value),
+            color = if (value == 0.0) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary,
+            fontSize = 10.sp
         )
     }
 }
 
+/** Vertical fader. Drag to change (relative, so a touch never jumps the value); double-tap = 0 dB. */
 @Composable
-private fun BandEditor(band: EqBand, onChange: ((EqBand) -> EqBand) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(colors.surfaceVariant)
-            .padding(12.dp)
+private fun VerticalGainSlider(
+    value: Double,
+    enabled: Boolean,
+    onChange: (Double) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val current by rememberUpdatedState(value)
+    val change by rememberUpdatedState(onChange)
+    val primary = MaterialTheme.colorScheme.primary
+    val fill = if (enabled) primary else Color.White.copy(alpha = 0.3f)
+    Canvas(
+        modifier
+            .pointerInput(Unit) {
+                detectTapGestures(onDoubleTap = { change(0.0) })
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val startY = down.position.y
+                    val startValue = current
+                    var moved = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val c = event.changes.firstOrNull() ?: break
+                        if (!c.pressed) break
+                        val dy = c.position.y - startY
+                        if (!moved && kotlin.math.abs(dy) > viewConfiguration.touchSlop) moved = true
+                        if (moved) {
+                            c.consume()
+                            val usable = (size.height * 0.82f).coerceAtLeast(1f)
+                            val v = (startValue - dy / usable * (2 * MAX_GAIN_DB)).coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)
+                            change((v * 10).roundToInt() / 10.0)
+                        }
+                    }
+                }
+            }
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            BandType.values().forEach { t ->
-                FilterChip(
-                    selected = band.type == t,
-                    onClick = { onChange { it.copy(type = t) } },
-                    label = { Text(t.label) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = colors.primary,
-                        selectedLabelColor = colors.onPrimary
-                    )
+        val w = size.width
+        val h = size.height
+        val pad = 14.dp.toPx()
+        val top = pad
+        val bottom = h - pad
+        fun yOf(db: Double) = (top + (bottom - top) * (1 - (db + MAX_GAIN_DB) / (2 * MAX_GAIN_DB))).toFloat()
+        val cx = w / 2f
+        val track = 3.dp.toPx()
+
+        // track + tick marks
+        drawRoundRect(Color.White.copy(alpha = 0.14f), Offset(cx - track / 2, top), Size(track, bottom - top), CornerRadius(track))
+        listOf(-12.0, -6.0, 0.0, 6.0, 12.0).forEach { db ->
+            val y = yOf(db)
+            val len = if (db == 0.0) 10.dp.toPx() else 5.dp.toPx()
+            drawLine(Color.White.copy(alpha = 0.3f), Offset(cx - len, y), Offset(cx - track, y), strokeWidth = 1.dp.toPx())
+        }
+        // fill from 0 dB to the value
+        val y0 = yOf(0.0)
+        val yv = yOf(value)
+        drawRoundRect(fill, Offset(cx - track / 2, minOf(y0, yv)), Size(track, kotlin.math.abs(yv - y0)), CornerRadius(track))
+        // thumb
+        val tw = (w * 0.62f).coerceAtMost(28.dp.toPx())
+        val th = 16.dp.toPx()
+        drawRoundRect(Color(0xFFE8E8EE), Offset(cx - tw / 2, yv - th / 2), Size(tw, th), CornerRadius(5.dp.toPx()))
+        drawLine(Color(0xFF55555F), Offset(cx - tw * 0.3f, yv), Offset(cx + tw * 0.3f, yv), strokeWidth = 2.dp.toPx())
+    }
+}
+
+/** Rotary knob for Bass / Treble: drag up or down, double-tap = 0 dB. */
+@Composable
+private fun Knob(label: String, value: Double, enabled: Boolean, onChange: (Double) -> Unit) {
+    val current by rememberUpdatedState(value)
+    val change by rememberUpdatedState(onChange)
+    val primary = MaterialTheme.colorScheme.primary
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(
+            if (value > 0) "+%.1f dB".format(value) else "%.1f dB".format(value),
+            color = if (value == 0.0) Color.White.copy(alpha = 0.5f) else primary,
+            fontSize = 11.sp
+        )
+        Spacer(Modifier.height(6.dp))
+        Canvas(
+            Modifier
+                .size(78.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures(onDoubleTap = { change(0.0) })
+                }
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val startY = down.position.y
+                        val startValue = current
+                        var moved = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val c = event.changes.firstOrNull() ?: break
+                            if (!c.pressed) break
+                            val dy = c.position.y - startY
+                            if (!moved && kotlin.math.abs(dy) > viewConfiguration.touchSlop) moved = true
+                            if (moved) {
+                                c.consume()
+                                val v = (startValue - dy / (160.dp.toPx()) * (2 * MAX_GAIN_DB)).coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)
+                                change((v * 2).roundToInt() / 2.0)
+                            }
+                        }
+                    }
+                }
+        ) {
+            val r = size.minDimension / 2f
+            val c = Offset(size.width / 2f, size.height / 2f)
+            val stroke = 4.dp.toPx()
+            // body
+            drawCircle(Brush.radialGradient(listOf(Color(0xFF3A3A45), Color(0xFF15151B)), c, r), r * 0.78f, c)
+            // range arc (270° starting bottom-left)
+            drawArc(
+                Color.White.copy(alpha = 0.15f), 135f, 270f, false,
+                topLeft = Offset(c.x - r + stroke, c.y - r + stroke),
+                size = Size((r - stroke) * 2, (r - stroke) * 2),
+                style = Stroke(stroke, cap = StrokeCap.Round)
+            )
+            // value arc from the top (0 dB)
+            val sweep = (value / MAX_GAIN_DB * 135.0).toFloat()
+            if (kotlin.math.abs(sweep) > 0.5f) {
+                drawArc(
+                    if (enabled) primary else Color.White.copy(alpha = 0.35f), 270f, sweep, false,
+                    topLeft = Offset(c.x - r + stroke, c.y - r + stroke),
+                    size = Size((r - stroke) * 2, (r - stroke) * 2),
+                    style = Stroke(stroke, cap = StrokeCap.Round)
                 )
             }
+            // pointer
+            val angle = Math.toRadians(270.0 + value / MAX_GAIN_DB * 135.0)
+            val inner = r * 0.30f
+            val outer = r * 0.66f
+            drawLine(
+                Color.White,
+                Offset(c.x + (inner * cos(angle)).toFloat(), c.y + (inner * sin(angle)).toFloat()),
+                Offset(c.x + (outer * cos(angle)).toFloat(), c.y + (outer * sin(angle)).toFloat()),
+                strokeWidth = 3.dp.toPx(),
+                cap = StrokeCap.Round
+            )
         }
-        Spacer(Modifier.height(6.dp))
-        // Frequency on a log scale: slider 0..1 maps to 20 Hz .. 20 kHz
-        Text("Frequency: ${freqLabel(band.freq)}", style = MaterialTheme.typography.labelMedium)
-        Slider(
-            value = (ln(band.freq / 20.0) / ln(1000.0)).toFloat().coerceIn(0f, 1f),
-            onValueChange = { pos ->
-                val f = 20.0 * 1000.0.pow(pos.toDouble())
-                onChange { it.copy(freq = roundFreq(f)) }
-            },
-            colors = SliderDefaults.colors(thumbColor = colors.primary, activeTrackColor = colors.primary)
-        )
-        Text("Q (width): %.2f".format(band.q), style = MaterialTheme.typography.labelMedium)
-        Slider(
-            value = band.q.toFloat(),
-            onValueChange = { q -> onChange { it.copy(q = (q * 100).roundToInt() / 100.0) } },
-            valueRange = 0.3f..8f,
-            colors = SliderDefaults.colors(thumbColor = colors.primary, activeTrackColor = colors.primary)
-        )
-        Text(
-            "Low Q = wide and smooth, high Q = narrow and precise.",
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable { onChange(!checked) }
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onChange,
-            colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
-        )
     }
 }
 
 @Composable
 private fun ResponseCurve(settings: EqSettings) {
-    val colors = MaterialTheme.colorScheme
-    val freqs = remember { AudioEngine.curveFrequencies(160) }
+    val freqs = remember { AudioEngine.curveFrequencies(140) }
     val curve = remember(settings) { AudioEngine.curve(settings, freqs) }
-    val lineColor = if (settings.enabled) colors.primary else colors.onSurfaceVariant
-    val gridColor = colors.outline.copy(alpha = 0.6f)
-
+    val line = if (settings.enabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.4f)
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(170.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(colors.surface)
+            .height(64.dp)
+            .padding(horizontal = 12.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black.copy(alpha = 0.35f))
     ) {
         val w = size.width
         val h = size.height
-        val range = 15.0 // dB shown above and below 0
+        val range = 15.0
         fun yOf(db: Double) = (h / 2 - (db / range) * (h / 2)).toFloat()
-        fun xOf(i: Int) = w * i / (freqs.size - 1)
-
-        // grid: 0 dB, ±6, ±12 and decade lines
-        listOf(-12.0, -6.0, 0.0, 6.0, 12.0).forEach { db ->
-            drawLine(
-                gridColor,
-                Offset(0f, yOf(db)),
-                Offset(w, yOf(db)),
-                strokeWidth = if (db == 0.0) 2f else 1f
-            )
-        }
+        drawLine(Color.White.copy(alpha = 0.15f), Offset(0f, yOf(0.0)), Offset(w, yOf(0.0)), strokeWidth = 1f)
         listOf(100.0, 1000.0, 10000.0).forEach { f ->
             val x = (ln(f / 20.0) / ln(1000.0) * w).toFloat()
-            drawLine(gridColor, Offset(x, 0f), Offset(x, h), strokeWidth = 1f)
+            drawLine(Color.White.copy(alpha = 0.08f), Offset(x, 0f), Offset(x, h), strokeWidth = 1f)
         }
-
         val path = Path()
         curve.forEachIndexed { i, db ->
-            val x = xOf(i)
+            val x = w * i / (freqs.size - 1)
             val y = yOf(db.coerceIn(-range, range))
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        val fill = Path().apply {
-            addPath(path)
-            lineTo(w, yOf(0.0))
-            lineTo(0f, yOf(0.0))
-            close()
-        }
-        drawPath(
-            fill,
-            Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.35f), lineColor.copy(alpha = 0.02f)))
-        )
-        drawPath(path, lineColor, style = Stroke(width = 5f, cap = StrokeCap.Round))
+        drawPath(path, line, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
     }
 }
 
-private fun dbLabel(v: Double): String = when {
-    v > 0.0 -> "+%.1f dB".format(v)
-    v < 0.0 -> "%.1f dB".format(v)
-    else -> "0 dB"
+@Composable
+private fun BandEditor(band: EqBand, onChange: ((EqBand) -> EqBand) -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            BandType.values().forEach { t ->
+                FilterChip(
+                    selected = band.type == t,
+                    onClick = { onChange { it.copy(type = t) } },
+                    label = { Text(t.label, fontSize = 12.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("Gain: %.1f dB".format(band.gainDb), color = Color.White, fontSize = 13.sp)
+        Slider(
+            value = band.gainDb.toFloat(),
+            onValueChange = { g -> onChange { it.copy(gainDb = (g * 10).roundToInt() / 10.0) } },
+            valueRange = (-MAX_GAIN_DB).toFloat()..MAX_GAIN_DB.toFloat(),
+            colors = SliderDefaults.colors(thumbColor = primary, activeTrackColor = primary)
+        )
+        Text("Frequency: ${freqLabel(band.freq)} Hz", color = Color.White, fontSize = 13.sp)
+        Slider(
+            value = (ln(band.freq / 20.0) / ln(1000.0)).toFloat().coerceIn(0f, 1f),
+            onValueChange = { pos -> onChange { it.copy(freq = roundFreq(20.0 * 1000.0.pow(pos.toDouble()))) } },
+            colors = SliderDefaults.colors(thumbColor = primary, activeTrackColor = primary)
+        )
+        Text("Width (Q): %.2f".format(band.q), color = Color.White, fontSize = 13.sp)
+        Slider(
+            value = band.q.toFloat(),
+            onValueChange = { q -> onChange { it.copy(q = (q * 100).roundToInt() / 100.0) } },
+            valueRange = 0.3f..8f,
+            colors = SliderDefaults.colors(thumbColor = primary, activeTrackColor = primary)
+        )
+        Text(
+            "Low Q = wide and smooth, high Q = narrow and precise.",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 11.sp
+        )
+    }
 }
 
 private fun freqLabel(f: Double): String =
     if (f >= 1000) {
         val k = f / 1000.0
-        if (k >= 10 || k == k.roundToInt().toDouble()) "${k.roundToInt()}k" else "%.1fk".format(k)
+        if (k >= 10 || k == k.roundToInt().toDouble()) "${k.roundToInt()}K" else "%.1fK".format(k)
     } else "${f.roundToInt()}"
 
 private fun roundFreq(f: Double): Double = when {
@@ -472,3 +608,4 @@ private fun roundFreq(f: Double): Double = when {
     f < 10000 -> (f / 50).roundToInt() * 50.0
     else -> (f / 100).roundToInt() * 100.0
 }
+

@@ -1,5 +1,11 @@
 package com.powersound.player.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,344 +13,446 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.powersound.player.LibraryState
-import com.powersound.player.data.Detail
+import androidx.compose.ui.unit.sp
+import com.powersound.player.data.Category
+import com.powersound.player.data.Group
 import com.powersound.player.data.Song
+import com.powersound.player.data.formatTime
+import com.powersound.player.data.letterKey
+import kotlinx.coroutines.launch
 
-private val TABS = listOf("Songs", "Albums", "Artists", "Folders")
+// ================================================================= Library home
 
 @Composable
-fun LibraryScreen(
-    library: LibraryState,
-    currentSongId: Long?,
-    onPlay: (List<Song>, Int) -> Unit,
-    onShuffle: (List<Song>) -> Unit,
-    onOpenDetail: (Detail) -> Unit,
-    modifier: Modifier = Modifier
+fun LibraryHome(
+    loading: Boolean,
+    isEmpty: (Category) -> Boolean,
+    bottomInset: Dp,
+    onOpen: (Category) -> Unit,
+    onRescan: () -> Unit
 ) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
-
-    Column(modifier.fillMaxSize()) {
-        TabRow(
-            selectedTabIndex = tab,
-            containerColor = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.primary
-        ) {
-            TABS.forEachIndexed { i, title ->
-                Tab(
-                    selected = tab == i,
-                    onClick = { tab = i },
-                    text = { Text(title) },
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        when {
-            library.loading && library.songs.isEmpty() -> CenterBox {
-                CircularProgressIndicator()
-            }
-            library.loaded && library.songs.isEmpty() -> CenterBox {
-                Text(
-                    "No music found on this device.\nCopy your FLAC files to the Music folder.",
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            else -> when (tab) {
-                0 -> SongsTab(library.songs, currentSongId, onPlay, onShuffle)
-                1 -> AlbumsTab(library, onOpenDetail)
-                2 -> ArtistsTab(library, onOpenDetail)
-                else -> FoldersTab(library, onOpenDetail)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CenterBox(content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { content() }
-}
-
-@Composable
-private fun SongsTab(
-    songs: List<Song>,
-    currentSongId: Long?,
-    onPlay: (List<Song>, Int) -> Unit,
-    onShuffle: (List<Song>) -> Unit
-) {
-    var query by rememberSaveable { mutableStateOf("") }
-    val filtered = remember(songs, query) {
-        val q = query.trim().lowercase()
-        if (q.isEmpty()) songs else songs.filter {
-            it.title.lowercase().contains(q) ||
-                it.artist.lowercase().contains(q) ||
-                it.album.lowercase().contains(q)
-        }
-    }
-
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 8.dp)) {
-        item {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                singleLine = true,
-                placeholder = { Text("Search songs, artists, albums") },
-                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Clear")
-                        }
-                    }
-                }
-            )
-        }
-        item {
-            PlayButtons(
-                count = filtered.size,
-                onPlay = { onPlay(filtered, 0) },
-                onShuffle = { onShuffle(filtered) }
-            )
-        }
-        itemsIndexed(filtered, key = { _, s -> s.id }) { index, song ->
-            SongRow(song = song, isCurrent = song.id == currentSongId) { onPlay(filtered, index) }
-        }
-    }
-}
-
-@Composable
-fun PlayButtons(count: Int, onPlay: () -> Unit, onShuffle: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    var menu by remember { mutableStateOf(false) }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = bottomInset + 12.dp)
     ) {
-        Button(
-            onClick = onPlay,
-            enabled = count > 0,
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-        ) {
-            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
-            Spacer(Modifier.width(4.dp))
-            Text("Play")
-        }
-        OutlinedButton(onClick = onShuffle, enabled = count > 0) {
-            Icon(Icons.Rounded.Shuffle, contentDescription = null)
-            Spacer(Modifier.width(4.dp))
-            Text("Shuffle")
-        }
-        Spacer(Modifier.weight(1f))
-        Text(
-            "$count songs",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun AlbumsTab(library: LibraryState, onOpenDetail: (Detail) -> Unit) {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(150.dp),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        items(library.albums, key = { it.id }) { album ->
-            Column(
-                Modifier.clickable {
-                    onOpenDetail(
-                        Detail(album.name, album.artist, album.songs.firstOrNull()?.id, album.songs)
-                    )
-                }
-            ) {
-                Artwork(
-                    songId = album.songs.firstOrNull()?.id,
-                    modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-                    sizePx = 384,
-                    cornerDp = 10
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    album.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    "${album.artist} • ${album.songs.size}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ArtistsTab(library: LibraryState, onOpenDetail: (Detail) -> Unit) {
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(library.artists, key = { it.name }) { artist ->
-            GroupRow(
-                icon = Icons.Rounded.Person,
-                title = artist.name,
-                subtitle = "${artist.songs.size} songs"
-            ) {
-                onOpenDetail(Detail(artist.name, "Artist", artist.songs.firstOrNull()?.id, artist.songs))
-            }
-        }
-    }
-}
-
-@Composable
-private fun FoldersTab(library: LibraryState, onOpenDetail: (Detail) -> Unit) {
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(library.folders, key = { it.path }) { folder ->
-            GroupRow(
-                icon = Icons.Rounded.Folder,
-                title = folder.name,
-                subtitle = "${folder.path} • ${folder.songs.size} songs"
-            ) {
-                onOpenDetail(Detail(folder.name, folder.path, folder.songs.firstOrNull()?.id, folder.songs))
-            }
-        }
-    }
-}
-
-@Composable
-private fun GroupRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .padding(0.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-fun DetailScreen(
-    detail: Detail,
-    currentSongId: Long?,
-    onPlay: (List<Song>, Int) -> Unit,
-    onShuffle: (List<Song>) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    LazyColumn(modifier.fillMaxSize()) {
         item {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Artwork(detail.coverSongId, Modifier.size(110.dp), sizePx = 384, cornerDp = 10)
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        detail.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        detail.subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                Text("Library", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
+                if (loading) {
+                    CircularProgressIndicator(Modifier.padding(end = 12.dp).width(20.dp).height(20.dp), strokeWidth = 2.dp)
+                }
+                Box {
+                    PillButton(icon = Icons.Rounded.MoreVert, onClick = { menu = true })
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text("Rescan library") }, onClick = { menu = false; onRescan() })
+                    }
                 }
             }
         }
-        item {
-            PlayButtons(
-                count = detail.songs.size,
-                onPlay = { onPlay(detail.songs, 0) },
-                onShuffle = { onShuffle(detail.songs) }
+        items(Category.values().toList(), key = { it.name }) { cat ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpen(cat) }
+                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CategoryIcon(cat.icon(), cat.color())
+                Spacer(Modifier.width(16.dp))
+                Text(cat.label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                if (isEmpty(cat)) {
+                    Spacer(Modifier.width(8.dp))
+                    Text("empty", fontSize = 10.sp, color = Color.White.copy(alpha = 0.5f))
+                }
+            }
+        }
+    }
+}
+
+// ================================================================= grid of groups
+
+@Composable
+fun GroupGridScreen(
+    title: String,
+    icon: ImageVector,
+    iconColor: Color,
+    backLabel: String,
+    groups: List<Group>,
+    bottomInset: Dp,
+    onBack: () -> Unit,
+    onOpen: (Group) -> Unit,
+    onPlay: (List<Song>) -> Unit,
+    onShuffle: (List<Song>) -> Unit,
+    onAddToQueue: (List<Song>) -> Unit
+) {
+    val state = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    var query by rememberSaveable { mutableStateOf<String?>(null) }
+    var menu by remember { mutableStateOf(false) }
+    val shown = remember(groups, query) {
+        val q = query?.trim()?.lowercase().orEmpty()
+        if (q.isEmpty()) groups else groups.filter { it.title.lowercase().contains(q) || it.subtitle.lowercase().contains(q) }
+    }
+    val allSongs = remember(shown) { shown.flatMap { it.songs } }
+    val keys = remember(shown) { shown.map { letterKey(it.title) } }
+    val headerItems = if (query != null) 2 else 1
+    val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
+
+    val pills: @Composable (Modifier) -> Unit = { m ->
+        Box(m) {
+            ActionPills(
+                onShuffle = { onShuffle(allSongs) },
+                onPlay = { onPlay(allSongs) },
+                onSearch = { query = if (query == null) "" else null },
+                onMore = { menu = true },
+                enabled = allSongs.isNotEmpty(),
+                searchActive = query != null
+            )
+            Box(Modifier.align(Alignment.TopEnd)) {
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Add all to queue") }, onClick = { menu = false; onAddToQueue(allSongs) })
+                }
+            }
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            state = state,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 10.dp, end = 26.dp, bottom = bottomInset + 70.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                PageHeader(backLabel, title, icon, iconColor, onBack) { pills(Modifier) }
+            }
+            if (query != null) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    FilterField(query ?: "", { query = it }, { query = null })
+                }
+            }
+            itemsIndexed(shown, key = { _, g -> g.key }) { _, g ->
+                GroupTile(g.title, g.subtitle, g.coverId) { onOpen(g) }
+            }
+        }
+
+        FastScroller(
+            itemKeys = keys,
+            onJump = { i -> scope.launch { state.scrollToItem(i + headerItems) } },
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .statusBarsPadding()
+                .padding(top = 90.dp, bottom = bottomInset + 10.dp)
+                .fillMaxHeight()
+        )
+
+        FloatingPills(visible = scrolled, bottomInset = bottomInset) { pills(Modifier) }
+    }
+}
+
+@Composable
+fun FloatingPills(visible: Boolean, bottomInset: Dp, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visible = visible,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 12.dp, end = 34.dp, bottom = bottomInset + 6.dp)
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+fun FilterField(value: String, onChange: (String) -> Unit, onClose: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color.White.copy(alpha = 0.10f))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Rounded.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.7f))
+        Spacer(Modifier.width(10.dp))
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = true,
+            textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                Box {
+                    if (value.isEmpty()) Text("Filter", color = Color.White.copy(alpha = 0.45f), fontSize = 16.sp)
+                    inner()
+                }
+            }
+        )
+        Icon(
+            Icons.Rounded.Close,
+            contentDescription = "Close",
+            tint = Color.White.copy(alpha = 0.8f),
+            modifier = Modifier.clickable(onClick = onClose)
+        )
+    }
+}
+
+// ================================================================= song lists
+
+/**
+ * A list of songs with any header on top (category header or album-art header).
+ * Has filter, A–Z scroller (optional) and the floating action pills.
+ */
+@Composable
+fun SongListScreen(
+    songs: List<Song>,
+    currentId: Long?,
+    bottomInset: Dp,
+    showIndex: Boolean,
+    emptyText: String,
+    onPlay: (List<Song>, Int) -> Unit,
+    onShuffle: (List<Song>) -> Unit,
+    onSongMenu: (Song) -> Unit,
+    onAddToQueue: (List<Song>) -> Unit,
+    header: @Composable (pills: @Composable () -> Unit) -> Unit
+) {
+    val state = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    var query by rememberSaveable { mutableStateOf<String?>(null) }
+    var menu by remember { mutableStateOf(false) }
+    val shown = remember(songs, query) {
+        val q = query?.trim()?.lowercase().orEmpty()
+        if (q.isEmpty()) songs else songs.filter {
+            it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) || it.album.lowercase().contains(q)
+        }
+    }
+    val keys = remember(shown, showIndex) { if (showIndex) shown.map { letterKey(it.title) } else emptyList() }
+    val headerItems = if (query != null) 2 else 1
+    val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
+
+    val pills: @Composable () -> Unit = {
+        Box {
+            ActionPills(
+                onShuffle = { onShuffle(shown) },
+                onPlay = { onPlay(shown, 0) },
+                onSearch = { query = if (query == null) "" else null },
+                onMore = { menu = true },
+                enabled = shown.isNotEmpty(),
+                searchActive = query != null
+            )
+            Box(Modifier.align(Alignment.TopEnd)) {
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Add all to queue") }, onClick = { menu = false; onAddToQueue(shown) })
+                }
+            }
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = state,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(end = if (showIndex) 18.dp else 0.dp, bottom = bottomInset + 70.dp)
+        ) {
+            item { header(pills) }
+            if (query != null) {
+                item { FilterField(query ?: "", { query = it }, { query = null }) }
+            }
+            if (shown.isEmpty()) {
+                item {
+                    Text(
+                        emptyText,
+                        color = Color.White.copy(alpha = 0.6f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp)
+                    )
+                }
+            }
+            itemsIndexed(shown, key = { _, s -> s.id }) { i, s ->
+                SongRow(
+                    song = s,
+                    isCurrent = s.id == currentId,
+                    onClick = { onPlay(shown, i) },
+                    onLongClick = { onSongMenu(s) }
+                )
+            }
+        }
+
+        if (showIndex && shown.size > 20) {
+            FastScroller(
+                itemKeys = keys,
+                onJump = { i -> scope.launch { state.scrollToItem(i + headerItems) } },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .statusBarsPadding()
+                    .padding(top = 90.dp, bottom = bottomInset + 10.dp)
+                    .fillMaxHeight()
             )
         }
-        itemsIndexed(detail.songs, key = { _, s -> s.id }) { index, song ->
-            SongRow(song, song.id == currentSongId) { onPlay(detail.songs, index) }
+
+        FloatingPills(visible = scrolled, bottomInset = bottomInset) {
+            Box(Modifier.padding(end = 0.dp)) { pills() }
+        }
+    }
+}
+
+/** Header with the big cover art (album / folder / artist page). */
+@Composable
+fun ArtHeader(group: Group, backLabel: String, onBack: () -> Unit, pills: @Composable () -> Unit) {
+    val bg = MaterialTheme.colorScheme.background
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(340.dp)
+    ) {
+        Artwork(
+            songId = group.coverId,
+            modifier = Modifier.fillMaxSize(),
+            sizePx = 1024,
+            cornerDp = 0,
+            placeholder = { BarsPlaceholder() }
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.25f),
+                        0.45f to Color.Transparent,
+                        1f to bg.copy(alpha = 0.85f)
+                    )
+                )
+        )
+        Box(
+            Modifier
+                .statusBarsPadding()
+                .padding(10.dp)
+        ) { BackChip(backLabel, onBack) }
+        Column(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 10.dp, end = 10.dp, bottom = 10.dp)
+        ) {
+            OverlayChip(group.title, big = true)
+            Spacer(Modifier.height(4.dp))
+            OverlayChip(group.subtitle)
+            Spacer(Modifier.height(4.dp))
+            OverlayChip("♪ ${group.songs.size} | ${formatTime(group.totalMs)}")
+            Spacer(Modifier.height(10.dp))
+            pills()
+        }
+    }
+}
+
+// ================================================================= folders hierarchy
+
+@Composable
+fun TreeScreen(
+    title: String,
+    backLabel: String,
+    folders: List<Group>,
+    songs: List<Song>,
+    currentId: Long?,
+    bottomInset: Dp,
+    onBack: () -> Unit,
+    onOpenFolder: (Group) -> Unit,
+    onPlay: (List<Song>, Int) -> Unit,
+    onShuffle: (List<Song>) -> Unit,
+    onSongMenu: (Song) -> Unit
+) {
+    val state = rememberLazyGridState()
+    val all = remember(folders, songs) { songs + folders.flatMap { it.songs } }
+    Box(Modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            state = state,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, bottom = bottomInset + 70.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                PageHeader(backLabel, title, Icons.Rounded.Folder, Category.FOLDERS_HIERARCHY.color(), onBack) {
+                    ActionPills(
+                        onShuffle = { onShuffle(all) },
+                        onPlay = { onPlay(all, 0) },
+                        onSearch = null,
+                        onMore = null,
+                        enabled = all.isNotEmpty()
+                    )
+                }
+            }
+            itemsIndexed(folders, key = { _, g -> g.key }) { _, g ->
+                GroupTile(g.title, g.subtitle, g.coverId) { onOpenFolder(g) }
+            }
+            itemsIndexed(songs, key = { _, s -> "song:${s.id}" }, span = { _, _ -> GridItemSpan(maxLineSpan) }) { i, s ->
+                SongRow(s, s.id == currentId, onClick = { onPlay(songs, i) }, onLongClick = { onSongMenu(s) })
+            }
         }
     }
 }

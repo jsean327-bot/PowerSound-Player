@@ -23,6 +23,7 @@ data class EqSettings(
     val autoHeadroom: Boolean = true,
     val bassDb: Double = 0.0,
     val trebleDb: Double = 0.0,
+    val toneEnabled: Boolean = true,
     val limiter: Boolean = true,
     val bands: List<EqBand> = defaultBands(),
     val presetName: String = "Flat"
@@ -66,6 +67,7 @@ fun EqSettings.toJson(): JSONObject = JSONObject().apply {
     put("autoHeadroom", autoHeadroom)
     put("bass", bassDb)
     put("treble", trebleDb)
+    put("tone", toneEnabled)
     put("limiter", limiter)
     put("preset", presetName)
     put("bands", JSONArray().apply {
@@ -99,6 +101,7 @@ fun eqSettingsFromJson(o: JSONObject): EqSettings {
         autoHeadroom = o.optBoolean("autoHeadroom", true),
         bassDb = o.optDouble("bass", 0.0),
         trebleDb = o.optDouble("treble", 0.0),
+        toneEnabled = o.optBoolean("tone", true),
         limiter = o.optBoolean("limiter", true),
         bands = bands,
         presetName = o.optString("preset", "Custom")

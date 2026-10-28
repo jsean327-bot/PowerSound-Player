@@ -10,11 +10,16 @@ data class Song(
     val artist: String,
     val album: String,
     val albumId: Long,
+    val albumArtist: String,
     val durationMs: Long,
     val track: Int,
     val folder: String,
     val mimeType: String,
-    val size: Long
+    val size: Long,
+    val year: Int,
+    val composer: String,
+    val genre: String,
+    val dateAdded: Long
 ) {
     val uri: Uri
         get() = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
@@ -27,14 +32,40 @@ data class Song(
         get() = track % 1000
 }
 
-data class Album(val id: Long, val name: String, val artist: String, val songs: List<Song>)
+/** Any list of songs shown as one tile or page: a folder, album, artist, genre, year... */
+data class Group(
+    val key: String,
+    val title: String,
+    val subtitle: String,
+    val songs: List<Song>
+) {
+    val coverId: Long? get() = songs.firstOrNull()?.id
+    val totalMs: Long get() = songs.sumOf { it.durationMs }
+}
 
-data class Artist(val name: String, val songs: List<Song>)
+enum class Kind { SONGS, GROUPS, TREE, QUEUE }
 
-data class Folder(val path: String, val name: String, val songs: List<Song>)
+enum class Category(val label: String, val kind: Kind) {
+    ALL_SONGS("All Songs", Kind.SONGS),
+    FOLDERS("Folders", Kind.GROUPS),
+    FOLDERS_HIERARCHY("Folders Hierarchy", Kind.TREE),
+    ALBUMS("Albums", Kind.GROUPS),
+    ARTISTS("Artists", Kind.GROUPS),
+    ALBUM_ARTISTS("Album Artists", Kind.GROUPS),
+    GENRES("Genres", Kind.GROUPS),
+    YEARS("Years", Kind.GROUPS),
+    COMPOSERS("Composers", Kind.GROUPS),
+    QUEUE("Queue", Kind.QUEUE),
+    MOST_PLAYED("Most Played", Kind.SONGS),
+    TOP_RATED("Top Rated", Kind.SONGS),
+    LOW_RATED("Low Rated", Kind.SONGS),
+    RECENTLY_PLAYED("Recently Played", Kind.SONGS),
+    RECENTLY_ADDED("Recently Added", Kind.SONGS),
+    LONG("Long", Kind.SONGS)
+}
 
-/** A song list opened from the library (album, artist or folder). */
-data class Detail(val title: String, val subtitle: String, val coverSongId: Long?, val songs: List<Song>)
+/** Songs of 10 minutes or more count as "Long". */
+const val LONG_TRACK_MS = 10 * 60 * 1000L
 
 fun formatFromMime(mime: String?): String {
     val m = mime?.lowercase() ?: return ""
@@ -62,4 +93,15 @@ fun formatTime(ms: Long): String {
     val m = (totalSec % 3600) / 60
     val s = totalSec % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+}
+
+/** Letter used by the A–Z fast scroller. */
+fun letterKey(text: String): String {
+    val c = text.trim().firstOrNull() ?: return "#"
+    val up = c.uppercaseChar()
+    return when {
+        up in 'A'..'Z' -> up.toString()
+        c in '؀'..'ۿ' -> "ع"
+        else -> "#"
+    }
 }
