@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,7 +27,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build release APK
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: gradle assembleRelease -PbuildNumber=${{ github.run_number }} --no-daemon --stacktrace
 
       - name: Rename APK
         run: |
@@ -36,3 +39,12 @@ jobs:
         with:
           name: PowerSoundPlayer-apk
           path: out/PowerSoundPlayer.apk
+
+      - name: Publish release (used by the in-app updater)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: PowerSound Player 1.${{ github.run_number }}
+          body: ${{ github.event.head_commit.message }}
+          files: out/PowerSoundPlayer.apk
+          make_latest: true
