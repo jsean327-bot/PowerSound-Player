@@ -217,9 +217,57 @@ object TagReader {
 /** Lyrics embedded in the song file; plain text and LRC ("[01:23.45] line") are supported. */
 object LyricsReader {
 
-    suspend fun read(context: Context, songId: Long): Lyrics? {
-        val text = TagReader.lyricsText(TagReader.read(context, songId)) ?: return null
-        return text.takeIf { it.isNotBlank() }?.let { parse(it) }
+    private val cache = java.util.concurrent.ConcurrentHashMap<Long, Lyrics>()
+    private val EMPTY = Lyrics(emptyList())
+
+    /** Settings → Lyrics → Rescan Lyrics Tags. */
+    fun clearCache() = cache.clear()
+
+    suspend fun read(context: Context, songId: Long): Lyrics? = read(context, songId, "")
+
+    /**
+     * Lyrics of a song: the lyrics tag inside the file first, then (Settings → Lyrics → Scan LRC Files)
+     * an .lrc file next to it with the same name.
+     */
+    suspend fun read(context: Context, songId: Long, path: String): Lyrics? {
+        cache[songId]?.let { return it.takeIf { l -> l.lines.isNotEmpty() } }
+        val fromTag = TagReader.lyricsText(TagReader.read(context, songId))?.takeIf { it.isNotBlank() }?.let { parse(it) }
+        val result = fromTag ?: if (SettingsStore.value.scanLrc && path.isNotBlank()) readLrcFile(path) else null
+        cache[songId] = result ?: EMPTY
+        return result
+    }
+
+    suspend fun hasLocal(context: Context, songId: Long, path: String): Boolean = read(context, songId, path) != null
+
+    private suspend fun readLrcFile(path: String): Lyrics? = withContext(Dispatchers.IO) {
+        try {
+            val audio = java.io.File(path)
+            val dir = audio.parentFile ?: return@withContext null
+            val base = audio.nameWithoutExtension
+            val file = sequenceOf("$base.lrc", "$base.LRC", "$base.txt").map { java.io.File(dir, it) }.firstOrNull { it.canRead() }
+                ?: dir.listFiles()?.firstOrNull { it.extension.equals("lrc", true) && it.nameWithoutExtension.equals(base, true) }
+                ?: return@withContext null
+            val text = decode(file.readBytes())
+            text.takeIf { it.isNotBlank() }?.let { parse(it) }
+        } catch (_: Exception) {
+            null // no "All files access": Android hides non-music files from the app
+        }
+    }
+
+    /** UTF-8 / UTF-16 with BOM; files that are not valid UTF-8 use Arabic Windows-1256 unless "Always Use UTF-8" is on. */
+    fun decode(b: ByteArray): String {
+        if (b.size >= 3 && b[0] == 0xEF.toByte() && b[1] == 0xBB.toByte() && b[2] == 0xBF.toByte()) return String(b, 3, b.size - 3, Charsets.UTF_8)
+        if (b.size >= 2 && b[0] == 0xFF.toByte() && b[1] == 0xFE.toByte()) return String(b, 2, b.size - 2, Charsets.UTF_16LE)
+        if (b.size >= 2 && b[0] == 0xFE.toByte() && b[1] == 0xFF.toByte()) return String(b, 2, b.size - 2, Charsets.UTF_16BE)
+        val strict = Charsets.UTF_8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        return try {
+            strict.decode(java.nio.ByteBuffer.wrap(b)).toString()
+        } catch (_: java.nio.charset.CharacterCodingException) {
+            if (SettingsStore.value.lyricsUtf8) String(b, Charsets.UTF_8)
+            else String(b, runCatching { Charset.forName("windows-1256") }.getOrDefault(Charsets.ISO_8859_1))
+        }
     }
 
     private val timeTag = Regex("""\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?]""")

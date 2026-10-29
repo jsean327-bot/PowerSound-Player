@@ -97,7 +97,8 @@ object MusicRepository {
                         year = if (yearCol >= 0) c.getInt(yearCol) else 0,
                         composer = (if (composerCol >= 0) clean(c.getString(composerCol)) else null) ?: "",
                         genre = (if (genreCol >= 0) clean(c.getString(genreCol)) else null) ?: "",
-                        dateAdded = if (addedCol >= 0) c.getLong(addedCol) else 0L
+                        dateAdded = if (addedCol >= 0) c.getLong(addedCol) else 0L,
+                        path = data ?: ""
                     )
                 )
             }

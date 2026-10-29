@@ -35,6 +35,8 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.TextSnippet
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.PlaylistPlay
@@ -51,6 +53,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -105,8 +109,11 @@ fun SongMenuDialog(
     onFolder: () -> Unit,
     onGenre: () -> Unit,
     onPlayNext: (() -> Unit)? = null,
-    onAddToQueue: (() -> Unit)? = null
+    onAddToQueue: (() -> Unit)? = null,
+    stars: Int = 0,
+    onStars: (Int) -> Unit = {}
 ) {
+    val ratingType = com.powersound.player.data.SettingsStore.value.ratingType
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
@@ -123,9 +130,27 @@ fun SongMenuDialog(
                     Text("${song.artist} - ${song.album}", color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("♪ ${formatTime(song.durationMs)} | ${song.formatLabel.lowercase()}", color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp)
                     Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        MiniRound(if (rating == 1) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp, rating == 1, onLike)
-                        MiniRound(if (rating == -1) Icons.Rounded.ThumbDown else Icons.Outlined.ThumbDown, rating == -1, onDislike)
+                    // Settings → Player Screen → Rating Type
+                    if (ratingType == 1) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            MiniRound(if (rating == 1) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp, rating == 1, onLike)
+                            MiniRound(if (rating == -1) Icons.Rounded.ThumbDown else Icons.Outlined.ThumbDown, rating == -1, onDislike)
+                        }
+                    } else if (ratingType >= 2) {
+                        Row {
+                            for (i in 1..5) {
+                                Icon(
+                                    if (i <= stars) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                                    contentDescription = "$i stars",
+                                    tint = if (i <= stars) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .clip(CircleShape)
+                                        .clickable { onStars(i) }
+                                        .padding(3.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -353,10 +378,21 @@ fun AlbumArtDialog(songId: Long, onDismiss: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LyricsSheet(song: Song, position: StateFlow<PlaybackPos>, onSeek: (Long) -> Unit, onDismiss: () -> Unit) {
+fun LyricsSheet(song: Song, position: StateFlow<PlaybackPos>, onSeek: (Long) -> Unit, onSearch: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val lyrics by produceState<Lyrics?>(null, song.id) { value = LyricsReader.read(context, song.id) ?: Lyrics(emptyList()) }
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
+    val lyrics by produceState<Lyrics?>(null, song.id) { value = LyricsReader.read(context, song.id, song.path) ?: Lyrics(emptyList()) }
     val pos by position.collectAsState()
+    // Settings → Lyrics → Keep Screen On
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(st.lyricsKeepScreenOn) {
+        val before = view.keepScreenOn
+        if (st.lyricsKeepScreenOn) view.keepScreenOn = true
+        onDispose { view.keepScreenOn = before }
+    }
+    // Settings → Lyrics → Lyrics Size, plus pinch to zoom
+    var zoom by remember { mutableStateOf(1f) }
+    val baseSp = when (st.lyricsSize) { 0 -> 13f; 2 -> 20f; else -> 16f } * zoom
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Text(
             song.title,
@@ -370,23 +406,34 @@ fun LyricsSheet(song: Song, position: StateFlow<PlaybackPos>, onSeek: (Long) -> 
         val l = lyrics
         when {
             l == null -> Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            l.lines.isEmpty() -> Text(
-                "No lyrics found in this file.\nLyrics embedded in FLAC (LYRICS tag) or MP3 (USLT) files are shown here.",
-                color = Color.White.copy(alpha = 0.6f),
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(30.dp)
-            )
+            l.lines.isEmpty() -> Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "No lyrics found for this track.\nLyrics inside FLAC (LYRICS tag) / MP3 (USLT) files, or an .lrc file with the same name, are shown here.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center
+                )
+                if (st.lyricsApp != 0) {
+                    Spacer(Modifier.height(14.dp))
+                    TextButton(onClick = { onSearch(); onDismiss() }) {
+                        Text("Search lyrics: ${com.powersound.player.data.LYRICS_APPS[st.lyricsApp.coerceIn(0, com.powersound.player.data.LYRICS_APPS.lastIndex)]}")
+                    }
+                }
+            }
             else -> {
-                val current = if (l.synced) l.lines.indexOfLast { (it.timeMs ?: 0L) <= pos.positionMs } else -1
+                // Settings → Lyrics → Lyrics Time Offset (positive = earlier)
+                val t = pos.positionMs + st.lyricsOffsetMs
+                val current = if (l.synced) l.lines.indexOfLast { (it.timeMs ?: 0L) <= t } else -1
                 val state = rememberLazyListState()
                 LaunchedEffect(current) {
                     if (current > 2) state.animateScrollToItem(current - 2)
                 }
                 LazyColumn(
                     state = state,
-                    modifier = Modifier.heightIn(max = 520.dp),
+                    modifier = Modifier
+                        .heightIn(max = 520.dp)
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, _, z, _ -> zoom = (zoom * z).coerceIn(0.6f, 2.2f) }
+                        },
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 30.dp)
                 ) {
                     itemsIndexed(l.lines) { i, line ->
@@ -397,16 +444,47 @@ fun LyricsSheet(song: Song, position: StateFlow<PlaybackPos>, onSeek: (Long) -> 
                                 i == current -> MaterialTheme.colorScheme.primary
                                 else -> Color.White.copy(alpha = 0.55f)
                             },
-                            fontSize = if (i == current) 19.sp else 16.sp,
+                            fontSize = (if (i == current) baseSp * 1.18f else baseSp).sp,
                             fontWeight = if (i == current) FontWeight.Bold else FontWeight.Normal,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .then(if (line.timeMs != null) Modifier.clickable { onSeek(line.timeMs) } else Modifier)
+                                .then(if (line.timeMs != null) Modifier.clickable { onSeek((line.timeMs - st.lyricsOffsetMs).coerceAtLeast(0L)) } else Modifier)
                                 .padding(vertical = 5.dp)
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+/** Settings → Lyrics → Preferred Lyrics App: search the track's lyrics outside the app. */
+fun searchLyrics(context: android.content.Context, song: Song) {
+    val st = com.powersound.player.data.SettingsStore.value
+    val q = "${song.artist} ${song.title}".trim()
+    val enc = android.net.Uri.encode(q)
+    val intent = when (st.lyricsApp) {
+        1 -> android.content.Intent(
+            android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse(
+                st.lyricsCustomUrl.replace("%ARTIST%", android.net.Uri.encode(song.artist)).replace("%TITLE%", android.net.Uri.encode(song.title)).replace(" ", "+")
+            )
+        )
+        2 -> android.content.Intent(android.content.Intent.ACTION_WEB_SEARCH).putExtra(android.app.SearchManager.QUERY, "$q lyrics")
+        3 -> android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com/search?q=$enc+lyrics"))
+        4 -> android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.musixmatch.com/search/$enc"))
+        5 -> android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://genius.com/search?q=$enc"))
+        else -> return
+    }.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(intent)
+    } catch (_: Exception) {
+        // no app for the web search: fall back to the browser
+        runCatching {
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com/search?q=$enc+lyrics"))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
         }
     }
 }

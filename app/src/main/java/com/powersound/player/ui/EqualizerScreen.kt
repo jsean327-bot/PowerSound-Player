@@ -493,7 +493,16 @@ private fun ResponseCurve(settings: EqSettings) {
             val y = yOf(db.coerceIn(-range, range))
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        drawPath(path, line, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+        // Settings → Skin → Eq. Graphic Mode Curve: monochromatic / colorful
+        if (settings.enabled && com.powersound.player.data.SettingsStore.value.eqCurveColorful) {
+            drawPath(
+                path,
+                Brush.horizontalGradient(listOf(Color(0xFF4F9DFF), Color(0xFF3DDC84), Color(0xFFE8C14A), Color(0xFFFF8A1F), Color(0xFFFF4D5E))),
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+            )
+        } else {
+            drawPath(path, if (settings.enabled) Color.White.copy(alpha = 0.9f) else line, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+        }
     }
 }
 

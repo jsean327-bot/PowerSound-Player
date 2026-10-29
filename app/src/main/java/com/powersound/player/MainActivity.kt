@@ -122,19 +122,62 @@ import kotlin.math.sign
 import kotlin.coroutines.cancellation.CancellationException
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        /** Set when the app is opened from the media notification (Settings → Notifications → Navigate to the List). */
+        val openedFromNotification = kotlinx.coroutines.flow.MutableStateFlow(0L)
+        const val EXTRA_FROM_NOTIFICATION = "powersound.fromNotification"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
-        )
-        super.onCreate(savedInstanceState)
         com.powersound.player.data.SettingsStore.init(this)
+        applySystemBars(com.powersound.player.data.SettingsStore.value)
+        super.onCreate(savedInstanceState)
         com.powersound.player.data.CrashLog.install(this)
+        handleIntent(intent)
         setContent {
             val appSettings by com.powersound.player.data.SettingsStore.settings.collectAsStateWithLifecycle()
-            PowerSoundTheme(accentIndex = appSettings.accent) {
+            // Settings → Look and Feel: orientation, status bar, navigation bar
+            LaunchedEffect(appSettings.orientation) {
+                requestedOrientation = when (appSettings.orientation) {
+                    1 -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    2 -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
+            }
+            LaunchedEffect(appSettings.hideStatusBar, appSettings.androidNavNoBg) {
+                applySystemBars(appSettings)
+            }
+            PowerSoundTheme(settings = appSettings) {
                 PowerSoundApp()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false) == true) {
+            openedFromNotification.value = System.currentTimeMillis()
+            intent.removeExtra(EXTRA_FROM_NOTIFICATION)
+        }
+    }
+
+    private fun applySystemBars(st: com.powersound.player.data.AppSettings) {
+        // Settings → Skin → Android Navigation Bar: default = soft dark background, or none
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(if (st.androidNavNoBg) android.graphics.Color.TRANSPARENT else 0x66000000)
+        )
+        val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+        if (st.hideStatusBar) {
+            controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+        } else {
+            controller.show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
         }
     }
 }
@@ -178,7 +221,8 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     val stats by vm.stats.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
 
-    var showNowPlaying by rememberSaveable { mutableStateOf(false) }
+    // Settings → Look and Feel → Start at Library (off: the app opens on the Player Screen)
+    var showNowPlaying by rememberSaveable { mutableStateOf(!com.powersound.player.data.SettingsStore.value.startAtLibrary) }
     var showMenu by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
@@ -216,11 +260,47 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         }
     }
 
-    // Settings → Look and Feel: keep the screen on while the player is open
+    // Settings → Look and Feel: always keep the screen on in the app
     val hostView = androidx.compose.ui.platform.LocalView.current
-    DisposableEffect(showNowPlaying, appSettings.keepScreenOn) {
-        hostView.keepScreenOn = showNowPlaying && appSettings.keepScreenOn
+    DisposableEffect(appSettings.keepScreenOn) {
+        hostView.keepScreenOn = appSettings.keepScreenOn
         onDispose { hostView.keepScreenOn = false }
+    }
+    // Nothing to show on the Player Screen at startup → stay in the library
+    val hasSong by androidx.compose.runtime.rememberUpdatedState(player.nowPlaying != null)
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(2500)
+        if (!hasSong) showNowPlaying = false
+    }
+    // Opened from the notification: the Player Screen, or the track's list (Settings → Notifications)
+    val fromNotification by MainActivity.openedFromNotification.collectAsStateWithLifecycle()
+    LaunchedEffect(fromNotification) {
+        if (fromNotification == 0L) return@LaunchedEffect
+        settingsOpen = false
+        if (appSettings.notifNavigateToList) {
+            vm.openSourceList(); showNowPlaying = false
+        } else if (player.nowPlaying != null) {
+            showNowPlaying = true
+        }
+    }
+    fun shareSong(s: Song) {
+        runCatching {
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                .setType(s.mimeType.ifBlank { "audio/*" })
+                .putExtra(android.content.Intent.EXTRA_STREAM, s.uri)
+                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            context.startActivity(android.content.Intent.createChooser(send, "Share").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+    // Settings → Player Screen → Line2 Press / Menu Button Long Press
+    fun goTo(s: Song, where: Int) {
+        showNowPlaying = false
+        when (where) {
+            1 -> vm.goToArtist(s)
+            2 -> vm.goToAlbum(s)
+            3 -> vm.goToFolder(s)
+            4 -> vm.goToGenre(s)
+        }
     }
 
     // Deleting a music file needs the user's OK from Android (Android 11+ shows its own dialog).
@@ -334,10 +414,11 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             )
         }
 
+        val npMs = com.powersound.player.ui.animMs(320)
         AnimatedVisibility(
             visible = showNowPlaying && player.nowPlaying != null,
-            enter = slideInVertically { it / 3 } + scaleIn(initialScale = 0.9f) + fadeIn(),
-            exit = slideOutVertically { it / 2 } + fadeOut()
+            enter = slideInVertically(tween(npMs)) { it / 3 } + scaleIn(tween(npMs), initialScale = 0.9f) + fadeIn(tween(npMs)),
+            exit = slideOutVertically(tween(npMs)) { it / 2 } + fadeOut(tween(npMs))
         ) {
             val np = player.nowPlaying
             val current = vm.song(np?.songId)
@@ -346,6 +427,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 position = vm.position,
                 song = current,
                 rating = stats.rating(np?.songId),
+                stars = stats.stars(np?.songId),
                 playCount = np?.songId?.let { stats.plays[it] } ?: 0,
                 vizMode = vm.vizMode,
                 vizPreset = vm.vizPreset,
@@ -366,6 +448,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 onRepeatMenu = { showRepeatMenu = true },
                 onLike = { vm.like(np?.songId) },
                 onDislike = { vm.dislike(np?.songId) },
+                onStars = { n -> vm.setStars(np?.songId, n) },
                 onQueue = { showQueue = true },
                 onMore = {
                     current?.let { s ->
@@ -373,16 +456,38 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                         songMenu = s
                     }
                 },
+                onMenuAction = { action ->
+                    current?.let { s ->
+                        when (action) {
+                            1 -> if (appSettings.confirmDelete) confirmDelete = s else deleteSong(s)
+                            2 -> playlistFor = listOf(s.id)
+                            3 -> tagsFor = s
+                            4 -> artFor = s.id
+                            5 -> goTo(s, 1)
+                            6 -> goTo(s, 2)
+                            7 -> goTo(s, 3)
+                            8 -> goTo(s, 4)
+                            9 -> shareSong(s)
+                            10 -> vm.like(s.id)
+                            11 -> vm.dislike(s.id)
+                        }
+                    }
+                },
+                onLine2 = { where -> current?.let { goTo(it, where) } },
                 onSleep = { showSleep = true },
                 onLyrics = { lyricsFor = current },
-                onAudioInfo = { showAudioInfo = true }
+                onLyricsApp = { current?.let { com.powersound.player.ui.searchLyrics(context, it) } },
+                onAudioInfo = { showAudioInfo = true },
+                onEqualizer = { showNowPlaying = false; vm.tab = Tab.EQ },
+                onBookmark = { np?.songId?.let { vm.addBookmark(it) } },
+                onAddToPlaylist = { np?.songId?.let { playlistFor = listOf(it) } }
             )
         }
     }
 
     // ---- settings (full screen) ----
     if (settingsOpen) {
-        BackHandler { if (settingsPage != null) settingsPage = null else settingsOpen = false }
+        BackHandler { if (settingsPage != null) settingsPage = settingsPage?.parent else settingsOpen = false }
         SettingsScreen(
             page = settingsPage,
             allFolders = vm.allFolders,
@@ -476,7 +581,11 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         )
     }
     lyricsFor?.let { s ->
-        LyricsSheet(song = s, position = vm.position, onSeek = vm::seekTo, onDismiss = { lyricsFor = null })
+        LyricsSheet(
+            song = s, position = vm.position, onSeek = vm::seekTo,
+            onSearch = { com.powersound.player.ui.searchLyrics(context, s) },
+            onDismiss = { lyricsFor = null }
+        )
     }
     tagsFor?.let { s ->
         InfoTagsDialog(song = s, audioInfo = if (s.id == currentId) player.audioInfo else "", onDismiss = { tagsFor = null })
@@ -511,6 +620,8 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         SongMenuDialog(
             song = s,
             rating = stats.rating(s.id),
+            stars = stats.stars(s.id),
+            onStars = { n -> vm.setStars(s.id, n) },
             onDismiss = { songMenu = null },
             onLike = { vm.like(s.id) },
             onDislike = { vm.dislike(s.id) },
@@ -521,7 +632,8 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             },
             onAlbumArt = { artFor = s.id },
             onInfo = { tagsFor = s },
-            onLyrics = { lyricsFor = s },
+            // Settings → Lyrics → Lyrics Item In The Track Menu
+            onLyrics = { if (appSettings.lyricsMenuItem == 1) com.powersound.player.ui.searchLyrics(context, s) else lyricsFor = s },
             onArtist = { showNowPlaying = false; vm.goToArtist(s) },
             onAlbum = { showNowPlaying = false; vm.goToAlbum(s) },
             onFolder = { showNowPlaying = false; vm.goToFolder(s) },
@@ -569,11 +681,11 @@ private fun LibraryHost(
             dirX = 1f
             dirY = 0f
             progress.collect { swipe.snapTo(it.progress) }
-            swipe.animateTo(1f, tween(170))
+            swipe.animateTo(1f, tween(com.powersound.player.ui.animMs(170)))
             vm.pop()
             swipe.snapTo(0f)
         } catch (e: CancellationException) {
-            scope.launch { swipe.animateTo(0f, tween(200)) }
+            scope.launch { swipe.animateTo(0f, tween(com.powersound.player.ui.animMs(200))) }
             throw e
         }
     }
@@ -581,11 +693,11 @@ private fun LibraryHost(
     fun finish(commit: Boolean) {
         scope.launch {
             if (commit) {
-                swipe.animateTo(1f, tween(180))
+                swipe.animateTo(1f, tween(com.powersound.player.ui.animMs(180)))
                 vm.pop()
                 swipe.snapTo(0f)
             } else {
-                swipe.animateTo(0f, tween(220))
+                swipe.animateTo(0f, tween(com.powersound.player.ui.animMs(220)))
             }
         }
     }

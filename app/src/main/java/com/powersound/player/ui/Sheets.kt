@@ -128,10 +128,8 @@ fun MenuSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf(
-                    SettingsPage.AUDIO, SettingsPage.LOOK, SettingsPage.VISUALIZATION,
-                    SettingsPage.LIBRARY, SettingsPage.HEADSET, SettingsPage.BACKGROUND
-                ).forEach { p ->
+                // Settings → Look and Feel → Settings Shortcuts in Main Menu
+                MENU_SHORTCUT_PAGES.take(com.powersound.player.data.SettingsStore.value.menuShortcuts).forEach { p ->
                     Text(
                         p.title,
                         color = Color.White,

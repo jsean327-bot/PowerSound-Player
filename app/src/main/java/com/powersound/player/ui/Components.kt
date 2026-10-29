@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -114,7 +115,7 @@ fun Artwork(
     }
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(cornerDp.dp))
+            .clip(RoundedCornerShape(com.powersound.player.ui.cornerDp(cornerDp).dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
@@ -213,19 +214,28 @@ fun AppBackground(songId: Long?) {
 
 // ---------------------------------------------------------------- chips & pills
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun OverlayChip(text: String, big: Boolean = false, modifier: Modifier = Modifier) {
+fun OverlayChip(
+    text: String,
+    big: Boolean = false,
+    modifier: Modifier = Modifier,
+    background: Boolean = true,
+    marquee: Boolean = false,
+    sizeSp: Int? = null
+) {
     Text(
         text = text,
         color = Color.White,
         fontWeight = FontWeight.Bold,
-        fontSize = if (big) 15.sp else 11.sp,
+        fontSize = (sizeSp ?: if (big) 15 else 11).sp,
         maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+        overflow = if (marquee) TextOverflow.Clip else TextOverflow.Ellipsis,
         modifier = modifier
             .clip(RoundedCornerShape(50))
-            .background(ChipBg)
+            .background(if (background) ChipBg else Color.Transparent)
             .padding(horizontal = if (big) 10.dp else 8.dp, vertical = if (big) 3.dp else 2.dp)
+            .then(if (marquee) Modifier.basicMarquee(iterations = Int.MAX_VALUE) else Modifier)
     )
 }
 
@@ -368,6 +378,12 @@ fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit, onLongClick: ()
     val artDp = when (zoom) { 0 -> 42; 2 -> 78; else -> 56 }
     val titleSp = when (zoom) { 0 -> 13; 2 -> 17; else -> 15 }
     val colors = MaterialTheme.colorScheme
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
+    // Settings → Look and Feel → List UI / Player Screen → Animate Long Labels Everywhere
+    val shownTitle = (if (st.filenameAsTitle) song.fileName else song.title).let { t ->
+        if (st.showTrackNumber && song.trackNumber > 0) "${song.trackNumber}. $t" else t
+    }
+    val marquee = st.marqueeEverywhere && isCurrent
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -382,12 +398,13 @@ fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit, onLongClick: ()
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                text = song.title,
+                text = shownTitle,
                 fontSize = titleSp.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (isCurrent) colors.primary else Color.White,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = if (marquee) TextOverflow.Clip else TextOverflow.Ellipsis,
+                modifier = if (marquee) Modifier.basicMarquee(iterations = Int.MAX_VALUE) else Modifier
             )
             Text(
                 text = "${song.artist} - ${song.album}",

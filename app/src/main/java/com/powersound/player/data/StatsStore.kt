@@ -13,7 +13,19 @@ data class Stats(
     val lastPlayed: Map<Long, Long> = emptyMap(),
     val ratings: Map<Long, Int> = emptyMap()
 ) {
+    /** 1 = liked, -1 = disliked, 11..15 = 1..5 stars, 0 = none. */
     fun rating(id: Long?): Int = if (id == null) 0 else ratings[id] ?: 0
+
+    /** Rating shown as stars (likes count as 5, dislikes as 1). */
+    fun stars(id: Long?): Int = when (val r = rating(id)) {
+        1 -> 5
+        -1 -> 1
+        in 11..15 -> r - 10
+        else -> 0
+    }
+
+    fun isTop(id: Long?): Boolean = rating(id) == 1 || stars(id) >= 4
+    fun isLow(id: Long?): Boolean = rating(id) == -1 || stars(id) in 1..2
 }
 
 object StatsStore {
@@ -43,7 +55,7 @@ object StatsStore {
         )
     }
 
-    /** 1 = liked, -1 = disliked, 0 = none. */
+    /** 1 = liked, -1 = disliked, 11..15 = stars, 0 = none. */
     fun setRating(id: Long, rating: Int) {
         val s = _stats.value
         save(s.copy(ratings = if (rating == 0) s.ratings - id else s.ratings + (id to rating)))

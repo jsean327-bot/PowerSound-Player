@@ -1,6 +1,7 @@
 package com.powersound.player.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -75,14 +76,18 @@ fun FloatingBottomBar(
     val next by rememberUpdatedState(onNext)
     val prev by rememberUpdatedState(onPrevious)
 
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
+    // Settings → Skin → Transparent Navbar / Offset Navbar
+    val barAlpha = when (st.navbarStyle) { 1 -> 0.62f; 2 -> 0f; else -> 0.96f }
+    val corner = cornerDp(26).dp
     Column(
         modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .background(Color(0xFF1B1B23).copy(alpha = 0.96f))
-            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(26.dp))
+            .padding(horizontal = if (st.offsetNavbar) 18.dp else 8.dp, vertical = if (st.offsetNavbar) 12.dp else 6.dp)
+            .clip(RoundedCornerShape(corner))
+            .background(Color(0xFF1B1B23).copy(alpha = barAlpha))
+            .border(1.dp, Color.White.copy(alpha = if (st.navbarStyle == 2) 0f else 0.06f), RoundedCornerShape(corner))
     ) {
         val np = state.nowPlaying
         if (np != null) {
@@ -111,10 +116,21 @@ fun FloatingBottomBar(
                     .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Artwork(np.songId, Modifier.size(42.dp), sizePx = 144, cornerDp = 8)
+                if (st.artAnimation) {
+                    // Settings → Player Screen → Album Art Animation (also for the bottom bar)
+                    androidx.compose.animation.Crossfade(np.songId, animationSpec = androidx.compose.animation.core.tween(animMs(320)), label = "miniArt") { id ->
+                        Artwork(id, Modifier.size(42.dp), sizePx = 144, cornerDp = 8)
+                    }
+                } else {
+                    Artwork(np.songId, Modifier.size(42.dp), sizePx = 144, cornerDp = 8)
+                }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(np.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        np.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1,
+                        overflow = if (st.marqueeEverywhere) TextOverflow.Clip else TextOverflow.Ellipsis,
+                        modifier = if (st.marqueeEverywhere) Modifier.basicMarquee(iterations = Int.MAX_VALUE) else Modifier
+                    )
                     Text(
                         listOf(np.artist, np.album).filter { it.isNotBlank() }.joinToString(" - "),
                         color = Color.White.copy(alpha = 0.75f),

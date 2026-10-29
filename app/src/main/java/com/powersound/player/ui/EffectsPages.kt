@@ -498,8 +498,10 @@ fun PowerKnob(
             val f = fraction.coerceIn(0f, 1f)
             val start = if (bipolar) 270f else 135f
             val sweep = if (bipolar) (f - 0.5f) * 270f else f * 270f
-            if (kotlin.math.abs(sweep) > 0.5f) {
-                drawArc(primary, start, sweep, false, topLeft = arcTopLeft, size = arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+            // Settings → Skin → Knob Highlight: none / monochromatic / colorful
+            val highlight = com.powersound.player.data.SettingsStore.value.knobHighlight
+            if (highlight != 0 && kotlin.math.abs(sweep) > 0.5f) {
+                drawArc(if (highlight == 2) primary else Color.White.copy(alpha = 0.85f), start, sweep, false, topLeft = arcTopLeft, size = arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
             }
             // pointer
             val angle = Math.toRadians((135.0 + f * 270.0))

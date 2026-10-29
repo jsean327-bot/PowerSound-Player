@@ -19,8 +19,14 @@ data class Song(
     val year: Int,
     val composer: String,
     val genre: String,
-    val dateAdded: Long
+    val dateAdded: Long,
+    /** Full path of the file (may be empty on some phones). */
+    val path: String = ""
 ) {
+    /** File name without extension, for "Filename as title". */
+    val fileName: String
+        get() = path.substringAfterLast('/').substringBeforeLast('.').ifBlank { title }
+
     val uri: Uri
         get() = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
 

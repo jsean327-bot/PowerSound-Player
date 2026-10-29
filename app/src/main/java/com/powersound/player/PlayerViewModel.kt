@@ -227,6 +227,17 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         com.powersound.player.data.SettingsStore.init(app)
         com.powersound.player.data.CrashLog.install(app)
         com.powersound.player.ui.HintStore.init(app)
+        // notification buttons that need the app (Settings → Notifications → Buttons)
+        viewModelScope.launch {
+            PlayerCommands.flow.collect { cmd ->
+                when (cmd) {
+                    "prevCat" -> changeCategory(-1)
+                    "nextCat" -> changeCategory(+1)
+                    "repeat" -> cycleRepeat()
+                    "shuffle" -> toggleShuffle()
+                }
+            }
+        }
         vizMode = runCatching { com.powersound.player.ui.VizMode.valueOf(modePrefs.getString("vizMode", null) ?: "") }
             .getOrDefault(com.powersound.player.ui.VizMode.OFF)
         vizPreset = runCatching { com.powersound.player.ui.VizPreset.valueOf(modePrefs.getString("vizPreset", null) ?: "") }
@@ -332,8 +343,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             Category.ALL_SONGS -> all
             Category.MOST_PLAYED -> all.filter { (stats.plays[it.id] ?: 0) > 0 }
                 .sortedByDescending { stats.plays[it.id] ?: 0 }.take(100)
-            Category.TOP_RATED -> all.filter { stats.rating(it.id) > 0 }
-            Category.LOW_RATED -> all.filter { stats.rating(it.id) < 0 }
+            Category.TOP_RATED -> all.filter { stats.isTop(it.id) }
+            Category.LOW_RATED -> all.filter { stats.isLow(it.id) }
             Category.RECENTLY_PLAYED -> all.filter { stats.lastPlayed.containsKey(it.id) }
                 .sortedByDescending { stats.lastPlayed[it.id] ?: 0L }.take(100)
             Category.RECENTLY_ADDED -> all.sortedByDescending { it.dateAdded }.take(100)
@@ -371,7 +382,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun goToFolder(song: Song) {
-        _library.value.folders.firstOrNull { it.key == "folder:${song.folder}" }?.let { openGroup(it, "Folders") }
+        val st = com.powersound.player.data.SettingsStore.value
+        val flat = _library.value.folders.firstOrNull { it.key == "folder:${song.folder}" }
+        if (!st.navigateToFolders || flat == null) {
+            // Folders Hierarchy: open the song's folder inside the tree
+            tab = Tab.LIBRARY
+            push(Screen.Tree(song.folder, "Folders Hierarchy"))
+            return
+        }
+        openGroup(flat, "Folders")
     }
 
     // ---- playback controls ----
@@ -642,8 +661,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun previous() {
         val c = controller ?: return
-        // Like most players: restart the song if more than 3 seconds in
-        if (c.currentPosition > 3000 || !c.hasPreviousMediaItem()) c.seekTo(0) else c.seekToPreviousMediaItem()
+        // Settings → Player Screen: "<< Button Resets Current Track" — first press rewinds, second changes track
+        val resets = com.powersound.player.data.SettingsStore.value.prevResets
+        if ((resets && c.currentPosition > 3000) || !c.hasPreviousMediaItem()) c.seekTo(0) else c.seekToPreviousMediaItem()
     }
 
     fun seekTo(positionMs: Long) {
@@ -703,6 +723,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun dislike(songId: Long?) {
         songId ?: return
         StatsStore.setRating(songId, if (StatsStore.stats.value.rating(songId) == -1) 0 else -1)
+    }
+
+    /** 1..5 stars; tapping the same number again clears the rating. 0 clears too. */
+    fun setStars(songId: Long?, stars: Int) {
+        songId ?: return
+        val now = StatsStore.stats.value.rating(songId)
+        StatsStore.setRating(songId, if (stars <= 0 || now == 10 + stars) 0 else 10 + stars.coerceIn(1, 5))
     }
 
     // ---- sleep timer ----
