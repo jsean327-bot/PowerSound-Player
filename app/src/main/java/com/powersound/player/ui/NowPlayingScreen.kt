@@ -115,19 +115,20 @@ fun NowPlayingScreen(
     val prev by rememberUpdatedState(onPrevious)
 
     var showWave by rememberSaveable { mutableStateOf(true) }
-    val dragY = remember { Animatable(0f) }
+    // 0 = fully open, 1 = gone. Follows the finger, then finishes smoothly when released.
+    val closeP = remember { Animatable(0f) }
     val artX = remember { Animatable(0f) }
-    var backProgress by remember { mutableFloatStateOf(0f) }
 
-    LaunchedEffect(Unit) { dragY.snapTo(0f) }
+    LaunchedEffect(Unit) { closeP.snapTo(0f) }
 
     // System back gesture: the screen shrinks with the finger, like the swipe down.
     PredictiveBackHandler { progress ->
         try {
-            progress.collect { backProgress = it.progress }
+            progress.collect { closeP.snapTo(it.progress) }
+            closeP.animateTo(1f, tween(170))
             close()
         } catch (e: CancellationException) {
-            backProgress = 0f
+            scope.launch { closeP.animateTo(0f, tween(200)) }
             throw e
         }
     }
@@ -140,11 +141,12 @@ fun NowPlayingScreen(
         Modifier
             .fillMaxSize()
             .graphicsLayer {
-                val p = max((dragY.value / size.height).coerceIn(0f, 1f) * 1.6f, backProgress).coerceIn(0f, 1f)
-                translationY = dragY.value
-                scaleX = 1f - 0.18f * p
-                scaleY = 1f - 0.18f * p
-                alpha = 1f - 0.5f * p
+                // shrinks and fades out completely with the finger; the library shows through more and more
+                val p = closeP.value
+                translationY = size.height * 0.22f * p
+                scaleX = 1f - 0.22f * p
+                scaleY = 1f - 0.22f * p
+                alpha = (1f - p).coerceIn(0f, 1f)
                 shape = RoundedCornerShape(36.dp.toPx() * p)
                 clip = p > 0f
             }
@@ -153,14 +155,20 @@ fun NowPlayingScreen(
                 detectVerticalDragGestures(
                     onVerticalDrag = { change, dy ->
                         change.consume()
-                        scope.launch { dragY.snapTo((dragY.value + dy).coerceAtLeast(0f)) }
+                        val next = (closeP.value + dy / (size.height * 0.5f)).coerceIn(0f, 1f)
+                        scope.launch { closeP.snapTo(next) }
                     },
                     onDragEnd = {
                         scope.launch {
-                            if (dragY.value > size.height * 0.15f) close() else dragY.animateTo(0f)
+                            if (closeP.value > 0.25f) {
+                                closeP.animateTo(1f, tween(180))
+                                close()
+                            } else {
+                                closeP.animateTo(0f, tween(220))
+                            }
                         }
                     },
-                    onDragCancel = { scope.launch { dragY.animateTo(0f) } }
+                    onDragCancel = { scope.launch { closeP.animateTo(0f, tween(220)) } }
                 )
             }
     ) {
