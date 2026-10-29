@@ -41,12 +41,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.powersound.player.PlaybackPos
 import com.powersound.player.PlayerUiState
 import kotlinx.coroutines.flow.StateFlow
 import com.powersound.player.Tab
 
 /** The floating card at the bottom: mini player + Library / EQ / Search / Menu. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FloatingBottomBar(
     state: PlayerUiState,
@@ -59,8 +67,10 @@ fun FloatingBottomBar(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     position: StateFlow<PlaybackPos>,
+    onOpenSource: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val openSource by rememberUpdatedState(onOpenSource)
     val open by rememberUpdatedState(onOpenPlayer)
     val next by rememberUpdatedState(onNext)
     val prev by rememberUpdatedState(onPrevious)
@@ -79,7 +89,7 @@ fun FloatingBottomBar(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable { open() }
+                    .combinedClickable(onClick = { open() }, onLongClick = { openSource() })
                     .pointerInput(Unit) {
                         var total = 0f
                         detectVerticalDragGestures(
@@ -160,7 +170,7 @@ private fun NavRow(tab: Tab, menuOpen: Boolean, onTab: (Tab) -> Unit, onMenu: ()
             verticalAlignment = Alignment.CenterVertically
         ) {
             NavItem(Icons.Rounded.GridView, "Library", !menuOpen && tab == Tab.LIBRARY) { onTab(Tab.LIBRARY) }
-            NavItem(Icons.Rounded.Equalizer, "Equalizer", !menuOpen && tab == Tab.EQ) { onTab(Tab.EQ) }
+            EqNavItem(!menuOpen && tab == Tab.EQ) { onTab(Tab.EQ) }
             NavItem(Icons.Rounded.Search, "Search", !menuOpen && tab == Tab.SEARCH) { onTab(Tab.SEARCH) }
             NavItem(Icons.Rounded.Menu, "Menu", menuOpen, onMenu)
         }
@@ -184,5 +194,49 @@ private fun androidx.compose.foundation.layout.RowScope.NavItem(
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = label, tint = if (selected) Color.White else Color.White.copy(alpha = 0.75f), modifier = Modifier.size(28.dp))
+    }
+}
+
+
+/** Equalizer tab button: tap opens the tab, long press gives quick on/off switches. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.EqNavItem(selected: Boolean, onClick: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val eq by com.powersound.player.audio.AudioEngine.settings.collectAsState()
+    val fx by com.powersound.player.audio.AudioEngine.fx.collectAsState()
+    Box(
+        Modifier
+            .weight(1f)
+            .height(48.dp)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) Color.White.copy(alpha = 0.12f) else Color.Transparent)
+            .combinedClickable(onClick = onClick, onLongClick = { menu = true }),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(Icons.Rounded.Equalizer, contentDescription = "Equalizer", tint = if (selected) Color.White else Color.White.copy(alpha = 0.75f), modifier = Modifier.size(28.dp))
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text((if (eq.enabled) "✓  " else "     ") + "Equalizer") },
+                onClick = { com.powersound.player.audio.AudioEngine.update { it.copy(enabled = !it.enabled) } }
+            )
+            DropdownMenuItem(
+                text = { Text((if (eq.toneEnabled) "✓  " else "     ") + "Bass & Treble") },
+                onClick = { com.powersound.player.audio.AudioEngine.update { it.copy(toneEnabled = !it.toneEnabled) } }
+            )
+            DropdownMenuItem(
+                text = { Text((if (eq.limiter) "✓  " else "     ") + "Limiter") },
+                onClick = { com.powersound.player.audio.AudioEngine.update { it.copy(limiter = !it.limiter) } }
+            )
+            DropdownMenuItem(
+                text = { Text((if (fx.reverbEnabled) "✓  " else "     ") + "Reverb") },
+                onClick = { com.powersound.player.audio.AudioEngine.updateFx { it.copy(reverbEnabled = !it.reverbEnabled) } }
+            )
+            DropdownMenuItem(
+                text = { Text((if (fx.tempoEnabled) "✓  " else "     ") + "Tempo") },
+                onClick = { com.powersound.player.audio.AudioEngine.updateFx { it.copy(tempoEnabled = !it.tempoEnabled) } }
+            )
+        }
     }
 }

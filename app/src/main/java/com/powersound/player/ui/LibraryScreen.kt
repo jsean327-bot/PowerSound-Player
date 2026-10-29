@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -139,15 +140,24 @@ fun GroupGridScreen(
     onOpen: (Group) -> Unit,
     onPlay: (List<Song>) -> Unit,
     onShuffle: (List<Song>) -> Unit,
-    onAddToQueue: (List<Song>) -> Unit
+    onAddToQueue: (List<Song>) -> Unit,
+    extraMenu: List<Pair<String, () -> Unit>> = emptyList()
 ) {
     val state = rememberLazyGridState()
+    var columns by rememberSaveable { mutableIntStateOf(2) }
+    var sort by rememberSaveable { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf(false) }
-    val shown = remember(groups, query) {
+    val shown = remember(groups, query, sort) {
         val q = query?.trim()?.lowercase().orEmpty()
-        if (q.isEmpty()) groups else groups.filter { it.title.lowercase().contains(q) || it.subtitle.lowercase().contains(q) }
+        val list = if (q.isEmpty()) groups else groups.filter { it.title.lowercase().contains(q) || it.subtitle.lowercase().contains(q) }
+        when (sort) {
+            1 -> list.reversed()
+            2 -> list.sortedByDescending { it.songs.size }
+            3 -> list.sortedBy { it.songs.size }
+            else -> list
+        }
     }
     val allSongs = remember(shown) { shown.flatMap { it.songs } }
     val keys = remember(shown) { shown.map { letterKey(it.title) } }
@@ -167,6 +177,19 @@ fun GroupGridScreen(
             Box(Modifier.align(Alignment.TopEnd)) {
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("Add all to queue") }, onClick = { menu = false; onAddToQueue(allSongs) })
+                    extraMenu.forEach { (label, action) ->
+                        DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() })
+                    }
+                    MenuHeader("List options • sort")
+                    listOf("Name A–Z", "Name Z–A", "Most songs", "Fewest songs").forEachIndexed { i, label ->
+                        DropdownMenuItem(
+                            text = { Text(if (sort == i) "✓  $label" else "     $label") },
+                            onClick = { sort = i; menu = false }
+                        )
+                    }
+                    MenuHeader("Zoom (or pinch the list)")
+                    DropdownMenuItem(text = { Text("Bigger tiles") }, onClick = { if (columns > 1) columns--; menu = false })
+                    DropdownMenuItem(text = { Text("Smaller tiles") }, onClick = { if (columns < 4) columns++; menu = false })
                 }
             }
         }
@@ -174,9 +197,11 @@ fun GroupGridScreen(
 
     Box(Modifier.fillMaxSize()) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Fixed(columns),
             state = state,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .pinchToZoom(columns, onZoomIn = { if (columns > 1) columns-- }, onZoomOut = { if (columns < 4) columns++ }),
             contentPadding = PaddingValues(start = 10.dp, end = 26.dp, bottom = bottomInset + 70.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -194,15 +219,17 @@ fun GroupGridScreen(
             }
         }
 
-        FastScroller(
-            itemKeys = keys,
-            onJump = { i -> scope.launch { state.scrollToItem(i + headerItems) } },
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .statusBarsPadding()
-                .padding(top = 90.dp, bottom = bottomInset + 10.dp)
-                .fillMaxHeight()
-        )
+        if (sort == 0) {
+            FastScroller(
+                itemKeys = keys,
+                onJump = { i -> scope.launch { state.scrollToItem(i + headerItems) } },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .statusBarsPadding()
+                    .padding(top = 90.dp, bottom = bottomInset + 10.dp)
+                    .fillMaxHeight()
+            )
+        }
 
         FloatingPills(visible = scrolled, bottomInset = bottomInset) { pills(Modifier) }
     }
@@ -277,19 +304,33 @@ fun SongListScreen(
     onShuffle: (List<Song>) -> Unit,
     onSongMenu: (Song) -> Unit,
     onAddToQueue: (List<Song>) -> Unit,
+    extraMenu: List<Pair<String, () -> Unit>> = emptyList(),
+    rowExtra: ((Song) -> String?)? = null,
     header: @Composable (pills: @Composable () -> Unit) -> Unit
 ) {
     val state = rememberLazyListState()
+    var zoom by rememberSaveable { mutableIntStateOf(1) }
+    var sort by rememberSaveable { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf(false) }
-    val shown = remember(songs, query) {
+    val shown = remember(songs, query, sort) {
         val q = query?.trim()?.lowercase().orEmpty()
-        if (q.isEmpty()) songs else songs.filter {
+        val list = if (q.isEmpty()) songs else songs.filter {
             it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) || it.album.lowercase().contains(q)
         }
+        when (sort) {
+            1 -> list.sortedBy { it.title.lowercase() }
+            2 -> list.sortedWith(compareBy({ it.artist.lowercase() }, { it.album.lowercase() }, { it.track }))
+            3 -> list.sortedWith(compareBy({ it.album.lowercase() }, { it.track }))
+            4 -> list.sortedByDescending { it.durationMs }
+            5 -> list.sortedByDescending { it.dateAdded }
+            6 -> list.sortedByDescending { it.year }
+            else -> list
+        }
     }
-    val keys = remember(shown, showIndex) { if (showIndex) shown.map { letterKey(it.title) } else emptyList() }
+    val indexOn = showIndex && (sort == 0 || sort == 1)
+    val keys = remember(shown, indexOn) { if (indexOn) shown.map { letterKey(it.title) } else emptyList() }
     val headerItems = if (query != null) 2 else 1
     val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
 
@@ -306,6 +347,19 @@ fun SongListScreen(
             Box(Modifier.align(Alignment.TopEnd)) {
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("Add all to queue") }, onClick = { menu = false; onAddToQueue(shown) })
+                    extraMenu.forEach { (label, action) ->
+                        DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() })
+                    }
+                    MenuHeader("List options • sort")
+                    listOf("Default order", "Title", "Artist", "Album", "Longest first", "Recently added", "Newest year").forEachIndexed { i, label ->
+                        DropdownMenuItem(
+                            text = { Text(if (sort == i) "✓  $label" else "     $label") },
+                            onClick = { sort = i; menu = false }
+                        )
+                    }
+                    MenuHeader("Zoom (or pinch the list)")
+                    DropdownMenuItem(text = { Text("Bigger rows") }, onClick = { if (zoom < 2) zoom++; menu = false })
+                    DropdownMenuItem(text = { Text("Smaller rows") }, onClick = { if (zoom > 0) zoom--; menu = false })
                 }
             }
         }
@@ -314,8 +368,10 @@ fun SongListScreen(
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             state = state,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(end = if (showIndex) 18.dp else 0.dp, bottom = bottomInset + 70.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .pinchToZoom(zoom, onZoomIn = { if (zoom < 2) zoom++ }, onZoomOut = { if (zoom > 0) zoom-- }),
+            contentPadding = PaddingValues(end = if (indexOn) 18.dp else 0.dp, bottom = bottomInset + 70.dp)
         ) {
             item { header(pills) }
             if (query != null) {
@@ -338,12 +394,14 @@ fun SongListScreen(
                     song = s,
                     isCurrent = s.id == currentId,
                     onClick = { onPlay(shown, i) },
-                    onLongClick = { onSongMenu(s) }
+                    onLongClick = { onSongMenu(s) },
+                    zoom = zoom,
+                    extra = rowExtra?.invoke(s)
                 )
             }
         }
 
-        if (showIndex && shown.size > 20) {
+        if (indexOn && shown.size > 20) {
             FastScroller(
                 itemKeys = keys,
                 onJump = { i -> scope.launch { state.scrollToItem(i + headerItems) } },
@@ -452,6 +510,59 @@ fun TreeScreen(
             }
             itemsIndexed(songs, key = { _, s -> "song:${s.id}" }, span = { _, _ -> GridItemSpan(maxLineSpan) }) { i, s ->
                 SongRow(s, s.id == currentId, onClick = { onPlay(songs, i) }, onLongClick = { onSongMenu(s) })
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun MenuHeader(text: String) {
+    Text(
+        text,
+        color = MaterialTheme.colorScheme.primary,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 4.dp)
+    )
+}
+
+/** Bookmarks: a song and the moment you saved. Tap to play from there, long press to remove. */
+@Composable
+fun BookmarksScreen(
+    bookmarks: List<com.powersound.player.data.Bookmark>,
+    songOf: (Long) -> Song?,
+    currentId: Long?,
+    bottomInset: Dp,
+    onBack: () -> Unit,
+    onPlay: (com.powersound.player.data.Bookmark) -> Unit,
+    onRemove: (com.powersound.player.data.Bookmark) -> Unit
+) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 20.dp)) {
+        item {
+            PageHeader("Library", Category.BOOKMARKS.label, Category.BOOKMARKS.icon(), Category.BOOKMARKS.color(), onBack) {
+                Text(
+                    "Add a bookmark from the ⋮ menu on the player. Tap to play from that moment, long press to remove.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp
+                )
+            }
+        }
+        if (bookmarks.isEmpty()) {
+            item {
+                Text("No bookmarks yet", color = Color.White.copy(alpha = 0.6f), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp))
+            }
+        }
+        items(bookmarks, key = { "${it.songId}:${it.createdAt}" }) { b ->
+            val song = songOf(b.songId)
+            if (song != null) {
+                SongRow(
+                    song = song,
+                    isCurrent = song.id == currentId,
+                    onClick = { onPlay(b) },
+                    onLongClick = { onRemove(b) },
+                    extra = "at ${formatTime(b.positionMs)}"
+                )
             }
         }
     }

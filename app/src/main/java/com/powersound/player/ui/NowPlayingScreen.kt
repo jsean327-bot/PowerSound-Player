@@ -264,6 +264,7 @@ fun NowPlayingScreen(
                                 }
                                 closeP.value > 0f -> closeP.animateTo(0f, tween(220))
                                 up < -120f -> lyrics()
+                                else -> Unit
                             }
                         }
                     },
@@ -418,6 +419,7 @@ fun NowPlayingScreen(
             val pos by position.collectAsState()
             val duration = pos.durationMs.coerceAtLeast(1L)
             val fraction = (pos.positionMs.toFloat() / duration).coerceIn(0f, 1f)
+            val durationNow by rememberUpdatedState(duration)
             var rowBounds by remember { mutableStateOf(Rect.Zero) }
             val edgeButton = with(androidx.compose.ui.platform.LocalDensity.current) { 54.dp.toPx() }
             Box(
@@ -433,7 +435,7 @@ fun NowPlayingScreen(
                                     (down.position.x in (r.right - edgeButton)..r.right))
                             if (onEdge) return@awaitEachGesture // ⏮ / ⏭ keep their own long press
                             var released = false
-                            val waited = kotlinx.coroutines.withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            val waited = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                                 while (true) {
                                     val e = awaitPointerEvent(PointerEventPass.Initial)
                                     val c = e.changes.firstOrNull { it.id == down.id }
@@ -457,7 +459,7 @@ fun NowPlayingScreen(
                                 if (!c.pressed) break
                                 scrubFrac = (c.position.x / size.width).coerceIn(0f, 1f)
                             }
-                            seek((scrubFrac * duration).toLong())
+                            seek((scrubFrac * durationNow).toLong())
                             scrubbing = false
                         }
                     },

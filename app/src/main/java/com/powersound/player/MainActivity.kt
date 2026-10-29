@@ -1,6 +1,22 @@
 package com.powersound.player
 
 import android.Manifest
+import android.app.Activity
+import android.app.RecoverableSecurityException
+import android.provider.MediaStore
+import androidx.activity.result.IntentSenderRequest
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import com.powersound.player.ui.AddToPlaylistDialog
+import com.powersound.player.ui.AlbumArtDialog
+import com.powersound.player.ui.AudioInfoDialog
+import com.powersound.player.ui.BookmarksScreen
+import com.powersound.player.ui.ChoiceDialog
+import com.powersound.player.ui.HintBubble
+import com.powersound.player.ui.HintStore
+import com.powersound.player.ui.InfoTagsDialog
+import com.powersound.player.ui.LyricsSheet
+import com.powersound.player.ui.SongMenuDialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -77,8 +93,8 @@ import com.powersound.player.ui.PowerSoundTheme
 import com.powersound.player.ui.QueueSheet
 import com.powersound.player.ui.SearchScreen
 import com.powersound.player.ui.SleepTimerDialog
-import com.powersound.player.ui.SongActionsSheet
 import com.powersound.player.ui.SongListScreen
+import com.powersound.player.ui.SaveNameDialog
 import com.powersound.player.ui.TreeScreen
 import com.powersound.player.ui.UpdateDialog
 import com.powersound.player.ui.color
@@ -159,6 +175,40 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     var showSleep by remember { mutableStateOf(false) }
     var songMenu by remember { mutableStateOf<Song?>(null) }
     var songMenuInfo by remember { mutableStateOf<String?>(null) }
+    var lyricsFor by remember { mutableStateOf<Song?>(null) }
+    var tagsFor by remember { mutableStateOf<Song?>(null) }
+    var artFor by remember { mutableStateOf<Long?>(null) }
+    var showAudioInfo by remember { mutableStateOf(false) }
+    var showRepeatMenu by remember { mutableStateOf(false) }
+    var showShuffleMenu by remember { mutableStateOf(false) }
+    var playlistFor by remember { mutableStateOf<List<Long>?>(null) }
+    var confirmDelete by remember { mutableStateOf<Song?>(null) }
+    var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
+
+    // Deleting a music file needs the user's OK from Android (Android 11+ shows its own dialog).
+    val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val id = pendingDeleteId
+        if (result.resultCode == Activity.RESULT_OK && id != null) vm.onSongDeleted(id)
+        pendingDeleteId = null
+    }
+    fun deleteSong(song: Song) {
+        pendingDeleteId = song.id
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val pi = MediaStore.createDeleteRequest(context.contentResolver, listOf(song.uri))
+                deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+            } else {
+                context.contentResolver.delete(song.uri, null, null)
+                vm.onSongDeleted(song.id)
+            }
+        } catch (e: SecurityException) {
+            val rse = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) e as? RecoverableSecurityException else null
+            if (rse != null) {
+                deleteLauncher.launch(IntentSenderRequest.Builder(rse.userAction.actionIntent.intentSender).build())
+            }
+        } catch (_: Exception) {
+        }
+    }
     var barHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val bottomInset: Dp = with(density) { barHeightPx.toDp() } + 4.dp
@@ -218,10 +268,32 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             onNext = vm::next,
             onPrevious = vm::previous,
             position = vm.position,
+            onOpenSource = { vm.openSourceList() },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .onSizeChanged { barHeightPx = it.height }
         )
+
+        if (tab == Tab.LIBRARY && vm.stack.size > 1 && !showNowPlaying && HintStore.shouldShow("library")) {
+            HintBubble(
+                title = "Library",
+                text = "Swipe the page in any direction to go back. Pinch to zoom the list. " +
+                    "⋮ → list options for sorting and zoom. Long press a song for its menu.",
+                onClose = { HintStore.dismiss("library") },
+                modifier = Modifier
+                    .align(Alignment.Center)
+            )
+        }
+        if (player.nowPlaying != null && !showNowPlaying && HintStore.shouldShow("mini")) {
+            HintBubble(
+                title = "Mini player",
+                text = "Tap to open the player. Swipe ◀ ▶ to change tracks. Long press for the track's list.",
+                onClose = { HintStore.dismiss("mini") },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = bottomInset + 8.dp)
+            )
+        }
 
         AnimatedVisibility(
             visible = showNowPlaying && player.nowPlaying != null,
@@ -229,29 +301,42 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             exit = slideOutVertically { it / 2 } + fadeOut()
         ) {
             val np = player.nowPlaying
+            val current = vm.song(np?.songId)
             NowPlayingScreen(
                 state = player,
                 position = vm.position,
+                song = current,
                 rating = stats.rating(np?.songId),
-                sleepActive = player.sleepEndsAt != null,
+                playCount = np?.songId?.let { stats.plays[it] } ?: 0,
+                vizMode = vm.vizMode,
+                vizPreset = vm.vizPreset,
+                onVizMode = vm::setVisualization,
+                onVizPreset = vm::setVisualizationPreset,
                 onClose = { showNowPlaying = false },
+                onSourceList = { vm.openSourceList(); showNowPlaying = false },
                 onTogglePlay = vm::togglePlay,
                 onNext = vm::next,
                 onPrevious = vm::previous,
                 onSeek = vm::seekTo,
                 onSeekBy = vm::seekBy,
+                onPrevCategory = { vm.changeCategory(-1) },
+                onNextCategory = { vm.changeCategory(+1) },
                 onShuffle = vm::toggleShuffle,
+                onShuffleMenu = { showShuffleMenu = true },
                 onRepeat = vm::cycleRepeat,
+                onRepeatMenu = { showRepeatMenu = true },
                 onLike = { vm.like(np?.songId) },
                 onDislike = { vm.dislike(np?.songId) },
                 onQueue = { showQueue = true },
                 onMore = {
-                    vm.song(np?.songId)?.let { s ->
+                    current?.let { s ->
                         songMenuInfo = player.audioInfo
                         songMenu = s
                     }
                 },
-                onSleep = { showSleep = true }
+                onSleep = { showSleep = true },
+                onLyrics = { lyricsFor = current },
+                onAudioInfo = { showAudioInfo = true }
             )
         }
     }
@@ -279,11 +364,54 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     }
     if (showSleep) {
         SleepTimerDialog(
-            active = player.sleepEndsAt != null,
-            onSet = { vm.setSleepTimer(it) },
-            onEndOfTrack = { vm.sleepAtEndOfTrack() },
+            remainingMinutes = player.sleepEndsAt?.let { ((it - System.currentTimeMillis()) / 60_000L + 1).toInt().coerceAtLeast(1) },
+            onSet = { m, finish -> vm.setSleepTimer(m, finish) },
             onCancelTimer = { vm.cancelSleep() },
             onDismiss = { showSleep = false }
+        )
+    }
+    if (showRepeatMenu) {
+        ChoiceDialog(
+            title = "When the list ends",
+            options = RepeatMode.values().map { it.label },
+            selected = player.repeat.ordinal,
+            onPick = { vm.setRepeatMode(RepeatMode.values()[it]) },
+            onDismiss = { showRepeatMenu = false }
+        )
+    }
+    if (showShuffleMenu) {
+        ChoiceDialog(
+            title = "Shuffle",
+            options = ShuffleMode.values().map { it.label },
+            selected = player.shuffleMode.ordinal,
+            onPick = { vm.setShuffleMode(ShuffleMode.values()[it]) },
+            onDismiss = { showShuffleMenu = false }
+        )
+    }
+    lyricsFor?.let { s ->
+        LyricsSheet(song = s, position = vm.position, onSeek = vm::seekTo, onDismiss = { lyricsFor = null })
+    }
+    tagsFor?.let { s ->
+        InfoTagsDialog(song = s, audioInfo = if (s.id == currentId) player.audioInfo else "", onDismiss = { tagsFor = null })
+    }
+    artFor?.let { id -> AlbumArtDialog(songId = id, onDismiss = { artFor = null }) }
+    if (showAudioInfo) {
+        AudioInfoDialog(
+            song = vm.song(currentId),
+            audioInfo = player.audioInfo,
+            dspSummary = dspSummary(),
+            onDismiss = { showAudioInfo = false }
+        )
+    }
+    playlistFor?.let { ids -> AddToPlaylistDialog(songIds = ids, onDismiss = { playlistFor = null }) }
+    confirmDelete?.let { s ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            containerColor = Color(0xFF1B1B22),
+            title = { Text("Delete file?", color = Color.White) },
+            text = { Text("\"${s.title}\" will be deleted from your phone.", color = Color.White.copy(alpha = 0.8f)) },
+            confirmButton = { TextButton(onClick = { confirmDelete = null; deleteSong(s) }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } }
         )
     }
     UpdateDialog(
@@ -293,15 +421,26 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         onDismiss = vm::dismissUpdate
     )
     songMenu?.let { s ->
-        SongActionsSheet(
+        SongMenuDialog(
             song = s,
-            info = songMenuInfo,
+            rating = stats.rating(s.id),
             onDismiss = { songMenu = null },
+            onLike = { vm.like(s.id) },
+            onDislike = { vm.dislike(s.id) },
+            onDelete = { confirmDelete = s },
+            onPlaylist = { playlistFor = listOf(s.id) },
+            onBookmark = {
+                if (s.id == currentId) vm.addBookmark(s.id) else com.powersound.player.data.LibraryStores.addBookmark(s.id, 0L)
+            },
+            onAlbumArt = { artFor = s.id },
+            onInfo = { tagsFor = s },
+            onLyrics = { lyricsFor = s },
+            onArtist = { showNowPlaying = false; vm.goToArtist(s) },
+            onAlbum = { showNowPlaying = false; vm.goToAlbum(s) },
+            onFolder = { showNowPlaying = false; vm.goToFolder(s) },
+            onGenre = { showNowPlaying = false; vm.goToGenre(s) },
             onPlayNext = { vm.playNext(listOf(s)) },
-            onAddToQueue = { vm.addToQueue(listOf(s)) },
-            onGoAlbum = { showNowPlaying = false; vm.goToAlbum(s) },
-            onGoArtist = { showNowPlaying = false; vm.goToArtist(s) },
-            onGoFolder = { showNowPlaying = false; vm.goToFolder(s) }
+            onAddToQueue = { vm.addToQueue(listOf(s)) }
         )
     }
 }
@@ -494,49 +633,60 @@ private fun ScreenContent(
     onOpenQueue: () -> Unit
 ) {
     val currentId = player.nowPlaying?.songId
-    val play: (List<Song>, Int) -> Unit = { list, i -> vm.play(list, i) }
-    val shuffle: (List<Song>) -> Unit = { vm.shuffleAll(it) }
     val addQueue: (List<Song>) -> Unit = { vm.addToQueue(it) }
+    val playlists by com.powersound.player.data.LibraryStores.playlists.collectAsStateWithLifecycle()
+    val bookmarks by com.powersound.player.data.LibraryStores.bookmarks.collectAsStateWithLifecycle()
+    var nameDialog by remember { mutableStateOf<Pair<String, (String) -> Unit>?>(null) }
+    var playlistSongMenu by remember { mutableStateOf<Pair<Long, Song>?>(null) }
 
     when (screen) {
         Screen.Home -> {
             val queueEmpty = player.queue.isEmpty()
-            val empty = remember(library.songs, stats, queueEmpty) {
+            val empty = remember(library.songs, stats, queueEmpty, playlists, bookmarks) {
                 Category.values().filter { cat ->
-                    when (cat.kind) {
-                        Kind.QUEUE -> queueEmpty
-                        Kind.SONGS -> vm.songsFor(cat, stats).isEmpty()
+                    when {
+                        cat.kind == Kind.QUEUE -> queueEmpty
+                        cat == Category.PLAYLISTS -> playlists.isEmpty()
+                        cat == Category.BOOKMARKS -> bookmarks.isEmpty()
+                        cat.kind == Kind.SONGS -> vm.songsFor(cat, stats).isEmpty()
                         else -> library.songs.isEmpty()
                     }
                 }.toSet()
             }
             LibraryHome(
-            loading = library.loading,
-            isEmpty = { cat -> cat in empty },
-            bottomInset = bottomInset,
-            onOpen = { cat ->
-                if (cat.kind == Kind.QUEUE) onOpenQueue() else vm.push(Screen.Cat(cat))
-            },
-            onRescan = { vm.loadLibrary(force = true) }
-        )
+                loading = library.loading,
+                isEmpty = { cat -> cat in empty },
+                bottomInset = bottomInset,
+                onOpen = { cat ->
+                    if (cat.kind == Kind.QUEUE) onOpenQueue() else vm.push(Screen.Cat(cat))
+                },
+                onRescan = { vm.loadLibrary(force = true) }
+            )
         }
 
         is Screen.Cat -> {
             val cat = screen.cat
+            val key = "cat:${cat.name}"
             when (cat.kind) {
-                Kind.GROUPS -> GroupGridScreen(
-                    title = cat.label,
-                    icon = cat.icon(),
-                    iconColor = cat.color(),
-                    backLabel = "Library",
-                    groups = library.groupsFor(cat),
-                    bottomInset = bottomInset,
-                    onBack = { vm.pop() },
-                    onOpen = { g -> vm.push(Screen.Detail(g, cat.label)) },
-                    onPlay = { play(it, 0) },
-                    onShuffle = shuffle,
-                    onAddToQueue = addQueue
-                )
+                Kind.GROUPS -> {
+                    val groups = if (cat == Category.PLAYLISTS) remember(playlists, library.songs) { vm.playlistGroups() } else library.groupsFor(cat)
+                    GroupGridScreen(
+                        title = cat.label,
+                        icon = cat.icon(),
+                        iconColor = cat.color(),
+                        backLabel = "Library",
+                        groups = groups,
+                        bottomInset = bottomInset,
+                        onBack = { vm.pop() },
+                        onOpen = { g -> vm.push(Screen.Detail(g, cat.label)) },
+                        onPlay = { vm.play(it, 0, sourceKey = key) },
+                        onShuffle = { vm.shuffleAll(it, key) },
+                        onAddToQueue = addQueue,
+                        extraMenu = if (cat == Category.PLAYLISTS) listOf(
+                            "New playlist" to { nameDialog = "New playlist" to { n: String -> com.powersound.player.data.LibraryStores.createPlaylist(n); Unit } }
+                        ) else emptyList()
+                    )
+                }
                 Kind.TREE -> {
                     val (subs, direct) = remember(library.songs) { MusicRepository.treeChildren(library.songs, "") }
                     TreeScreen(
@@ -548,11 +698,20 @@ private fun ScreenContent(
                         bottomInset = bottomInset,
                         onBack = { vm.pop() },
                         onOpenFolder = { g -> vm.push(Screen.Tree(g.key.removePrefix("tree:"), cat.label)) },
-                        onPlay = play,
-                        onShuffle = shuffle,
+                        onPlay = { list, i -> vm.play(list, i, sourceKey = key) },
+                        onShuffle = { vm.shuffleAll(it, key) },
                         onSongMenu = onSongMenu
                     )
                 }
+                Kind.BOOKMARKS -> BookmarksScreen(
+                    bookmarks = bookmarks,
+                    songOf = { vm.song(it) },
+                    currentId = currentId,
+                    bottomInset = bottomInset,
+                    onBack = { vm.pop() },
+                    onPlay = { vm.playBookmark(it) },
+                    onRemove = { com.powersound.player.data.LibraryStores.removeBookmark(it) }
+                )
                 else -> {
                     val songs = remember(library.songs, stats, cat) { vm.songsFor(cat, stats) }
                     SongListScreen(
@@ -561,10 +720,11 @@ private fun ScreenContent(
                         bottomInset = bottomInset,
                         showIndex = cat == Category.ALL_SONGS,
                         emptyText = "Nothing here yet",
-                        onPlay = play,
-                        onShuffle = shuffle,
+                        onPlay = { list, i -> vm.play(list, i, sourceKey = key) },
+                        onShuffle = { vm.shuffleAll(it, key) },
                         onSongMenu = onSongMenu,
-                        onAddToQueue = addQueue
+                        onAddToQueue = addQueue,
+                        rowExtra = if (cat == Category.MOST_PLAYED) { s -> "${stats.plays[s.id] ?: 0}×" } else null
                     ) { pills ->
                         PageHeader("Library", cat.label, cat.icon(), cat.color(), { vm.pop() }) { pills() }
                     }
@@ -572,18 +732,34 @@ private fun ScreenContent(
             }
         }
 
-        is Screen.Detail -> SongListScreen(
-            songs = screen.group.songs,
-            currentId = currentId,
-            bottomInset = bottomInset,
-            showIndex = false,
-            emptyText = "No songs",
-            onPlay = play,
-            onShuffle = shuffle,
-            onSongMenu = onSongMenu,
-            onAddToQueue = addQueue
-        ) { pills ->
-            ArtHeader(screen.group, screen.backLabel, { vm.pop() }) { pills() }
+        is Screen.Detail -> {
+            // always show the current version (after a rescan or a playlist edit)
+            val group = remember(screen.group.key, library, playlists) { vm.findGroup(screen.group.key) } ?: screen.group
+            val isPlaylist = group.key.startsWith("playlist:")
+            val playlistId = if (isPlaylist) group.key.removePrefix("playlist:").toLongOrNull() else null
+            SongListScreen(
+                songs = group.songs,
+                currentId = currentId,
+                bottomInset = bottomInset,
+                showIndex = false,
+                emptyText = if (isPlaylist) "This playlist is empty.\nAdd songs from the ⋮ menu of any song." else "No songs",
+                onPlay = { list, i -> vm.play(list, i, sourceKey = group.key) },
+                onShuffle = { vm.shuffleAll(it, group.key) },
+                onSongMenu = { s -> if (playlistId != null) playlistSongMenu = playlistId to s else onSongMenu(s) },
+                onAddToQueue = addQueue,
+                extraMenu = if (playlistId != null) listOf(
+                    "Rename playlist" to {
+                        nameDialog = "Rename playlist" to { n: String -> com.powersound.player.data.LibraryStores.renamePlaylist(playlistId, n) }
+                    },
+                    "Delete playlist" to {
+                        com.powersound.player.data.LibraryStores.deletePlaylist(playlistId)
+                        vm.pop()
+                        Unit
+                    }
+                ) else listOf("Add all to a playlist" to { nameDialog = "New playlist" to { n: String -> com.powersound.player.data.LibraryStores.createPlaylist(n, group.songs.map { it.id }); Unit } })
+            ) { pills ->
+                ArtHeader(group, screen.backLabel, { vm.pop() }) { pills() }
+            }
         }
 
         is Screen.Tree -> {
@@ -601,12 +777,43 @@ private fun ScreenContent(
                 onOpenFolder = { g ->
                     vm.push(Screen.Tree(g.key.removePrefix("tree:"), screen.path.substringAfterLast('/')))
                 },
-                onPlay = play,
-                onShuffle = shuffle,
+                onPlay = { list, i -> vm.play(list, i, sourceKey = "folder:${screen.path}") },
+                onShuffle = { vm.shuffleAll(it, "folder:${screen.path}") },
                 onSongMenu = onSongMenu
             )
         }
     }
+
+    nameDialog?.let { (title, save) ->
+        SaveNameDialog(title, onSave = save, onDismiss = { nameDialog = null })
+    }
+    playlistSongMenu?.let { (pid, s) ->
+        ChoiceDialog(
+            title = s.title,
+            options = listOf("Remove from playlist", "Song menu…"),
+            selected = -1,
+            onPick = { i ->
+                if (i == 0) com.powersound.player.data.LibraryStores.removeFromPlaylist(pid, s.id) else onSongMenu(s)
+            },
+            onDismiss = { playlistSongMenu = null }
+        )
+    }
+}
+
+private fun dspSummary(): String {
+    val eq = com.powersound.player.audio.AudioEngine.settings.value
+    val fx = com.powersound.player.audio.AudioEngine.fx.value
+    val parts = ArrayList<String>()
+    if (eq.enabled) parts.add("EQ ${eq.bands.size} bands (${eq.presetName})")
+    if (eq.enabled && eq.toneEnabled && (eq.bassDb != 0.0 || eq.trebleDb != 0.0)) parts.add("Bass/Treble")
+    if (eq.enabled && eq.limiter) parts.add("Limiter")
+    if (fx.reverbEnabled) parts.add("Reverb (${fx.reverbPreset})")
+    if (fx.tempoEnabled && fx.tempo != 1.0) parts.add("Tempo %.2fx".format(fx.tempo))
+    if (fx.mono) parts.add("Mono")
+    if (fx.stereoExpand > 0.0) parts.add("Stereo expand")
+    if (fx.balance != 0.0) parts.add("Balance")
+    if (fx.volume < 1.0) parts.add("Volume ${(fx.volume * 100).toInt()}%")
+    return if (parts.isEmpty()) "Off — bit-exact pass-through" else parts.joinToString(" • ") + " • 64-bit float DSP with dither"
 }
 
 @Composable

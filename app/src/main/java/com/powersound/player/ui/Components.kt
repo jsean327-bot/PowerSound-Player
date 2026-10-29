@@ -43,6 +43,8 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlayCircleFilled
 import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
@@ -304,7 +306,9 @@ fun Category.icon(): ImageVector = when (this) {
     Category.GENRES -> Icons.Rounded.Category
     Category.YEARS -> Icons.Rounded.DateRange
     Category.COMPOSERS -> Icons.Rounded.Edit
+    Category.PLAYLISTS -> Icons.Rounded.PlaylistPlay
     Category.QUEUE -> Icons.Rounded.QueueMusic
+    Category.BOOKMARKS -> Icons.Rounded.Bookmark
     Category.MOST_PLAYED -> Icons.Rounded.PlayCircleFilled
     Category.TOP_RATED -> Icons.Rounded.ThumbUp
     Category.LOW_RATED -> Icons.Rounded.ThumbDown
@@ -321,7 +325,9 @@ fun Category.color(): Color = when (this) {
     Category.GENRES -> Color(0xFFC06BD8)
     Category.YEARS -> Color(0xFF4FB6C9)
     Category.COMPOSERS -> Color(0xFF3FAE6A)
+    Category.PLAYLISTS -> Color(0xFFD08A5B)
     Category.QUEUE -> Color(0xFFC9A63F)
+    Category.BOOKMARKS -> Color(0xFF5B7FD0)
     Category.MOST_PLAYED -> Color(0xFFB98BF0)
     Category.TOP_RATED -> Color(0xFF7FA0C0)
     Category.LOW_RATED -> Color(0xFF8A8A8A)
@@ -347,7 +353,9 @@ fun CategoryIcon(icon: ImageVector, color: Color, size: Int = 34) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit, onLongClick: () -> Unit = {}) {
+fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit, onLongClick: () -> Unit = {}, zoom: Int = 1, extra: String? = null) {
+    val artDp = when (zoom) { 0 -> 42; 2 -> 78; else -> 56 }
+    val titleSp = when (zoom) { 0 -> 13; 2 -> 17; else -> 15 }
     val colors = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
@@ -359,12 +367,12 @@ fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit, onLongClick: ()
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Artwork(songId = song.id, modifier = Modifier.size(56.dp), sizePx = 168, cornerDp = 10)
+        Artwork(songId = song.id, modifier = Modifier.size(artDp.dp), sizePx = if (zoom == 2) 240 else 168, cornerDp = 10)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 text = song.title,
-                fontSize = 15.sp,
+                fontSize = titleSp.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (isCurrent) colors.primary else Color.White,
                 maxLines = 1,
@@ -379,7 +387,7 @@ fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit, onLongClick: ()
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "♪ ${formatTime(song.durationMs)} | ${song.formatLabel.lowercase()}",
+                text = "♪ ${formatTime(song.durationMs)} | ${song.formatLabel.lowercase()}" + (extra?.let { "  •  $it" } ?: ""),
                 fontSize = 10.sp,
                 color = Color.White.copy(alpha = 0.55f),
                 maxLines = 1
@@ -549,3 +557,35 @@ fun GroupTile(title: String, subtitle: String, coverId: Long?, onClick: () -> Un
         }
     }
 }
+
+
+/**
+ * Pinch with two fingers: spread = zoom in, pinch = zoom out. One step per gesture.
+ * Single-finger scrolling is not affected.
+ */
+fun Modifier.pinchToZoom(key: Any, onZoomIn: () -> Unit, onZoomOut: () -> Unit): Modifier =
+    pointerInput(key) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+            var startDist = 0f
+            var fired = false
+            while (true) {
+                val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                val pressed = e.changes.filter { it.pressed }
+                if (pressed.isEmpty()) break
+                if (pressed.size >= 2) {
+                    val d = (pressed[0].position - pressed[1].position).getDistance()
+                    if (startDist == 0f) startDist = d
+                    e.changes.forEach { it.consume() }
+                    if (!fired && startDist > 0f) {
+                        val ratio = d / startDist
+                        if (ratio > 1.3f) {
+                            onZoomIn(); fired = true
+                        } else if (ratio < 0.77f) {
+                            onZoomOut(); fired = true
+                        }
+                    }
+                }
+            }
+        }
+    }

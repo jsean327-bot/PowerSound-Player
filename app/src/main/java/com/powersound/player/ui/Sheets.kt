@@ -212,36 +212,3 @@ fun SongActionsSheet(
         Spacer(Modifier.height(24.dp))
     }
 }
-
-@Composable
-fun SleepTimerDialog(
-    active: Boolean,
-    onSet: (Int) -> Unit,
-    onEndOfTrack: () -> Unit,
-    onCancelTimer: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = SheetBg,
-        title = { Text("Sleep timer", color = Color.White) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                listOf(15, 30, 45, 60, 90, 120).forEach { m ->
-                    TextButton(onClick = { onSet(m); onDismiss() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("$m minutes", color = Color.White, modifier = Modifier.fillMaxWidth())
-                    }
-                }
-                TextButton(onClick = { onEndOfTrack(); onDismiss() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("End of current song", color = Color.White, modifier = Modifier.fillMaxWidth())
-                }
-            }
-        },
-        confirmButton = {
-            if (active) TextButton(onClick = { onCancelTimer(); onDismiss() }) { Text("Turn off") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        }
-    )
-}

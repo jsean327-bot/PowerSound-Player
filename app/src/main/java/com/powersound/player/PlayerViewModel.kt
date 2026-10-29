@@ -19,6 +19,7 @@ import com.powersound.player.audio.AudioEngine
 import com.powersound.player.data.AudioInfo
 import com.powersound.player.data.Category
 import com.powersound.player.data.Group
+import com.powersound.player.data.LibraryStores
 import com.powersound.player.data.LONG_TRACK_MS
 import com.powersound.player.data.MusicRepository
 import com.powersound.player.data.Song
@@ -44,6 +45,28 @@ data class NowPlaying(
 /** Position is kept apart from the rest so only the progress bars redraw 4x per second. */
 data class PlaybackPos(val positionMs: Long = 0, val durationMs: Long = 0)
 
+/** The 6 "what happens at the end" modes, cycled by the repeat button. */
+enum class RepeatMode(val label: String) {
+    ADVANCE("Play All Categories"),
+    SONG_REPEAT("Play the current song and repeat"),
+    LIST_REPEAT("Play the current category and repeat"),
+    ADVANCE_REPEAT("Play all categories and repeat"),
+    SONG_STOP("Play the current song and stop"),
+    LIST_STOP("Play the current category and stop");
+
+    fun next(): RepeatMode = values()[(ordinal + 1) % values().size]
+}
+
+enum class ShuffleMode(val label: String) {
+    OFF("Shuffle off"),
+    SONGS("Shuffle songs"),
+    CATEGORIES("Shuffle categories"),
+    ALL("Shuffle songs and categories");
+
+    val songs: Boolean get() = this == SONGS || this == ALL
+    val categories: Boolean get() = this == CATEGORIES || this == ALL
+}
+
 data class QueueEntry(val index: Int, val songId: Long?, val title: String, val artist: String)
 
 data class PlayerUiState(
@@ -56,7 +79,11 @@ data class PlayerUiState(
     val audioInfo: String = "",
     val queue: List<QueueEntry> = emptyList(),
     val currentIndex: Int = -1,
-    val sleepEndsAt: Long? = null
+    val sleepEndsAt: Long? = null,
+    val repeat: RepeatMode = RepeatMode.LIST_STOP,
+    val shuffleMode: ShuffleMode = ShuffleMode.OFF,
+    /** Library key of the list the current queue came from (album:…, folder:…, cat:ALL_SONGS…). */
+    val sourceKey: String? = null
 )
 
 data class LibraryState(
@@ -123,6 +150,22 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val stack = mutableStateListOf<Screen>(Screen.Home)
     var tab by mutableStateOf(Tab.LIBRARY)
 
+    // ---- visualization (remembered between openings of the player) ----
+    var vizMode by mutableStateOf(com.powersound.player.ui.VizMode.OFF)
+        private set
+    var vizPreset by mutableStateOf(com.powersound.player.ui.VizPreset.SPECTRUM_CENTERED)
+        private set
+
+    fun setVisualization(mode: com.powersound.player.ui.VizMode) {
+        vizMode = mode
+        modePrefs.edit().putString("vizMode", mode.name).apply()
+    }
+
+    fun setVisualizationPreset(p: com.powersound.player.ui.VizPreset) {
+        vizPreset = p
+        modePrefs.edit().putString("vizPreset", p.name).apply()
+    }
+
     private var songById: Map<Long, Song> = emptyMap()
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
@@ -130,8 +173,38 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private var infoForId: Long? = null
     private var lastRecordedId: Long? = null
     private var sleepJob: Job? = null
+    private var stopAtSongEnd = false
+    private val modePrefs = app.getSharedPreferences("powersound_player", android.content.Context.MODE_PRIVATE)
 
     private val listener = object : Player.Listener {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) return
+            val c = controller ?: return
+            // "current song and stop", or the sleep timer waiting for the song to finish
+            if (_player.value.repeat == RepeatMode.SONG_STOP || stopAtSongEnd) {
+                c.pause()
+                if (stopAtSongEnd) {
+                    stopAtSongEnd = false
+                    _player.value = _player.value.copy(sleepEndsAt = null)
+                }
+            }
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState != Player.STATE_ENDED) return
+            if (stopAtSongEnd) {
+                stopAtSongEnd = false
+                _player.value = _player.value.copy(sleepEndsAt = null)
+                return
+            }
+            // "Play all categories": the list is over, continue with the next album / folder / …
+            when (_player.value.repeat) {
+                RepeatMode.ADVANCE -> changeCategory(+1, wrap = false)
+                RepeatMode.ADVANCE_REPEAT -> changeCategory(+1, wrap = true)
+                else -> Unit
+            }
+        }
+
         override fun onEvents(player: Player, events: Player.Events) {
             val queueChanged = events.contains(Player.EVENT_TIMELINE_CHANGED) ||
                 events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
@@ -142,6 +215,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     init {
         AudioEngine.init(app)
         StatsStore.init(app)
+        LibraryStores.init(app)
+        com.powersound.player.ui.HintStore.init(app)
+        vizMode = runCatching { com.powersound.player.ui.VizMode.valueOf(modePrefs.getString("vizMode", null) ?: "") }
+            .getOrDefault(com.powersound.player.ui.VizMode.OFF)
+        vizPreset = runCatching { com.powersound.player.ui.VizPreset.valueOf(modePrefs.getString("vizPreset", null) ?: "") }
+            .getOrDefault(com.powersound.player.ui.VizPreset.SPECTRUM_CENTERED)
+        _player.value = _player.value.copy(
+            repeat = runCatching { RepeatMode.valueOf(modePrefs.getString("repeat", null) ?: "") }.getOrDefault(RepeatMode.LIST_STOP),
+            shuffleMode = runCatching { ShuffleMode.valueOf(modePrefs.getString("shuffle", null) ?: "") }.getOrDefault(ShuffleMode.OFF)
+        )
         connect()
         checkForUpdate(manual = false)
         // Tempo from the Effects page is applied to the player (pitch is kept).
@@ -174,6 +257,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 controller = c
                 c.addListener(listener)
                 applyTempo()
+                applyModes()
                 refresh(true)
             }
         }, ContextCompat.getMainExecutor(app))
@@ -253,19 +337,143 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- playback controls ----
 
-    fun play(songs: List<Song>, startIndex: Int, shuffle: Boolean = false) {
+    fun play(
+        songs: List<Song>,
+        startIndex: Int,
+        shuffle: Boolean = false,
+        sourceKey: String? = null,
+        startPositionMs: Long = 0L
+    ) {
         val c = controller ?: return
         if (songs.isEmpty()) return
         val index = startIndex.coerceIn(0, songs.lastIndex)
-        c.shuffleModeEnabled = shuffle
-        c.setMediaItems(songs.map { it.toMediaItem() }, index, 0L)
+        if (shuffle && !_player.value.shuffleMode.songs) setShuffleMode(ShuffleMode.SONGS)
+        c.shuffleModeEnabled = _player.value.shuffleMode.songs
+        c.setMediaItems(songs.map { it.toMediaItem() }, index, startPositionMs)
         c.prepare()
         c.play()
+        _player.value = _player.value.copy(sourceKey = sourceKey)
     }
 
-    fun shuffleAll(songs: List<Song>) {
+    // ---- categories ("Play all categories", long-press prev/next) ----
+
+    /** All groups of the category the current queue came from, and the index of the current one. */
+    private fun sourceGroups(): Pair<List<Group>, Int>? {
+        val key = _player.value.sourceKey ?: return null
+        val lib = _library.value
+        val list = when (key.substringBefore(':')) {
+            "folder" -> lib.folders
+            "album" -> lib.albums
+            "artist" -> lib.artists
+            "albumartist" -> lib.albumArtists
+            "genre" -> lib.genres
+            "year" -> lib.years
+            "composer" -> lib.composers
+            "playlist" -> playlistGroups()
+            else -> return null
+        }
+        val i = list.indexOfFirst { it.key == key }
+        return if (i < 0 || list.isEmpty()) null else list to i
+    }
+
+    /** Finds the current version of a library group (after a rescan or a playlist edit). */
+    fun findGroup(key: String): Group? {
+        val lib = _library.value
+        val list = when (key.substringBefore(':')) {
+            "folder" -> lib.folders
+            "album" -> lib.albums
+            "artist" -> lib.artists
+            "albumartist" -> lib.albumArtists
+            "genre" -> lib.genres
+            "year" -> lib.years
+            "composer" -> lib.composers
+            "playlist" -> playlistGroups()
+            else -> return null
+        }
+        return list.firstOrNull { it.key == key }
+    }
+
+    /** Plays the next (+1) or previous (-1) album / folder / … Returns false when there is none. */
+    fun changeCategory(dir: Int, wrap: Boolean = true): Boolean {
+        val (list, i) = sourceGroups() ?: return false
+        val target = if (_player.value.shuffleMode.categories && list.size > 1) {
+            list.indices.filter { it != i }.random()
+        } else {
+            val n = i + dir
+            when {
+                n in list.indices -> n
+                wrap -> (n + list.size) % list.size
+                else -> return false
+            }
+        }
+        val g = list[target]
+        if (g.songs.isEmpty()) return false
+        val start = if (_player.value.shuffleMode.songs) g.songs.indices.random() else 0
+        play(g.songs, start, sourceKey = g.key)
+        return true
+    }
+
+    /** The library page of the list that is playing (for "track source list"). */
+    fun sourceScreen(): Screen? {
+        val key = _player.value.sourceKey
+        if (key != null && key.startsWith("cat:")) {
+            val cat = runCatching { Category.valueOf(key.removePrefix("cat:")) }.getOrNull()
+            if (cat != null) return Screen.Cat(cat)
+        }
+        sourceGroups()?.let { (list, i) ->
+            val label = when (key?.substringBefore(':')) {
+                "folder" -> "Folders"; "album" -> "Albums"; "artist" -> "Artists"
+                "albumartist" -> "Album Artists"; "genre" -> "Genres"; "year" -> "Years"
+                "composer" -> "Composers"; "playlist" -> "Playlists"; else -> "Library"
+            }
+            return Screen.Detail(list[i], label)
+        }
+        val song = song(_player.value.nowPlaying?.songId) ?: return null
+        val album = _library.value.albums.firstOrNull { it.key == "album:${song.albumId}" } ?: return null
+        return Screen.Detail(album, "Albums")
+    }
+
+    fun openSourceList() {
+        val s = sourceScreen() ?: return
+        tab = Tab.LIBRARY
+        push(s)
+    }
+
+    // ---- playlists & bookmarks ----
+
+    fun playlistGroups(): List<Group> = LibraryStores.playlists.value.map { p ->
+        val songs = p.songIds.mapNotNull { songById[it] }
+        Group("playlist:${p.id}", p.name, if (songs.size == 1) "1 song" else "${songs.size} songs", songs)
+    }
+
+    fun addBookmark(songId: Long?) {
+        songId ?: return
+        LibraryStores.addBookmark(songId, controller?.currentPosition ?: 0L)
+    }
+
+    fun playBookmark(b: com.powersound.player.data.Bookmark) {
+        val s = song(b.songId) ?: return
+        play(listOf(s), 0, startPositionMs = b.positionMs)
+    }
+
+    fun goToGenre(song: Song) {
+        _library.value.genres.firstOrNull { it.key == "genre:${song.genre.ifBlank { "Unknown genre" }}" }?.let { openGroup(it, "Genres") }
+    }
+
+    /** After a song file was deleted: drop it from the queue and rescan. */
+    fun onSongDeleted(songId: Long) {
+        val c = controller
+        if (c != null) {
+            for (i in c.mediaItemCount - 1 downTo 0) {
+                if (c.getMediaItemAt(i).mediaId == songId.toString()) c.removeMediaItem(i)
+            }
+        }
+        loadLibrary(force = true)
+    }
+
+    fun shuffleAll(songs: List<Song>, sourceKey: String? = null) {
         if (songs.isEmpty()) return
-        play(songs, songs.indices.random(), shuffle = true)
+        play(songs, songs.indices.random(), shuffle = true, sourceKey = sourceKey)
     }
 
     fun playNext(songs: List<Song>) {
@@ -333,17 +541,37 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun toggleShuffle() {
-        val c = controller ?: return
-        c.shuffleModeEnabled = !c.shuffleModeEnabled
+        setShuffleMode(if (_player.value.shuffleMode == ShuffleMode.OFF) ShuffleMode.SONGS else ShuffleMode.OFF)
     }
 
-    fun cycleRepeat() {
+    fun setShuffleMode(mode: ShuffleMode) {
+        _player.value = _player.value.copy(shuffleMode = mode)
+        modePrefs.edit().putString("shuffle", mode.name).apply()
+        applyModes()
+    }
+
+    /** Cycles the 6 end-of-list modes and returns the new one (for the toast). */
+    fun cycleRepeat(): RepeatMode {
+        val next = _player.value.repeat.next()
+        setRepeatMode(next)
+        return next
+    }
+
+    fun setRepeatMode(mode: RepeatMode) {
+        _player.value = _player.value.copy(repeat = mode)
+        modePrefs.edit().putString("repeat", mode.name).apply()
+        applyModes()
+    }
+
+    private fun applyModes() {
         val c = controller ?: return
-        c.repeatMode = when (c.repeatMode) {
-            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+        val st = _player.value
+        c.repeatMode = when (st.repeat) {
+            RepeatMode.SONG_REPEAT -> Player.REPEAT_MODE_ONE
+            RepeatMode.LIST_REPEAT -> Player.REPEAT_MODE_ALL
             else -> Player.REPEAT_MODE_OFF
         }
+        c.shuffleModeEnabled = st.shuffleMode.songs
     }
 
     // ---- ratings ----
@@ -360,7 +588,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- sleep timer ----
 
-    fun setSleepTimer(minutes: Int) = startSleep(minutes * 60_000L)
+    fun setSleepTimer(minutes: Int, finishSong: Boolean = false) = startSleep(minutes * 60_000L, finishSong)
 
     fun sleepAtEndOfTrack() {
         val c = controller ?: return
@@ -371,16 +599,23 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelSleep() {
         sleepJob?.cancel()
         sleepJob = null
+        stopAtSongEnd = false
         _player.value = _player.value.copy(sleepEndsAt = null)
     }
 
-    private fun startSleep(ms: Long) {
+    private fun startSleep(ms: Long, finishSong: Boolean = false) {
         sleepJob?.cancel()
+        stopAtSongEnd = false
         _player.value = _player.value.copy(sleepEndsAt = System.currentTimeMillis() + ms)
         sleepJob = viewModelScope.launch {
             delay(ms)
-            controller?.pause()
-            _player.value = _player.value.copy(sleepEndsAt = null)
+            if (finishSong && controller?.isPlaying == true) {
+                // let the current song play to its end, then stop
+                stopAtSongEnd = true
+            } else {
+                controller?.pause()
+                _player.value = _player.value.copy(sleepEndsAt = null)
+            }
         }
     }
 

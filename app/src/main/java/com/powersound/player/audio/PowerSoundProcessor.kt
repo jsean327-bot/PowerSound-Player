@@ -151,6 +151,14 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         // Fast path: nothing switched on and already 16-bit -> copy untouched (bit-exact).
         if (!isFloat && !eqOn && !fxOn) {
             val bytes = frames * channels * 2
+            if (VisualizerBus.active) {
+                val view = inputBuffer.duplicate().order(java.nio.ByteOrder.nativeOrder()).asShortBuffer()
+                for (f in 0 until frames) {
+                    var sum = 0f
+                    for (ch in 0 until channels) sum += view.get(f * channels + ch) / 32768f
+                    VisualizerBus.write(sum / channels)
+                }
+            }
             val slice = inputBuffer.duplicate()
             slice.limit(slice.position() + bytes)
             out.put(slice)
@@ -165,6 +173,7 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         val buf = frameBuf
         val stereo = channels == 2
         val rev = reverb
+        val viz = VisualizerBus.active
 
         for (f in 0 until frames) {
             // ---- EQ per channel ----
@@ -234,6 +243,12 @@ class PowerSoundProcessor : BaseAudioProcessor() {
                 }
             } else {
                 limiterGain = 1.0
+            }
+
+            if (viz) {
+                var sum = 0.0
+                for (ch in 0 until channels) sum += buf[ch]
+                VisualizerBus.write((sum / channels * limiterGain).toFloat())
             }
 
             for (ch in 0 until channels) {

@@ -43,7 +43,7 @@ data class Group(
     val totalMs: Long get() = songs.sumOf { it.durationMs }
 }
 
-enum class Kind { SONGS, GROUPS, TREE, QUEUE }
+enum class Kind { SONGS, GROUPS, TREE, QUEUE, BOOKMARKS }
 
 enum class Category(val label: String, val kind: Kind) {
     ALL_SONGS("All Songs", Kind.SONGS),
@@ -55,7 +55,9 @@ enum class Category(val label: String, val kind: Kind) {
     GENRES("Genres", Kind.GROUPS),
     YEARS("Years", Kind.GROUPS),
     COMPOSERS("Composers", Kind.GROUPS),
+    PLAYLISTS("Playlists", Kind.GROUPS),
     QUEUE("Queue", Kind.QUEUE),
+    BOOKMARKS("Bookmarks", Kind.BOOKMARKS),
     MOST_PLAYED("Most Played", Kind.SONGS),
     TOP_RATED("Top Rated", Kind.SONGS),
     LOW_RATED("Low Rated", Kind.SONGS),
