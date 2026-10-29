@@ -83,6 +83,20 @@ import com.powersound.player.ui.TreeScreen
 import com.powersound.player.ui.UpdateDialog
 import com.powersound.player.ui.color
 import com.powersound.player.ui.icon
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Velocity
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.sign
 import kotlin.coroutines.cancellation.CancellationException
 
 class MainActivity : ComponentActivity() {
@@ -293,8 +307,12 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
 }
 
 /**
- * The Library tab: a stack of pages. The system back gesture shrinks the top page
- * like a card and reveals the page underneath, as in the reference video.
+ * The Library tab: a stack of pages. Going back works like the reference video —
+ * in any direction:
+ *  • swipe the page left or right anywhere,
+ *  • pull it down when the list is at the top, or up when it is at the end,
+ *  • or use the system back gesture / back button.
+ * The page shrinks like a card following the finger and the previous page shows underneath.
  */
 @Composable
 private fun LibraryHost(
@@ -308,25 +326,104 @@ private fun LibraryHost(
     onOpenQueue: () -> Unit
 ) {
     val holder = rememberSaveableStateHolder()
-    var backProgress by remember { mutableFloatStateOf(0f) }
+    val scope = rememberCoroutineScope()
     val stack = vm.stack
+    val canGoBack = enabled && stack.size > 1
 
-    PredictiveBackHandler(enabled = enabled && stack.size > 1) { progress ->
+    var systemBack by remember { mutableFloatStateOf(0f) }
+    val swipe = remember { Animatable(0f) }
+    var dirX by remember { mutableFloatStateOf(1f) }
+    var dirY by remember { mutableFloatStateOf(0f) }
+    var pageWidth by remember { mutableFloatStateOf(1f) }
+    var pageHeight by remember { mutableFloatStateOf(1f) }
+
+    PredictiveBackHandler(enabled = canGoBack) { progress ->
         try {
-            progress.collect { backProgress = it.progress }
+            dirX = 1f
+            dirY = 0f
+            progress.collect { systemBack = it.progress }
             vm.pop()
-            backProgress = 0f
+            systemBack = 0f
         } catch (e: CancellationException) {
-            backProgress = 0f
+            systemBack = 0f
             throw e
         }
     }
 
+    fun finish(commit: Boolean) {
+        scope.launch {
+            if (commit) {
+                swipe.animateTo(1f, tween(160))
+                vm.pop()
+                swipe.snapTo(0f)
+            } else {
+                swipe.animateTo(0f, tween(200))
+            }
+        }
+    }
+
+    // Vertical: whatever the list can't scroll any more (top or end) moves the page instead.
+    val pullConnection = remember(canGoBack) {
+        object : NestedScrollConnection {
+            var pull = 0f
+
+            fun show() {
+                dirX = 0f
+                dirY = sign(pull)
+                val p = (abs(pull) / (pageHeight * 0.35f)).coerceIn(0f, 1f)
+                scope.launch { swipe.snapTo(p) }
+            }
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (pull == 0f || source != NestedScrollSource.Drag) return Offset.Zero
+                val next = pull + available.y
+                return when {
+                    next * pull <= 0f -> {
+                        val used = -pull
+                        pull = 0f
+                        show()
+                        Offset(0f, used)
+                    }
+                    abs(next) < abs(pull) -> {
+                        pull = next
+                        show()
+                        Offset(0f, available.y)
+                    }
+                    else -> Offset.Zero
+                }
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (!canGoBack || source != NestedScrollSource.Drag || available.y == 0f) return Offset.Zero
+                pull += available.y
+                show()
+                return Offset(0f, available.y)
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pull == 0f) return Velocity.Zero
+                val flungSameWay = abs(available.y) > 2500f && sign(available.y) == sign(pull)
+                val commit = swipe.value > 0.35f || flungSameWay
+                pull = 0f
+                finish(commit)
+                return available
+            }
+        }
+    }
+
+    val p = max(systemBack, swipe.value)
     val bg = MaterialTheme.colorScheme.background
-    // Only the top page is shown; during a back swipe the page underneath is shown too.
+    // Only the top page is shown; while going back the page underneath is shown too.
     // Each page is keyed by its id so it keeps its scroll position when it moves.
-    val visible = if (backProgress > 0f && stack.size > 1) stack.takeLast(2) else listOf(stack.last())
-    Box(Modifier.fillMaxSize()) {
+    val visible = if (p > 0f && stack.size > 1) stack.takeLast(2) else listOf(stack.last())
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onSizeChanged {
+                pageWidth = it.width.toFloat().coerceAtLeast(1f)
+                pageHeight = it.height.toFloat().coerceAtLeast(1f)
+            }
+    ) {
         visible.forEachIndexed { i, screen ->
             key(screen.id) {
                 val isTop = i == visible.lastIndex
@@ -334,15 +431,38 @@ private fun LibraryHost(
                     Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            val p = if (isTop) backProgress else 0f
-                            scaleX = 1f - 0.14f * p
-                            scaleY = 1f - 0.14f * p
-                            translationX = 48.dp.toPx() * p
-                            alpha = 1f - 0.25f * p
-                            shape = RoundedCornerShape(34.dp.toPx() * p)
-                            clip = p > 0f
+                            val q = if (isTop) max(systemBack, swipe.value) else 0f
+                            scaleX = 1f - 0.14f * q
+                            scaleY = 1f - 0.14f * q
+                            translationX = dirX * 56.dp.toPx() * q
+                            translationY = dirY * 90.dp.toPx() * q
+                            alpha = 1f - 0.3f * q
+                            shape = RoundedCornerShape(34.dp.toPx() * q)
+                            clip = q > 0f
                         }
-                        .then(if (isTop && backProgress > 0f) Modifier.background(bg) else Modifier)
+                        .then(if (isTop && p > 0f) Modifier.background(bg) else Modifier)
+                        .then(
+                            if (isTop && canGoBack) Modifier
+                                .nestedScroll(pullConnection)
+                                .pointerInput(screen.id) {
+                                    // Horizontal: swipe left or right anywhere on the page.
+                                    var dx = 0f
+                                    detectHorizontalDragGestures(
+                                        onDragStart = { dx = 0f },
+                                        onHorizontalDrag = { change, d ->
+                                            change.consume()
+                                            dx += d
+                                            dirX = sign(dx)
+                                            dirY = 0f
+                                            val prog = (abs(dx) / (pageWidth * 0.45f)).coerceIn(0f, 1f)
+                                            scope.launch { swipe.snapTo(prog) }
+                                        },
+                                        onDragEnd = { finish(swipe.value > 0.3f) },
+                                        onDragCancel = { finish(false) }
+                                    )
+                                }
+                            else Modifier
+                        )
                 ) {
                     holder.SaveableStateProvider(screen.id) {
                         ScreenContent(screen, vm, library, player, stats, bottomInset, onSongMenu, onOpenQueue)
