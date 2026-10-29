@@ -26,6 +26,12 @@ object ArtworkLoader {
     private val missing: MutableSet<String> = Collections.synchronizedSet(HashSet())
     private val gate = Semaphore(4)
 
+    /** Settings → Album Art: forget every loaded cover so they are read again. */
+    fun clear() {
+        cache.evictAll()
+        missing.clear()
+    }
+
     fun cached(songId: Long, sizePx: Int): ImageBitmap? =
         cache.get(key(songId, sizePx))?.asImageBitmap()
 

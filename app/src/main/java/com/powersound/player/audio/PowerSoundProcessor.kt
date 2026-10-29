@@ -108,12 +108,13 @@ class PowerSoundProcessor : BaseAudioProcessor() {
 
         // ---- effects & reverb ----
         val fx = AudioEngine.fxSnapshot
-        fxOn = fx.active
+        val rg = AudioEngine.replayGainDb
+        fxOn = fx.active || kotlin.math.abs(rg) > 0.01
         mono = fx.mono
         sideGain = 1.0 + 1.5 * fx.stereoExpand
         gainL = min(1.0, 1.0 - fx.balance)
         gainR = min(1.0, 1.0 + fx.balance)
-        volume = fx.volume.coerceIn(0.0, 1.0)
+        volume = fx.volume.coerceIn(0.0, 1.0) * linearGain(rg)
         reverbOn = fx.reverbEnabled
         if (reverbOn) {
             val r = reverb?.takeIf { sampleRate == configuredRate } ?: Reverb(sampleRate)
@@ -123,7 +124,7 @@ class PowerSoundProcessor : BaseAudioProcessor() {
             reverb = null
         }
 
-        useLimiter = (eqOn && s.limiter) || reverbOn || sideGain > 1.0
+        useLimiter = (eqOn && s.limiter) || reverbOn || sideGain > 1.0 || rg > 0.0
         if (sampleRate != configuredRate) {
             releaseCoef = 1.0 - exp(-1.0 / (0.15 * sampleRate)) // 150 ms release
         }

@@ -52,6 +52,17 @@ object AudioEngine {
     var version: Int = 0
         private set
 
+    /** ReplayGain of the song now playing (dB, already including the preamp). 0 = off. */
+    @Volatile
+    var replayGainDb: Double = 0.0
+        private set
+
+    fun setReplayGain(db: Double) {
+        if (kotlin.math.abs(db - replayGainDb) < 0.01) return
+        replayGainDb = db
+        version += 1
+    }
+
     /** Automatic negative gain that keeps EQ boosts from clipping. */
     @Volatile
     var headroomDb: Double = 0.0

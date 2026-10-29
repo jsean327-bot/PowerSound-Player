@@ -53,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -94,6 +95,11 @@ import com.powersound.player.ui.QueueSheet
 import com.powersound.player.ui.SearchScreen
 import com.powersound.player.ui.SleepTimerDialog
 import com.powersound.player.ui.SongListScreen
+import com.powersound.player.ui.SettingsScreen
+import com.powersound.player.ui.SettingsPage
+import com.powersound.player.ui.ChangelogDialog
+import com.powersound.player.ui.HelpDialog
+import com.powersound.player.ui.StreamsScreen
 import com.powersound.player.ui.SaveNameDialog
 import com.powersound.player.ui.TreeScreen
 import com.powersound.player.ui.UpdateDialog
@@ -122,8 +128,11 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
         super.onCreate(savedInstanceState)
+        com.powersound.player.data.SettingsStore.init(this)
+        com.powersound.player.data.CrashLog.install(this)
         setContent {
-            PowerSoundTheme {
+            val appSettings by com.powersound.player.data.SettingsStore.settings.collectAsStateWithLifecycle()
+            PowerSoundTheme(accentIndex = appSettings.accent) {
                 PowerSoundApp()
             }
         }
@@ -184,6 +193,35 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     var playlistFor by remember { mutableStateOf<List<Long>?>(null) }
     var confirmDelete by remember { mutableStateOf<Song?>(null) }
     var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsPage by remember { mutableStateOf<SettingsPage?>(null) }
+    var showChangelog by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    val appSettings by com.powersound.player.data.SettingsStore.settings.collectAsStateWithLifecycle()
+
+    // Settings → Export / Import: save or restore all settings and data as a file the user picks
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            backupMessage = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(com.powersound.player.data.DataBackup.export(context).toByteArray()) }
+                "Saved. Keep this file to restore your EQ, presets, playlists and settings later."
+            }.getOrElse { "Couldn't save the file: ${it.message}" }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val text = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
+            backupMessage = if (text != null && com.powersound.player.data.DataBackup.import(context, text)) "RESTART" else "This file is not a PowerSound backup."
+        }
+    }
+
+    // Settings → Look and Feel: keep the screen on while the player is open
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(showNowPlaying, appSettings.keepScreenOn) {
+        hostView.keepScreenOn = showNowPlaying && appSettings.keepScreenOn
+        onDispose { hostView.keepScreenOn = false }
+    }
 
     // Deleting a music file needs the user's OK from Android (Android 11+ shows its own dialog).
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
@@ -217,7 +255,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     val tab = vm.tab
 
     // Back from the EQ / Search tabs goes to the Library tab.
-    BackHandler(enabled = tab != Tab.LIBRARY && !showNowPlaying) { vm.tab = Tab.LIBRARY }
+    BackHandler(enabled = tab != Tab.LIBRARY && !showNowPlaying && !settingsOpen) { vm.tab = Tab.LIBRARY }
 
     val tabHolder = rememberSaveableStateHolder()
     val openSongMenu: (Song) -> Unit = { s -> songMenuInfo = null; songMenu = s }
@@ -234,9 +272,10 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 player = player,
                 stats = stats,
                 bottomInset = bottomInset,
-                enabled = !showNowPlaying,
+                enabled = !showNowPlaying && !settingsOpen,
                 onSongMenu = openSongMenu,
-                onOpenQueue = { showQueue = true }
+                onOpenQueue = { showQueue = true },
+                onOpenSettings = { settingsPage = SettingsPage.LIBRARY; settingsOpen = true }
             )
             Tab.EQ -> EqualizerScreen(bottomInset)
             Tab.SEARCH -> SearchScreen(
@@ -341,6 +380,51 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         }
     }
 
+    // ---- settings (full screen) ----
+    if (settingsOpen) {
+        BackHandler { if (settingsPage != null) settingsPage = null else settingsOpen = false }
+        SettingsScreen(
+            page = settingsPage,
+            allFolders = vm.allFolders,
+            onPage = { settingsPage = it },
+            onClose = { settingsOpen = false; settingsPage = null },
+            onRescan = { vm.loadLibrary(force = true) },
+            onOpenEqualizer = { settingsOpen = false; settingsPage = null; showNowPlaying = false; vm.tab = Tab.EQ },
+            onCheckUpdate = { vm.checkForUpdate(manual = true) },
+            onChangelog = { showChangelog = true },
+            onExport = { exportLauncher.launch("PowerSound-backup.json") },
+            onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
+        )
+    }
+    if (showChangelog) ChangelogDialog { showChangelog = false }
+    if (showHelp) HelpDialog { showHelp = false }
+    backupMessage?.let { msg ->
+        if (msg == "RESTART") {
+            AlertDialog(
+                onDismissRequest = {},
+                containerColor = Color(0xFF1B1B22),
+                title = { Text("Restored", color = Color.White) },
+                text = { Text("Your settings and data were restored. PowerSound will restart now.", color = Color.White.copy(alpha = 0.8f)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val restart = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                            ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                        if (restart != null) context.startActivity(restart)
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                    }) { Text("Restart") }
+                }
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { backupMessage = null },
+                containerColor = Color(0xFF1B1B22),
+                title = { Text("Settings/Data", color = Color.White) },
+                text = { Text(msg, color = Color.White.copy(alpha = 0.8f)) },
+                confirmButton = { TextButton(onClick = { backupMessage = null }) { Text("OK") } }
+            )
+        }
+    }
+
     // ---- sheets & dialogs ----
     if (showMenu) {
         val left = player.sleepEndsAt?.let { ((it - System.currentTimeMillis()) / 60_000L + 1).coerceAtLeast(1) }
@@ -350,6 +434,9 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             onSleep = { showSleep = true },
             onEqualizer = { showNowPlaying = false; vm.tab = Tab.EQ },
             onCheckUpdate = { vm.checkForUpdate(manual = true) },
+            onSettings = { p -> settingsPage = p; settingsOpen = true },
+            onChangelog = { showChangelog = true },
+            onHelp = { showHelp = true },
             sleepLabel = left?.let { "$it min left" }
         )
     }
@@ -427,7 +514,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             onDismiss = { songMenu = null },
             onLike = { vm.like(s.id) },
             onDislike = { vm.dislike(s.id) },
-            onDelete = { confirmDelete = s },
+            onDelete = { if (appSettings.confirmDelete) confirmDelete = s else deleteSong(s) },
             onPlaylist = { playlistFor = listOf(s.id) },
             onBookmark = {
                 if (s.id == currentId) vm.addBookmark(s.id) else com.powersound.player.data.LibraryStores.addBookmark(s.id, 0L)
@@ -462,7 +549,8 @@ private fun LibraryHost(
     bottomInset: Dp,
     enabled: Boolean,
     onSongMenu: (Song) -> Unit,
-    onOpenQueue: () -> Unit
+    onOpenQueue: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val holder = rememberSaveableStateHolder()
     val scope = rememberCoroutineScope()
@@ -613,7 +701,7 @@ private fun LibraryHost(
                         )
                 ) {
                     holder.SaveableStateProvider(screen.id) {
-                        ScreenContent(screen, vm, library, player, stats, bottomInset, onSongMenu, onOpenQueue)
+                        ScreenContent(screen, vm, library, player, stats, bottomInset, onSongMenu, onOpenQueue, onOpenSettings)
                     }
                 }
             }
@@ -630,9 +718,12 @@ private fun ScreenContent(
     stats: Stats,
     bottomInset: Dp,
     onSongMenu: (Song) -> Unit,
-    onOpenQueue: () -> Unit
+    onOpenQueue: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val currentId = player.nowPlaying?.songId
+    val appSettings by com.powersound.player.data.SettingsStore.settings.collectAsStateWithLifecycle()
+    val streams by com.powersound.player.data.LibraryStores.streams.collectAsStateWithLifecycle()
     val addQueue: (List<Song>) -> Unit = { vm.addToQueue(it) }
     val playlists by com.powersound.player.data.LibraryStores.playlists.collectAsStateWithLifecycle()
     val bookmarks by com.powersound.player.data.LibraryStores.bookmarks.collectAsStateWithLifecycle()
@@ -642,12 +733,13 @@ private fun ScreenContent(
     when (screen) {
         Screen.Home -> {
             val queueEmpty = player.queue.isEmpty()
-            val empty = remember(library.songs, stats, queueEmpty, playlists, bookmarks) {
+            val empty = remember(library.songs, stats, queueEmpty, playlists, bookmarks, streams, appSettings.longTrackMin) {
                 Category.values().filter { cat ->
                     when {
                         cat.kind == Kind.QUEUE -> queueEmpty
                         cat == Category.PLAYLISTS -> playlists.isEmpty()
                         cat == Category.BOOKMARKS -> bookmarks.isEmpty()
+                        cat == Category.STREAMS -> streams.isEmpty()
                         cat.kind == Kind.SONGS -> vm.songsFor(cat, stats).isEmpty()
                         else -> library.songs.isEmpty()
                     }
@@ -660,7 +752,9 @@ private fun ScreenContent(
                 onOpen = { cat ->
                     if (cat.kind == Kind.QUEUE) onOpenQueue() else vm.push(Screen.Cat(cat))
                 },
-                onRescan = { vm.loadLibrary(force = true) }
+                onRescan = { vm.loadLibrary(force = true) },
+                hidden = appSettings.hiddenCategories,
+                onSettings = onOpenSettings
             )
         }
 
@@ -703,6 +797,13 @@ private fun ScreenContent(
                         onSongMenu = onSongMenu
                     )
                 }
+                Kind.STREAMS -> StreamsScreen(
+                    streams = streams,
+                    playingId = player.queue.getOrNull(player.currentIndex)?.mediaId,
+                    bottomInset = bottomInset,
+                    onBack = { vm.pop() },
+                    onPlay = { vm.playStream(it) }
+                )
                 Kind.BOOKMARKS -> BookmarksScreen(
                     bookmarks = bookmarks,
                     songOf = { vm.song(it) },

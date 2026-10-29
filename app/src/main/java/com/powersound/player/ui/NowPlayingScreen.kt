@@ -188,10 +188,19 @@ fun NowPlayingScreen(
         }
     }
     var choosePreset by remember { mutableStateOf(false) }
+    val appSettings by com.powersound.player.data.SettingsStore.settings.collectAsState()
+    // Settings → Visualization: change preset every N seconds
+    LaunchedEffect(vizMode, appSettings.vizPresetSeconds, vizPreset) {
+        val sec = appSettings.vizPresetSeconds
+        if (vizMode != VizMode.OFF && sec > 0) {
+            delay(sec * 1000L)
+            onVizPreset(vizPreset.next(1))
+        }
+    }
     val contentAlpha by animateFloatAsState(
         when (vizMode) {
             VizMode.OFF -> 1f
-            VizMode.FADE -> if (showControls) 1f else 0.42f
+            VizMode.FADE -> if (showControls) 1f else appSettings.vizFadedOpacity
             VizMode.FULL -> if (showControls) 1f else 0f
         },
         tween(300),
@@ -350,7 +359,7 @@ fun NowPlayingScreen(
                         )
                     }
             ) {
-                Artwork(np?.songId, Modifier.fillMaxSize(), sizePx = 1024, cornerDp = 0, placeholder = { BarsPlaceholder() })
+                Artwork(np?.songId, Modifier.fillMaxSize(), sizePx = if (appSettings.artHighQuality) 1024 else 512, cornerDp = 0, placeholder = { BarsPlaceholder() })
                 Box(
                     Modifier
                         .fillMaxSize()

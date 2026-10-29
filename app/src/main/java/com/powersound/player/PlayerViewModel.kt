@@ -67,7 +67,7 @@ enum class ShuffleMode(val label: String) {
     val categories: Boolean get() = this == CATEGORIES || this == ALL
 }
 
-data class QueueEntry(val index: Int, val songId: Long?, val title: String, val artist: String)
+data class QueueEntry(val index: Int, val songId: Long?, val title: String, val artist: String, val mediaId: String = "")
 
 data class PlayerUiState(
     val nowPlaying: NowPlaying? = null,
@@ -174,6 +174,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private var lastRecordedId: Long? = null
     private var sleepJob: Job? = null
     private var stopAtSongEnd = false
+    private var tick = 0
+    private var gainForId: Long? = null
+    private var gainJob: Job? = null
+    private var fadeJob: Job? = null
+
+    /** Folders found on the phone before the Settings → Library filters (for the folder picker). */
+    var allFolders: List<String> = emptyList()
+        private set
     private val modePrefs = app.getSharedPreferences("powersound_player", android.content.Context.MODE_PRIVATE)
 
     private val listener = object : Player.Listener {
@@ -216,6 +224,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         AudioEngine.init(app)
         StatsStore.init(app)
         LibraryStores.init(app)
+        com.powersound.player.data.SettingsStore.init(app)
+        com.powersound.player.data.CrashLog.install(app)
         com.powersound.player.ui.HintStore.init(app)
         vizMode = runCatching { com.powersound.player.ui.VizMode.valueOf(modePrefs.getString("vizMode", null) ?: "") }
             .getOrDefault(com.powersound.player.ui.VizMode.OFF)
@@ -231,11 +241,31 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             AudioEngine.fx.collect { applyTempo() }
         }
+        // React to Settings: library filters reload the library, ReplayGain mode re-reads the song's gain.
+        viewModelScope.launch {
+            var last: com.powersound.player.data.AppSettings? = null
+            com.powersound.player.data.SettingsStore.settings.collect { st ->
+                val prev = last
+                last = st
+                if (prev == null) return@collect
+                if (prev.minDurationSec != st.minDurationSec || prev.excludedFolders != st.excludedFolders) {
+                    if (_library.value.loaded) loadLibrary(force = true)
+                }
+                if (prev.replayGain != st.replayGain || prev.replayGainPreamp != st.replayGainPreamp ||
+                    prev.replayGainNoTagDb != st.replayGainNoTagDb
+                ) {
+                    gainForId = null
+                    applySongSettings(_player.value.nowPlaying?.songId)
+                }
+            }
+        }
         viewModelScope.launch {
             while (isActive) {
                 val c = controller
                 if (c != null && c.isPlaying) {
                     _position.value = PlaybackPos(c.currentPosition, durationOf(c))
+                    tick++
+                    if (tick % 20 == 0) rememberPosition(c) // every ~5 s
                 }
                 delay(250)
             }
@@ -268,7 +298,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (current.loading || (current.loaded && !force)) return
         _library.value = current.copy(loading = true)
         viewModelScope.launch {
-            val songs = MusicRepository.loadSongs(getApplication())
+            val raw = MusicRepository.loadSongs(getApplication())
+            allFolders = raw.map { it.folder }.distinct().sortedBy { it.lowercase() }
+            val st = com.powersound.player.data.SettingsStore.value
+            val songs = raw.filter { s ->
+                s.durationMs >= st.minDurationSec * 1000L &&
+                    st.excludedFolders.none { ex -> s.folder == ex || s.folder.startsWith("$ex/") }
+            }
             songById = songs.associateBy { it.id }
             _library.value = LibraryState(
                 loading = false,
@@ -301,7 +337,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             Category.RECENTLY_PLAYED -> all.filter { stats.lastPlayed.containsKey(it.id) }
                 .sortedByDescending { stats.lastPlayed[it.id] ?: 0L }.take(100)
             Category.RECENTLY_ADDED -> all.sortedByDescending { it.dateAdded }.take(100)
-            Category.LONG -> all.filter { it.durationMs >= LONG_TRACK_MS }.sortedByDescending { it.durationMs }
+            Category.LONG -> {
+                val min = com.powersound.player.data.SettingsStore.value.longTrackMin * 60_000L
+                all.filter { it.durationMs >= min }.sortedByDescending { it.durationMs }
+            }
             else -> emptyList()
         }
     }
@@ -509,12 +548,92 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun togglePlay() {
         val c = controller ?: return
+        val st = com.powersound.player.data.SettingsStore.value
+        fadeJob?.cancel()
         if (c.isPlaying) {
-            c.pause()
+            rememberPosition(c)
+            if (st.fadeOnPause && st.fadeMs > 0) {
+                // Settings → Audio: fade out, then pause
+                fadeJob = viewModelScope.launch {
+                    val steps = 12
+                    for (i in steps - 1 downTo 0) {
+                        c.volume = i / steps.toFloat()
+                        delay(st.fadeMs / steps.toLong())
+                    }
+                    c.pause()
+                    c.volume = 1f
+                }
+            } else c.pause()
         } else {
             if (c.playbackState == Player.STATE_IDLE) c.prepare()
-            c.play()
+            if (st.fadeOnPause && st.fadeMs > 0) {
+                c.volume = 0f
+                c.play()
+                fadeJob = viewModelScope.launch {
+                    val steps = 12
+                    for (i in 1..steps) {
+                        delay(st.fadeMs / steps.toLong())
+                        c.volume = i / steps.toFloat()
+                    }
+                }
+            } else {
+                c.volume = 1f
+                c.play()
+            }
         }
+    }
+
+    // ---- per-song settings: ReplayGain and remembered position ----
+
+    private fun applySongSettings(songId: Long?) {
+        if (songId == gainForId) return
+        gainForId = songId
+        gainJob?.cancel()
+        val st = com.powersound.player.data.SettingsStore.value
+        if (songId == null || st.replayGain == 0) {
+            AudioEngine.setReplayGain(0.0)
+        } else {
+            gainJob = viewModelScope.launch {
+                val rg = com.powersound.player.data.TagReader.replayGain(
+                    com.powersound.player.data.TagReader.read(getApplication(), songId)
+                )
+                val db = if (st.replayGain == 2) rg.albumDb ?: rg.trackDb else rg.trackDb ?: rg.albumDb
+                AudioEngine.setReplayGain(if (db != null) db + st.replayGainPreamp else st.replayGainNoTagDb)
+            }
+        }
+        // Settings → Misc: long songs continue where you left them
+        val c = controller ?: return
+        val song = song(songId) ?: return
+        if (st.rememberPosition && song.durationMs >= REMEMBER_MIN_MS && c.currentPosition < 3000) {
+            val saved = com.powersound.player.data.SettingsStore.savedPosition(song.id)
+            if (saved in 5_000 until (song.durationMs - 15_000)) c.seekTo(saved)
+        }
+    }
+
+    private fun rememberPosition(c: MediaController) {
+        if (!com.powersound.player.data.SettingsStore.value.rememberPosition) return
+        val id = c.currentMediaItem?.mediaId?.toLongOrNull() ?: return
+        val song = song(id) ?: return
+        if (song.durationMs < REMEMBER_MIN_MS) return
+        val pos = c.currentPosition
+        com.powersound.player.data.SettingsStore.savePosition(id, if (pos > song.durationMs - 15_000) 0L else pos)
+    }
+
+    // ---- streams ----
+
+    fun playStream(stream: com.powersound.player.data.StreamItem) {
+        val c = controller ?: return
+        val uri = android.net.Uri.parse(stream.url.trim())
+        val item = MediaItem.Builder()
+            .setMediaId("stream:${stream.id}")
+            .setUri(uri)
+            .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
+            .setMediaMetadata(MediaMetadata.Builder().setTitle(stream.name).setArtist("Stream").build())
+            .build()
+        c.setMediaItem(item)
+        c.prepare()
+        c.play()
+        _player.value = _player.value.copy(sourceKey = "cat:STREAMS")
     }
 
     fun next() {
@@ -707,7 +826,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     index = i,
                     songId = mi.mediaId.toLongOrNull(),
                     title = mi.mediaMetadata.title?.toString() ?: "Unknown",
-                    artist = mi.mediaMetadata.artist?.toString() ?: ""
+                    artist = mi.mediaMetadata.artist?.toString() ?: "",
+                    mediaId = mi.mediaId
                 )
             }
         } else _player.value.queue
@@ -730,6 +850,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             StatsStore.recordPlay(id)
         }
         updateAudioInfo(id)
+        applySongSettings(id)
     }
 
     private fun durationOf(c: MediaController): Long {
@@ -766,6 +887,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         super.onCleared()
     }
 }
+
+/** Songs at least this long get their position remembered (Settings → Misc). */
+private const val REMEMBER_MIN_MS = 10 * 60_000L
 
 private fun Song.toMediaItem(): MediaItem =
     MediaItem.Builder()

@@ -12,17 +12,24 @@ data class Playlist(val id: Long, val name: String, val songIds: List<Long>)
 
 data class Bookmark(val songId: Long, val positionMs: Long, val createdAt: Long)
 
+/** An internet radio / stream address. */
+data class StreamItem(val id: Long, val name: String, val url: String)
+
 /** User playlists and bookmarks, saved on the phone. */
 object LibraryStores {
 
     private const val PREFS = "powersound_library"
     private const val KEY_PLAYLISTS = "playlists"
     private const val KEY_BOOKMARKS = "bookmarks"
+    private const val KEY_STREAMS = "streams"
 
     private var prefs: SharedPreferences? = null
 
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
+
+    private val _streams = MutableStateFlow<List<StreamItem>>(emptyList())
+    val streams: StateFlow<List<StreamItem>> = _streams.asStateFlow()
 
     private val _bookmarks = MutableStateFlow<List<Bookmark>>(emptyList())
     val bookmarks: StateFlow<List<Bookmark>> = _bookmarks.asStateFlow()
@@ -47,6 +54,30 @@ object LibraryStores {
                 Bookmark(o.optLong("song"), o.optLong("pos"), o.optLong("at"))
             }
         }.getOrDefault(emptyList())
+        _streams.value = runCatching {
+            val arr = JSONArray(p.getString(KEY_STREAMS, "[]"))
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                StreamItem(o.optLong("id"), o.optString("name"), o.optString("url"))
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    // ---- streams ----
+
+    fun saveStream(item: StreamItem) {
+        val list = if (_streams.value.any { it.id == item.id }) _streams.value.map { if (it.id == item.id) item else it }
+        else _streams.value + item
+        saveStreams(list)
+    }
+
+    fun deleteStream(id: Long) = saveStreams(_streams.value.filterNot { it.id == id })
+
+    private fun saveStreams(list: List<StreamItem>) {
+        _streams.value = list
+        val arr = JSONArray()
+        list.forEach { s -> arr.put(JSONObject().apply { put("id", s.id); put("name", s.name); put("url", s.url) }) }
+        prefs?.edit()?.putString(KEY_STREAMS, arr.toString())?.apply()
     }
 
     // ---- playlists ----

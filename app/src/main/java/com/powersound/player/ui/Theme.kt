@@ -27,7 +27,20 @@ private val PowerColors = darkColorScheme(
     surfaceContainerHigh = SurfaceHigh
 )
 
+/** Accent colours offered in Settings → Look and Feel. */
+val ACCENTS = listOf(
+    "Orange" to Color(0xFFFF8A1F),
+    "Blue" to Color(0xFF4F9DFF),
+    "Red" to Color(0xFFFF4D5E),
+    "Green" to Color(0xFF3DDC84),
+    "Purple" to Color(0xFFB07CFF),
+    "Pink" to Color(0xFFFF6FB1),
+    "Gold" to Color(0xFFE8C14A),
+    "White" to Color(0xFFEDEDF2)
+)
+
 @Composable
-fun PowerSoundTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = PowerColors, content = content)
+fun PowerSoundTheme(accentIndex: Int = 0, content: @Composable () -> Unit) {
+    val accent = ACCENTS.getOrNull(accentIndex)?.second ?: Accent
+    MaterialTheme(colorScheme = PowerColors.copy(primary = accent, secondary = accent), content = content)
 }

@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.PlayCircleFilled
 import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
@@ -56,6 +57,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -165,29 +167,36 @@ fun BoxScope.BarsPlaceholder() {
     }
 }
 
-/** Blurred cover of the current song behind every screen. */
+/** Blurred cover of the current song behind every screen (Settings → Background). */
 @Composable
 fun AppBackground(songId: Long?) {
     val context = LocalContext.current
-    val bitmap by produceState<ImageBitmap?>(null, songId) {
-        value = songId?.let { ArtworkLoader.load(context, it, 192) }
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
+    val bitmap by produceState<ImageBitmap?>(null, songId, st.bgEnabled) {
+        value = if (st.bgEnabled) songId?.let { ArtworkLoader.load(context, it, 192) } else null
     }
     val bg = MaterialTheme.colorScheme.background
+    val saturation = remember(st.bgSaturation) {
+        androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+            androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(st.bgSaturation) }
+        )
+    }
     Box(
         Modifier
             .fillMaxSize()
             .background(bg)
     ) {
         val b = bitmap
-        if (b != null) {
+        if (b != null && st.bgEnabled) {
             Image(
                 bitmap = b,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                alpha = 0.55f,
+                alpha = st.bgIntensity,
+                colorFilter = saturation,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(80.dp)
+                    .blur(st.bgBlur.dp)
             )
         }
         Box(
@@ -307,6 +316,7 @@ fun Category.icon(): ImageVector = when (this) {
     Category.YEARS -> Icons.Rounded.DateRange
     Category.COMPOSERS -> Icons.Rounded.Edit
     Category.PLAYLISTS -> Icons.Rounded.PlaylistPlay
+    Category.STREAMS -> Icons.Rounded.Radio
     Category.QUEUE -> Icons.Rounded.QueueMusic
     Category.BOOKMARKS -> Icons.Rounded.Bookmark
     Category.MOST_PLAYED -> Icons.Rounded.PlayCircleFilled
@@ -326,6 +336,7 @@ fun Category.color(): Color = when (this) {
     Category.YEARS -> Color(0xFF4FB6C9)
     Category.COMPOSERS -> Color(0xFF3FAE6A)
     Category.PLAYLISTS -> Color(0xFFD08A5B)
+    Category.STREAMS -> Color(0xFF6FBF73)
     Category.QUEUE -> Color(0xFFC9A63F)
     Category.BOOKMARKS -> Color(0xFF5B7FD0)
     Category.MOST_PLAYED -> Color(0xFFB98BF0)

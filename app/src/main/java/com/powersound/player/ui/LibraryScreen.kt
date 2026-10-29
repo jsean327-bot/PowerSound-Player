@@ -6,6 +6,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -79,7 +82,9 @@ fun LibraryHome(
     isEmpty: (Category) -> Boolean,
     bottomInset: Dp,
     onOpen: (Category) -> Unit,
-    onRescan: () -> Unit
+    onRescan: () -> Unit,
+    hidden: Set<String> = emptySet(),
+    onSettings: () -> Unit = {}
 ) {
     var menu by remember { mutableStateOf(false) }
     LazyColumn(
@@ -102,11 +107,12 @@ fun LibraryHome(
                     PillButton(icon = Icons.Rounded.MoreVert, onClick = { menu = true })
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(text = { Text("Rescan library") }, onClick = { menu = false; onRescan() })
+                        DropdownMenuItem(text = { Text("Library settings") }, onClick = { menu = false; onSettings() })
                     }
                 }
             }
         }
-        items(Category.values().toList(), key = { it.name }) { cat ->
+        items(Category.values().filter { it.name !in hidden }, key = { it.name }) { cat ->
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -565,5 +571,97 @@ fun BookmarksScreen(
                 )
             }
         }
+    }
+}
+
+/** Internet radio and other stream addresses. Tap to play, long press to edit or delete. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun StreamsScreen(
+    streams: List<com.powersound.player.data.StreamItem>,
+    playingId: String?,
+    bottomInset: Dp,
+    onBack: () -> Unit,
+    onPlay: (com.powersound.player.data.StreamItem) -> Unit
+) {
+    var editing by remember { mutableStateOf<com.powersound.player.data.StreamItem?>(null) }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset + 20.dp)) {
+        item {
+            PageHeader("Library", Category.STREAMS.label, Category.STREAMS.icon(), Category.STREAMS.color(), onBack) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PillButton(
+                        icon = Icons.Rounded.Add,
+                        text = "Add stream",
+                        onClick = { editing = com.powersound.player.data.StreamItem(System.currentTimeMillis(), "", "") }
+                    )
+                }
+            }
+        }
+        if (streams.isEmpty()) {
+            item {
+                Text(
+                    "No streams yet.\nTap \"Add stream\" and paste a radio address (http… .mp3, .aac or .m3u8).",
+                    color = Color.White.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(32.dp)
+                )
+            }
+        }
+        items(streams, key = { it.id }) { st ->
+            val current = playingId == "stream:${st.id}"
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(if (current) Color.White.copy(alpha = 0.10f) else Color.Transparent)
+                    .combinedClickable(onClick = { onPlay(st) }, onLongClick = { editing = st })
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CategoryIcon(Category.STREAMS.icon(), Category.STREAMS.color(), 44)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(st.name, color = if (current) MaterialTheme.colorScheme.primary else Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(st.url, color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+
+    editing?.let { item ->
+        var name by remember(item.id) { mutableStateOf(item.name) }
+        var url by remember(item.id) { mutableStateOf(item.url) }
+        val isNew = streams.none { it.id == item.id }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { editing = null },
+            containerColor = Color(0xFF1B1B22),
+            title = { Text(if (isNew) "Add stream" else "Edit stream", color = Color.White) },
+            text = {
+                Column {
+                    androidx.compose.material3.OutlinedTextField(value = name, onValueChange = { name = it.take(40) }, singleLine = true, label = { Text("Name") })
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(value = url, onValueChange = { url = it.trim() }, singleLine = true, label = { Text("Address (http…)") })
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    enabled = url.startsWith("http"),
+                    onClick = {
+                        com.powersound.player.data.LibraryStores.saveStream(item.copy(name = name.ifBlank { url }, url = url))
+                        editing = null
+                    }
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                Row {
+                    if (!isNew) androidx.compose.material3.TextButton(onClick = {
+                        com.powersound.player.data.LibraryStores.deleteStream(item.id)
+                        editing = null
+                    }) { Text("Delete") }
+                    androidx.compose.material3.TextButton(onClick = { editing = null }) { Text("Cancel") }
+                }
+            }
+        )
     }
 }

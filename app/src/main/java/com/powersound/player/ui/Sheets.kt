@@ -26,6 +26,9 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.AlertDialog
@@ -93,7 +96,7 @@ fun PowerSoundLogo() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun MenuSheet(
     onDismiss: () -> Unit,
@@ -101,6 +104,9 @@ fun MenuSheet(
     onSleep: () -> Unit,
     onEqualizer: () -> Unit,
     onCheckUpdate: () -> Unit,
+    onSettings: (SettingsPage?) -> Unit,
+    onChangelog: () -> Unit,
+    onHelp: () -> Unit,
     sleepLabel: String?
 ) {
     val context = LocalContext.current
@@ -112,11 +118,40 @@ fun MenuSheet(
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             PowerSoundLogo()
             Text("Player $version", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
+            SheetItem(Icons.Rounded.Settings, "Settings") { onDismiss(); onSettings(null) }
+            // quick links into Settings
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 56.dp, end = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    SettingsPage.AUDIO, SettingsPage.LOOK, SettingsPage.VISUALIZATION,
+                    SettingsPage.LIBRARY, SettingsPage.HEADSET, SettingsPage.BACKGROUND
+                ).forEach { p ->
+                    Text(
+                        p.title,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color.White.copy(alpha = 0.10f))
+                            .clickable { onDismiss(); onSettings(p) }
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
             SheetItem(Icons.Rounded.Equalizer, "Equalizer") { onDismiss(); onEqualizer() }
             SheetItem(Icons.Rounded.Timer, if (sleepLabel != null) "Sleep timer ($sleepLabel)" else "Sleep timer") { onDismiss(); onSleep() }
             SheetItem(Icons.Rounded.Refresh, "Rescan library") { onDismiss(); onRescan() }
             SheetItem(Icons.Rounded.SystemUpdate, "Check for updates") { onDismiss(); onCheckUpdate() }
+            SheetItem(Icons.Rounded.History, "Changelog") { onDismiss(); onChangelog() }
+            SheetItem(Icons.Rounded.HelpOutline, "Help") { onDismiss(); onHelp() }
         }
     }
 }

@@ -79,6 +79,25 @@ object Updater {
         }
     }
 
+    /** Release names and notes from GitHub, newest first (for the Changelog). */
+    suspend fun changelog(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
+        val conn = URL("https://api.github.com/repos/$REPO/releases?per_page=30").openConnection() as HttpURLConnection
+        try {
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 15_000
+            conn.setRequestProperty("Accept", "application/vnd.github+json")
+            conn.setRequestProperty("User-Agent", "PowerSound-Player")
+            if (conn.responseCode !in 200..299) return@withContext emptyList()
+            val arr = org.json.JSONArray(conn.inputStream.bufferedReader().use { it.readText() })
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                o.optString("name").ifBlank { o.optString("tag_name") } to o.optString("body").trim()
+            }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     /** Downloads the APK into the app's cache, reporting progress 0..1. */
     suspend fun download(context: Context, info: UpdateInfo, onProgress: (Float) -> Unit): File =
         withContext(Dispatchers.IO) {
