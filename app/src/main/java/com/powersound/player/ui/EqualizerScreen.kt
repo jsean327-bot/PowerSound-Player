@@ -97,8 +97,14 @@ fun EqPage(bottomInset: Dp) {
     var menu by remember { mutableStateOf(false) }
 
     fun edit(change: (EqSettings) -> EqSettings) = AudioEngine.update(change)
-    fun editBandAt(i: Int, change: (EqBand) -> EqBand) = edit { s ->
-        s.copy(bands = s.bands.mapIndexed { idx, b -> if (idx == i) change(b) else b }, presetName = "Custom")
+    val customPresets by AudioEngine.customPresets.collectAsState()
+    fun editBandAt(i: Int, change: (EqBand) -> EqBand) {
+        // Settings → Equalizer → Auto Save: changes go into the loaded user preset
+        val keep = com.powersound.player.data.SettingsStore.value.eqAutoSave && customPresets.any { it.name == settings.presetName }
+        edit { s ->
+            s.copy(bands = s.bands.mapIndexed { idx, b -> if (idx == i) change(b) else b }, presetName = if (keep) s.presetName else "Custom")
+        }
+        if (keep) AudioEngine.autoSaveIfCustom()
     }
 
     Column(
@@ -203,11 +209,25 @@ fun EqPage(bottomInset: Dp) {
                             Icon(Icons.Rounded.MoreVert, contentDescription = "More", tint = Color.White)
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Auto headroom") },
-                                leadingIcon = { Checkbox(checked = settings.autoHeadroom, onCheckedChange = null) },
-                                onClick = { edit { it.copy(autoHeadroom = !it.autoHeadroom) } }
-                            )
+                            if (com.powersound.player.data.SettingsStore.value.musicFx) {
+                                // Settings → Audio → Advanced Tweaks → MusicFX
+                                val ctx = androidx.compose.ui.platform.LocalContext.current
+                                DropdownMenuItem(
+                                    text = { Text("MusicFX (Android audio effects)") },
+                                    onClick = {
+                                        menu = false
+                                        runCatching {
+                                            ctx.startActivity(
+                                                android.content.Intent(android.media.audiofx.AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL)
+                                                    .putExtra(android.media.audiofx.AudioEffect.EXTRA_AUDIO_SESSION, AudioEngine.audioSessionId)
+                                                    .putExtra(android.media.audiofx.AudioEffect.EXTRA_PACKAGE_NAME, ctx.packageName)
+                                                    .putExtra(android.media.audiofx.AudioEffect.EXTRA_CONTENT_TYPE, android.media.audiofx.AudioEffect.CONTENT_TYPE_MUSIC)
+                                                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            )
+                                        }
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Save as preset") },
                                 onClick = { menu = false; showSave = true }
@@ -223,7 +243,7 @@ fun EqPage(bottomInset: Dp) {
                 Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
                     PowerKnob(
                         label = "Bass",
-                        valueText = dbText(settings.bassDb),
+                        valueText = toneText(settings.bassDb),
                         fraction = ((settings.bassDb + MAX_GAIN_DB) / (2 * MAX_GAIN_DB)).toFloat(),
                         bipolar = true,
                         enabled = settings.enabled && settings.toneEnabled,
@@ -233,7 +253,7 @@ fun EqPage(bottomInset: Dp) {
                     )
                     PowerKnob(
                         label = "Treble",
-                        valueText = dbText(settings.trebleDb),
+                        valueText = toneText(settings.trebleDb),
                         fraction = ((settings.trebleDb + MAX_GAIN_DB) / (2 * MAX_GAIN_DB)).toFloat(),
                         bipolar = true,
                         enabled = settings.enabled && settings.toneEnabled,
@@ -387,11 +407,15 @@ private fun SliderColumn(
                 .clickable(onClick = onLabel)
                 .padding(horizontal = 2.dp, vertical = 2.dp) else Modifier.padding(vertical = 2.dp)
         )
-        Text(
-            "%.1f".format(value),
-            color = if (value == 0.0) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary,
-            fontSize = 10.sp
-        )
+        // Settings → Equalizer → Equalizer Values: hidden / dB / %
+        val mode = com.powersound.player.data.SettingsStore.value.eqValues
+        if (mode != 0) {
+            Text(
+                if (mode == 2) "${(value / MAX_GAIN_DB * 100).roundToInt()}%" else "%.1f".format(value),
+                color = if (value == 0.0) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary,
+                fontSize = 10.sp
+            )
+        }
     }
 }
 
@@ -464,6 +488,13 @@ private fun VerticalGainSlider(
 }
 
 private fun dbText(v: Double) = if (v > 0) "+%.1f dB".format(v) else "%.1f dB".format(v)
+
+/** Bass / Treble knob text (Settings → Equalizer → Tone Values: hidden / dB / %). */
+private fun toneText(v: Double): String = when (com.powersound.player.data.SettingsStore.value.toneValues) {
+    0 -> ""
+    2 -> "${(v / MAX_GAIN_DB * 100).roundToInt()}%"
+    else -> dbText(v)
+}
 
 @Composable
 private fun ResponseCurve(settings: EqSettings) {

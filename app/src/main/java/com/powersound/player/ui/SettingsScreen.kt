@@ -117,7 +117,7 @@ enum class SettingsPage(
     val parent: SettingsPage? = null
 ) {
     LOOK("Look and Feel", "Skin, player interface, language, notifications", Icons.Rounded.Palette, Color(0xFF8E8CF0)),
-    AUDIO("Audio", "ReplayGain, fade on pause, equalizer", Icons.Rounded.VolumeUp, Color(0xFFE0708A)),
+    AUDIO("Audio", "Crossfade, replay gain, focus, equalizer, outputs", Icons.Rounded.VolumeUp, Color(0xFFE0708A)),
     VISUALIZATION("Visualization", "Faded controls opacity, preset duration", Icons.Rounded.GraphicEq, Color(0xFFB07CFF)),
     BACKGROUND("Background", "Blur, intensity, saturation", Icons.Rounded.Wallpaper, Color(0xFF4FB6A0)),
     ALBUM_ART("Album Art", "Quality, cache cleanup", Icons.Rounded.Album, Color(0xFF6FBF73)),
@@ -134,8 +134,31 @@ enum class SettingsPage(
     NOTIFICATIONS("Notifications", "Buttons, keeping", Icons.Rounded.Palette, Color(0xFF8E8CF0), LOOK),
     NOTIF_BUTTONS("Buttons", "Media notification buttons", Icons.Rounded.Palette, Color(0xFF8E8CF0), NOTIFICATIONS),
     ICON("Icon", "Launcher icon", Icons.Rounded.Palette, Color(0xFF8E8CF0), LOOK),
-    LIST_UI("List UI", "Filename as title, track numbers", Icons.Rounded.Palette, Color(0xFF8E8CF0), LOOK)
+    LIST_UI("List UI", "Filename as title, track numbers", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7), LIBRARY),
+
+    // ---- inside Audio ----
+    CROSSFADE("Crossfade, Fade, and Gapless", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), AUDIO),
+    REPLAY_GAIN("Replay Gain (RG)", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), AUDIO),
+    AUDIO_FOCUS("Audio Focus", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), AUDIO),
+    EQ_SETTINGS("Equalizer", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), AUDIO),
+    EQ_BANDS("Graphic Equalizer Bands", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), EQ_SETTINGS),
+    TONE("Tone", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), EQ_SETTINGS),
+    RESAMPLER("Resampler", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), AUDIO),
+    OUTPUTS("Audio Outputs", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), AUDIO),
+    OUT_WIRED("Wired Headset/AUX", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), OUTPUTS),
+    OUT_SPEAKER("Speaker", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), OUTPUTS),
+    OUT_BT("Bluetooth", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), OUTPUTS),
+    OUT_USB("USB DAC", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), OUTPUTS),
+    OUT_OTHER("Other Output Devices", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), OUTPUTS),
+    BIT_PERFECT("Bit Perfect", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), AUDIO),
+    TWEAKS("Advanced Tweaks", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), AUDIO)
 }
+
+/** Output key → its settings page. */
+private val OUTPUT_PAGES = listOf(
+    "wired" to SettingsPage.OUT_WIRED, "speaker" to SettingsPage.OUT_SPEAKER, "bt" to SettingsPage.OUT_BT,
+    "usb" to SettingsPage.OUT_USB, "other" to SettingsPage.OUT_OTHER
+)
 
 /** Everything searchable: (page, item title). */
 private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
@@ -153,7 +176,7 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.PLAYER_SCREEN to "Animate Long Labels Everywhere", SettingsPage.PLAYER_SCREEN to "Edit Player Screen Buttons",
     SettingsPage.PLAYER_SCREEN to "Prefer No Gap", SettingsPage.PLAYER_SCREEN to "Do Not Edit On Long Press",
     SettingsPage.PLAYER_SCREEN to "Restore Player Screen Buttons", SettingsPage.PLAYER_SCREEN to "Rating Type",
-    SettingsPage.PLAYER_SCREEN to "Menu Button", SettingsPage.PLAYER_SCREEN to "Menu Button Long Press", SettingsPage.PLAYER_SCREEN to "Lyrics Button",
+    SettingsPage.PLAYER_SCREEN to "Menu Button", SettingsPage.PLAYER_SCREEN to "Menu Button Long Press", SettingsPage.LYRICS to "Lyrics Button",
     SettingsPage.PLAYER_SCREEN to "Line2 Press", SettingsPage.PLAYER_SCREEN to "Line2 Long Press",
     SettingsPage.PLAYER_SCREEN to "<< Button Resets Current Track", SettingsPage.PLAYER_SCREEN to "-10/+10s Rewind Pro Buttons",
     SettingsPage.PLAYER_SCREEN to "Navigate to the Folders",
@@ -164,8 +187,26 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.NOTIFICATIONS to "Navigate to the List", SettingsPage.NOTIFICATIONS to "Keep Notification",
     SettingsPage.NOTIFICATIONS to "Remove Notification on Disconnection", SettingsPage.NOTIF_BUTTONS to "Notification buttons",
     SettingsPage.LIST_UI to "Filename As Title", SettingsPage.LIST_UI to "Show Track Number",
-    SettingsPage.AUDIO to "ReplayGain", SettingsPage.AUDIO to "ReplayGain preamp", SettingsPage.AUDIO to "Files without ReplayGain",
-    SettingsPage.AUDIO to "Fade on pause / resume", SettingsPage.AUDIO to "Fade length", SettingsPage.AUDIO to "Equalizer",
+    SettingsPage.AUDIO to "Audio Info",
+    SettingsPage.CROSSFADE to "Auto-advance Fading", SettingsPage.CROSSFADE to "Manual Track Change Fading", SettingsPage.CROSSFADE to "Crossfade Length",
+    SettingsPage.CROSSFADE to "Fade Play/Pause/Stop", SettingsPage.CROSSFADE to "Fade Length", SettingsPage.CROSSFADE to "Fade on Seek",
+    SettingsPage.CROSSFADE to "Silence Between Tracks", SettingsPage.CROSSFADE to "Gapless",
+    SettingsPage.REPLAY_GAIN to "Replay Gain", SettingsPage.REPLAY_GAIN to "Source", SettingsPage.REPLAY_GAIN to "RG preamp",
+    SettingsPage.REPLAY_GAIN to "Preamp for songs without RG info",
+    SettingsPage.AUDIO_FOCUS to "Resume After Call", SettingsPage.AUDIO_FOCUS to "Resume On Start", SettingsPage.AUDIO_FOCUS to "Resume On Reopen",
+    SettingsPage.AUDIO_FOCUS to "Short Audio Focus Change / Calls", SettingsPage.AUDIO_FOCUS to "Resume On Focus Gain",
+    SettingsPage.AUDIO_FOCUS to "Duck Volume", SettingsPage.AUDIO_FOCUS to "Permanent Audio Focus Change",
+    SettingsPage.EQ_SETTINGS to "Equalizer Values", SettingsPage.EQ_SETTINGS to "Tone Values", SettingsPage.EQ_SETTINGS to "Auto Save",
+    SettingsPage.EQ_SETTINGS to "Smooth Equalizer/Tone Gains", SettingsPage.EQ_SETTINGS to "Import AutoEq Presets",
+    SettingsPage.EQ_SETTINGS to "Restore Equalizer Presets",
+    SettingsPage.EQ_BANDS to "Number of Bands", SettingsPage.EQ_BANDS to "Enable Custom Bands", SettingsPage.EQ_BANDS to "Custom Number of Bands",
+    SettingsPage.EQ_BANDS to "First Frequency", SettingsPage.EQ_BANDS to "Last Frequency",
+    SettingsPage.TONE to "Bass Frequency", SettingsPage.TONE to "Bass Q", SettingsPage.TONE to "Treble Frequency", SettingsPage.TONE to "Treble Q",
+    SettingsPage.RESAMPLER to "Resampler Type", SettingsPage.RESAMPLER to "Resampler Cutoff Frequency Ratio", SettingsPage.RESAMPLER to "Dither",
+    SettingsPage.OUTPUTS to "Audio Outputs", SettingsPage.OUT_BT to "Bluetooth output", SettingsPage.OUT_WIRED to "Wired Headset/AUX output",
+    SettingsPage.OUT_SPEAKER to "Speaker output", SettingsPage.OUT_USB to "USB DAC output", SettingsPage.OUT_OTHER to "Other Output Devices",
+    SettingsPage.BIT_PERFECT to "Perfect Bit Perfect", SettingsPage.BIT_PERFECT to "64-bit Audio Pipeline",
+    SettingsPage.TWEAKS to "Pause/Resume on Volume", SettingsPage.TWEAKS to "MusicFX", SettingsPage.TWEAKS to "Restore Reverb Presets",
     SettingsPage.VISUALIZATION to "Faded controls opacity", SettingsPage.VISUALIZATION to "Change preset automatically",
     SettingsPage.BACKGROUND to "Blurred album art background", SettingsPage.BACKGROUND to "Blur", SettingsPage.BACKGROUND to "Intensity",
     SettingsPage.BACKGROUND to "Saturation",
@@ -223,7 +264,8 @@ fun SettingsScreen(
     onPage: (SettingsPage?) -> Unit,
     onClose: () -> Unit,
     onRescan: () -> Unit,
-    onOpenEqualizer: () -> Unit,
+    onAudioInfo: () -> Unit,
+    onImportAutoEq: () -> Unit,
     onCheckUpdate: () -> Unit,
     onChangelog: () -> Unit,
     onExport: () -> Unit,
@@ -245,7 +287,7 @@ fun SettingsScreen(
         }
     }
     CompositionLocalProvider(LocalSc provides sc) {
-        SettingsContent(st, page, allFolders, onPage, onClose, onRescan, onOpenEqualizer, onCheckUpdate, onChangelog, onExport, onImport)
+        SettingsContent(st, page, allFolders, onPage, onClose, onRescan, onAudioInfo, onImportAutoEq, onCheckUpdate, onChangelog, onExport, onImport)
     }
 }
 
@@ -257,7 +299,8 @@ private fun SettingsContent(
     onPage: (SettingsPage?) -> Unit,
     onClose: () -> Unit,
     onRescan: () -> Unit,
-    onOpenEqualizer: () -> Unit,
+    onAudioInfo: () -> Unit,
+    onImportAutoEq: () -> Unit,
     onCheckUpdate: () -> Unit,
     onChangelog: () -> Unit,
     onExport: () -> Unit,
@@ -346,7 +389,7 @@ private fun SettingsContent(
                     PlainRow("Player Screen") { onPage(SettingsPage.PLAYER_SCREEN) }
                     PlainRow("Lyrics") { onPage(SettingsPage.LYRICS) }
                     PlainRow("Notifications") { onPage(SettingsPage.NOTIFICATIONS) }
-                    LinkHint("Press here for the additional List UI options like Filename As Title, Show Track Number, etc.") { onPage(SettingsPage.LIST_UI) }
+                    Hint("List options like Filename As Title and Show Track Number are in Library → List UI")
 
                     SectionLabel("Misc")
                     ChoiceRow("Language", listOf("Auto", "English"), st.language) { v -> set { it.copy(language = v) } }
@@ -406,7 +449,7 @@ private fun SettingsContent(
                     RadioCard("Default", "Track labels and buttons on the cover. Best for small or wide screens", st.layout == 0) { set { it.copy(layout = 0) } }
                     RadioCard("Alternative layout", "Moves track labels below the cover, makes on-cover buttons smaller and faded", st.layout == 1) { set { it.copy(layout = 1) } }
                     RadioCard("Full cover", "Moves all track labels and buttons below the cover. Works best on long screen phones", st.layout == 2) { set { it.copy(layout = 2) } }
-                    LinkHint("Use Player Screen and Lyrics options to hide/show the menu/lyrics buttons and rating") { onPage(SettingsPage.PLAYER_SCREEN) }
+                    Hint("The menu button and the rating are set in Look and Feel → Player Screen, the lyrics button in Look and Feel → Lyrics")
                     Divider()
                     ChipRow("Track Labels", null, listOf("Default", "Centered"), if (st.labelsCentered) 1 else 0) { v -> set { it.copy(labelsCentered = v == 1) } }
                     Hint("Centered: applied for Alternative layout / Full cover")
@@ -450,7 +493,6 @@ private fun SettingsContent(
 
                 page == SettingsPage.PLAYER_SCREEN -> {
                     var editButtons by remember { mutableStateOf(false) }
-                    LinkHint("Press here for the additional Skin options like Static Seekbar, Pro Buttons") { onPage(SettingsPage.SKIN) }
                     SwitchRow("Album Art Animation", "Animate on track advance. Also applies to the bottom bar", st.artAnimation) { v -> set { it.copy(artAnimation = v) } }
                     SwitchRow("Animate Long Labels", "Scroll long track title and album/artist labels", st.marquee) { v -> set { it.copy(marquee = v) } }
                     SwitchRow("Animate Long Labels Everywhere", "Scroll long track labels also in lists and the mini player", st.marqueeEverywhere) { v ->
@@ -481,9 +523,6 @@ private fun SettingsContent(
                     ChipRow("Menu Button Long Press", "Long press action for the track menu button", MENU_LONG_PRESS, st.menuLongPress) { v ->
                         set { it.copy(menuLongPress = v) }
                     }
-                    ChipRow("Lyrics Button", "Button on the Player Screen cover", listOf("Disabled", "When local lyrics available", "Always"), st.lyricsButton) { v ->
-                        set { it.copy(lyricsButton = v) }
-                    }
                     ChipRow("Line2 Press", "Handle press on the 2nd track text line", listOf("Disabled", "Artist", "Album", "Folder", "Genre"), st.line2Press) { v ->
                         set { it.copy(line2Press = v) }
                     }
@@ -511,7 +550,7 @@ private fun SettingsContent(
                                 artAnimation = d.artAnimation, marquee = d.marquee, marqueeEverywhere = d.marqueeEverywhere,
                                 playerButtons = d.playerButtons, preferNoGap = d.preferNoGap, noEditLongPress = d.noEditLongPress,
                                 ratingType = d.ratingType, menuButton = d.menuButton, menuLongPress = d.menuLongPress,
-                                lyricsButton = d.lyricsButton, line2Press = d.line2Press, line2LongPress = d.line2LongPress,
+                                line2Press = d.line2Press, line2LongPress = d.line2LongPress,
                                 prevResets = d.prevResets, proRewindLong = d.proRewindLong, navigateToFolders = d.navigateToFolders
                             )
                         }
@@ -694,26 +733,274 @@ private fun SettingsContent(
                 }
 
                 // ============================================================ OTHER SECTIONS
+                // ============================================================ AUDIO
                 page == SettingsPage.AUDIO -> {
-                    SectionLabel("ReplayGain (same loudness for every song)")
-                    ChoiceRow("ReplayGain", listOf("Off", "Track gain", "Album gain"), st.replayGain) { v -> set { it.copy(replayGain = v) } }
+                    PlainRow("Audio Info", "Detailed info about the audio processing. Also available by long pressing the small info line on the Player Screen", onClick = onAudioInfo)
+                    PlainRow("Crossfade, Fade, and Gapless", "Crossfade options, fade type and length, gapless") { onPage(SettingsPage.CROSSFADE) }
+                    PlainRow("Replay Gain (RG)", "Enable RG, set source, preamp values") { onPage(SettingsPage.REPLAY_GAIN) }
+                    PlainRow("Audio Focus", "Pause/Resume/Duck volume on calls/notifications/start") { onPage(SettingsPage.AUDIO_FOCUS) }
+                    PlainRow("Equalizer", "Equalizer settings, number of bands, frequencies") { onPage(SettingsPage.EQ_SETTINGS) }
+                    PlainRow("Resampler", "Resampling/dither settings") { onPage(SettingsPage.RESAMPLER) }
+                    PlainRow("Audio Outputs", "Wired Headset, Speaker, Bluetooth, USB and other outputs") { onPage(SettingsPage.OUTPUTS) }
+                    PlainRow("Bit Perfect", "64-bit audio pipeline, Perfect Bit Perfect") { onPage(SettingsPage.BIT_PERFECT) }
+                    PlainRow("Advanced Tweaks", "Pause/resume on volume, MusicFX, presets reset") { onPage(SettingsPage.TWEAKS) }
+                }
+
+                page == SettingsPage.CROSSFADE -> {
+                    ChipRow(
+                        "Auto-advance Fading", "Applied when the song changes automatically",
+                        listOf("No fading", "Non-gapless tracks", "All songs", "Shuffled songs"), st.autoFade
+                    ) { v -> set { it.copy(autoFade = v) } }
+                    ChipRow(
+                        "Manual Track Change Fading", "Applied when you change the song (next / previous)",
+                        listOf("No fading", "Short crossfade", "Crossfade"), st.manualFade
+                    ) { v -> set { it.copy(manualFade = v) } }
                     SliderRow(
-                        "ReplayGain preamp", "%+.1f dB".format(st.replayGainPreamp), st.replayGainPreamp.toFloat(), -6f..6f,
-                        enabled = st.replayGain != 0
-                    ) { v -> set { it.copy(replayGainPreamp = (v * 2).roundToInt() / 2.0) } }
-                    SliderRow(
-                        "Files without ReplayGain", "%+.1f dB".format(st.replayGainNoTagDb), st.replayGainNoTagDb.toFloat(), -12f..0f,
-                        enabled = st.replayGain != 0
-                    ) { v -> set { it.copy(replayGainNoTagDb = (v * 2).roundToInt() / 2.0) } }
-                    Hint("Uses the REPLAYGAIN_TRACK_GAIN / REPLAYGAIN_ALBUM_GAIN tags inside your FLAC and MP3 files.")
-                    SectionLabel("Fades")
-                    SwitchRow("Fade on pause / resume", "Smooth volume fade instead of a hard stop", st.fadeOnPause) { v -> set { it.copy(fadeOnPause = v) } }
-                    SliderRow("Fade length", "${st.fadeMs} ms", st.fadeMs.toFloat(), 100f..1500f, enabled = st.fadeOnPause) { v ->
+                        "Crossfade Length", "%.1f s".format(st.crossfadeSec), st.crossfadeSec, 1f..12f,
+                        enabled = st.autoFade != 0 || st.manualFade == 2,
+                        subtitle = "How long the old and the new song overlap"
+                    ) { v -> set { it.copy(crossfadeSec = (v * 2).roundToInt() / 2f) } }
+                    NoteBlock(
+                        "\"Non-gapless tracks\" keeps albums that play in order gapless and crossfades everything else",
+                        "Perfect Bit Perfect disables all fading effects",
+                        "Crossfade is skipped when the song is the last one (repeat \"song and stop\", sleep timer)"
+                    )
+                    SwitchRow("Fade Play/Pause/Stop", "Smooth volume fade instead of a hard stop", st.fadeOnPause) { v -> set { it.copy(fadeOnPause = v) } }
+                    SliderRow("Fade Length", "${st.fadeMs} ms", st.fadeMs.toFloat(), 100f..1500f, enabled = st.fadeOnPause) { v ->
                         set { it.copy(fadeMs = ((v / 50).roundToInt() * 50)) }
                     }
-                    SectionLabel("Sound")
-                    ActionRow("Equalizer, effects and reverb", "Open the sound tab", onClick = onOpenEqualizer)
-                    Hint("Gapless playback is always on. Output: 16-bit PCM through Android (the Bluetooth codec is chosen by the phone).")
+                    SwitchRow("Fade on Seek", "A very short fade when you jump in the song, so there is no click", st.fadeOnSeek) { v -> set { it.copy(fadeOnSeek = v) } }
+                    StepSliderRow(
+                        "Silence Between Tracks", if (st.silenceMs == 0) "0 ms (gapless)" else "${st.silenceMs} ms",
+                        st.silenceMs / 250, 0, 20, "None", "5 s"
+                    ) { v -> set { it.copy(silenceMs = v * 250) } }
+                    Hint("Gapless playback is always on when there is no silence and no crossfade. Silence turns crossfade off.")
+                    RestoreRow {
+                        set {
+                            it.copy(
+                                autoFade = d.autoFade, manualFade = d.manualFade, crossfadeSec = d.crossfadeSec, fadeOnPause = d.fadeOnPause,
+                                fadeMs = d.fadeMs, fadeOnSeek = d.fadeOnSeek, silenceMs = d.silenceMs
+                            )
+                        }
+                    }
+                }
+
+                page == SettingsPage.REPLAY_GAIN -> {
+                    ChipRow(
+                        "Replay Gain", null,
+                        listOf("Don't apply", "Apply gain", "Apply gain / prevent clipping according to the peak"), st.replayGain
+                    ) { v -> set { it.copy(replayGain = v) } }
+                    ChipRow("Source", null, listOf("Album", "Track"), st.rgSource) { v -> set { it.copy(rgSource = v) } }
+                    KnobRow(
+                        "RG preamp", null, "%+.1fdB".format(st.replayGainPreamp),
+                        ((st.replayGainPreamp + 15) / 30).toFloat(), enabled = st.replayGain != 0,
+                        onChange = { f -> set { it.copy(replayGainPreamp = ((f * 30 - 15) * 2).roundToInt() / 2.0) } },
+                        onReset = { set { it.copy(replayGainPreamp = 0.0) } }
+                    )
+                    KnobRow(
+                        "Preamp for songs without RG info", null, "%+.1fdB".format(st.replayGainNoTagDb),
+                        ((st.replayGainNoTagDb + 15) / 30).toFloat(), enabled = st.replayGain != 0,
+                        onChange = { f -> set { it.copy(replayGainNoTagDb = ((f * 30 - 15) * 2).roundToInt() / 2.0) } },
+                        onReset = { set { it.copy(replayGainNoTagDb = 0.0) } }
+                    )
+                    Hint("Reads REPLAYGAIN_ALBUM/TRACK_GAIN and _PEAK tags from FLAC and MP3 files. Drag a knob up/down, double-tap to reset.")
+                    RestoreRow {
+                        set { it.copy(replayGain = d.replayGain, rgSource = d.rgSource, replayGainPreamp = d.replayGainPreamp, replayGainNoTagDb = d.replayGainNoTagDb) }
+                    }
+                }
+
+                page == SettingsPage.AUDIO_FOCUS -> {
+                    SwitchRow("Resume After Call", "Resume playing on hang up (if paused by a call)", st.resumeAfterCall) { v -> set { it.copy(resumeAfterCall = v) } }
+                    SwitchRow("Resume On Start", "Resume playing when PowerSound is started", st.resumeOnStart) { v -> set { it.copy(resumeOnStart = v) } }
+                    SwitchRow(
+                        "Resume On Reopen", "Also resume when PowerSound is already running and reopened" +
+                            if (!st.resumeOnStart) " (needs Resume On Start)" else "",
+                        st.resumeOnReopen
+                    ) { v -> set { it.copy(resumeOnReopen = v) } }
+                    SectionLabel("Audio Focus")
+                    NoteBlock("Audio focus decides what happens when another app or a call needs the sound")
+                    SwitchRow(
+                        "Short Audio Focus Change / Calls",
+                        "Temporarily pause on short audio focus changes (notifications, navigation, voice messages…). Calls always pause",
+                        st.pauseOnShortFocus
+                    ) { v -> set { it.copy(pauseOnShortFocus = v) } }
+                    SwitchRow("Resume On Focus Gain", "Resume after getting the focus back. If disabled, the player stays paused", st.resumeOnFocusGain) { v ->
+                        set { it.copy(resumeOnFocusGain = v) }
+                    }
+                    SwitchRow(
+                        "Duck Volume", "When possible, lower the volume on short audio focus instead of pausing. Can be turned off per output (Audio Outputs → No Duck)",
+                        st.duckVolume
+                    ) { v -> set { it.copy(duckVolume = v) } }
+                    SwitchRow("Permanent Audio Focus Change", "Pause when another player, game, etc. takes over the sound", st.pauseOnPermanentFocus) { v ->
+                        set { it.copy(pauseOnPermanentFocus = v) }
+                    }
+                    RestoreRow {
+                        set {
+                            it.copy(
+                                resumeAfterCall = d.resumeAfterCall, resumeOnStart = d.resumeOnStart, resumeOnReopen = d.resumeOnReopen,
+                                pauseOnShortFocus = d.pauseOnShortFocus, resumeOnFocusGain = d.resumeOnFocusGain,
+                                duckVolume = d.duckVolume, pauseOnPermanentFocus = d.pauseOnPermanentFocus
+                            )
+                        }
+                    }
+                }
+
+                page == SettingsPage.EQ_SETTINGS -> {
+                    val eq by com.powersound.player.audio.AudioEngine.settings.collectAsState()
+                    var confirmRestore by remember { mutableStateOf(false) }
+                    NoteBlock(
+                        "Depending on the loaded preset, the equalizer is in Graphic or Parametric mode",
+                        "Graphic mode: 5 to 32 bands spread over the whole range",
+                        "Parametric mode (e.g. AutoEq presets): every band has its own frequency, gain, Q and type"
+                    )
+                    PlainRow("Graphic Equalizer Bands", "${eq.bands.size} bands • set number of bands, frequencies") { onPage(SettingsPage.EQ_BANDS) }
+                    PlainRow("Tone", "Set Bass/Treble frequencies and Q factors") { onPage(SettingsPage.TONE) }
+                    ChipRow("Equalizer Values", null, listOf("Hidden", "dB", "%"), st.eqValues) { v -> set { it.copy(eqValues = v) } }
+                    ChipRow("Tone Values", null, listOf("Hidden", "dB", "%"), st.toneValues) { v -> set { it.copy(toneValues = v) } }
+                    SwitchRow("Auto Save", "Changes are saved into the loaded user preset", st.eqAutoSave) { v -> set { it.copy(eqAutoSave = v) } }
+                    SwitchRow(
+                        "Smooth Equalizer/Tone Gains", "Automatically reduce the volume by the biggest boost so the equalizer/tone never overloads",
+                        eq.autoHeadroom
+                    ) { v -> com.powersound.player.audio.AudioEngine.update { it.copy(autoHeadroom = v) } }
+                    PlainRow("Import AutoEq Presets", "Import \"ParametricEQ.txt\" files from the AutoEq project (e.g. for your earbuds)", onClick = onImportAutoEq)
+                    PlainRow("Restore Equalizer Presets", "Imported AutoEq presets are removed, built-in presets stay") { confirmRestore = true }
+                    RestoreRow {
+                        set {
+                            it.copy(
+                                eqValues = d.eqValues, toneValues = d.toneValues, eqAutoSave = d.eqAutoSave, eqBandCount = d.eqBandCount,
+                                eqCustomBands = d.eqCustomBands, eqCustomCount = d.eqCustomCount, eqFirstFreq = d.eqFirstFreq, eqLastFreq = d.eqLastFreq
+                            )
+                        }
+                        com.powersound.player.audio.AudioEngine.update { it.copy(autoHeadroom = true) }
+                    }
+                    if (confirmRestore) ConfirmDialog(
+                        "Restore Equalizer Presets", "Imported AutoEq presets will be removed.",
+                        onOk = { com.powersound.player.audio.AudioEngine.removeAutoEqPresets() }
+                    ) { confirmRestore = false }
+                }
+
+                page == SettingsPage.EQ_BANDS -> {
+                    val counts = listOf(5, 10, 12, 16, 24, 31)
+                    ChipRow(
+                        "Number of Bands", "Predefined number of bands, including the recommended band spread",
+                        listOf("5", "10 (ISO)", "12", "16", "24", "31 (ISO)"), if (st.eqCustomBands) -1 else counts.indexOf(st.eqBandCount)
+                    ) { i -> set { it.copy(eqBandCount = counts[i], eqCustomBands = false) } }
+                    SectionLabel("Advanced")
+                    SwitchRow("Enable Custom Bands", "Your own number of bands and frequency range", st.eqCustomBands) { v -> set { it.copy(eqCustomBands = v) } }
+                    StepSliderRow("Custom Number of Bands", "${st.eqCustomCount}", st.eqCustomCount, 5, 32, "5", "32", enabled = st.eqCustomBands) { v ->
+                        set { it.copy(eqCustomCount = v) }
+                    }
+                    val firsts = listOf(20, 25, 31, 40, 50, 63, 80, 100)
+                    StepSliderRow("First Frequency", "${st.eqFirstFreq} Hz", firsts.indexOf(st.eqFirstFreq).coerceAtLeast(0), 0, firsts.lastIndex, "20 Hz", "100 Hz", enabled = st.eqCustomBands) { i ->
+                        set { it.copy(eqFirstFreq = firsts[i]) }
+                    }
+                    val lasts = listOf(8000, 10000, 12000, 14000, 16000, 18000, 20000)
+                    StepSliderRow("Last Frequency", "%.1f kHz".format(st.eqLastFreq / 1000.0), lasts.indexOf(st.eqLastFreq).coerceAtLeast(0), 0, lasts.lastIndex, "8 kHz", "20 kHz", enabled = st.eqCustomBands) { i ->
+                        set { it.copy(eqLastFreq = lasts[i]) }
+                    }
+                    Hint("Changing the bands keeps your current curve as well as possible. Tap a frequency on the Equalizer to change one band.")
+                }
+
+                page == SettingsPage.TONE -> {
+                    val eq by com.powersound.player.audio.AudioEngine.settings.collectAsState()
+                    fun tone(change: (com.powersound.player.audio.EqSettings) -> com.powersound.player.audio.EqSettings) = com.powersound.player.audio.AudioEngine.update(change)
+                    val bassFreqs = listOf(40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0, 150.0, 200.0, 250.0, 300.0)
+                    StepSliderRow(
+                        "Bass Frequency", "${eq.bassFreq.roundToInt()} Hz", bassFreqs.indexOfFirst { it >= eq.bassFreq }.coerceAtLeast(0), 0, bassFreqs.lastIndex, "40 Hz", "300 Hz"
+                    ) { i -> tone { it.copy(bassFreq = bassFreqs[i]) } }
+                    SliderRow("Bass Q", "%.2f".format(eq.bassQ), eq.bassQ.toFloat(), 0.3f..2f) { v -> tone { it.copy(bassQ = (v * 20).roundToInt() / 20.0) } }
+                    val trebleFreqs = listOf(3000.0, 4000.0, 5000.0, 6000.0, 7000.0, 8000.0, 10000.0, 12000.0, 14000.0, 16000.0)
+                    StepSliderRow(
+                        "Treble Frequency", "%.1f kHz".format(eq.trebleFreq / 1000), trebleFreqs.indexOfFirst { it >= eq.trebleFreq }.coerceAtLeast(0), 0, trebleFreqs.lastIndex, "3 kHz", "16 kHz"
+                    ) { i -> tone { it.copy(trebleFreq = trebleFreqs[i]) } }
+                    SliderRow("Treble Q", "%.2f".format(eq.trebleQ), eq.trebleQ.toFloat(), 0.3f..2f) { v -> tone { it.copy(trebleQ = (v * 20).roundToInt() / 20.0) } }
+                    Hint("Bass and Treble are shelf filters controlled by the knobs on the Equalizer.")
+                    RestoreRow {
+                        tone {
+                            it.copy(
+                                bassFreq = com.powersound.player.audio.BASS_FREQ, bassQ = com.powersound.player.audio.SHELF_Q,
+                                trebleFreq = com.powersound.player.audio.TREBLE_FREQ, trebleQ = com.powersound.player.audio.SHELF_Q
+                            )
+                        }
+                    }
+                }
+
+                page == SettingsPage.RESAMPLER -> {
+                    NoteBlock(
+                        "PowerSound resamples only when an output has a fixed Sample Rate (Audio Outputs → output → Sample Rate)",
+                        "Use \"Follow Track\" there to avoid resampling completely"
+                    )
+                    ChipRow("Resampler Type", null, listOf("High quality", "Very high quality"), st.resamplerType) { v -> set { it.copy(resamplerType = v) } }
+                    KnobRow(
+                        "Resampler Cutoff Frequency Ratio", "Higher keeps more treble, lower keeps the filter cleaner",
+                        "%.1f%%".format(st.resamplerCutoff * 100), (st.resamplerCutoff - 0.90f) / 0.09f, bipolar = false,
+                        onChange = { f -> set { it.copy(resamplerCutoff = (0.90f + f * 0.09f).let { v -> (v * 1000).roundToInt() / 1000f }) } },
+                        onReset = { set { it.copy(resamplerCutoff = d.resamplerCutoff) } }
+                    )
+                    ChoiceRow("Dither", com.powersound.player.audio.Ditherer.NAMES, st.dither) { v -> set { it.copy(dither = v) } }
+                    Hint("Dither is used whenever the 64-bit processing is reduced to the 16-bit output. Triangular is a safe choice; noise shaping moves the noise to frequencies the ear hears less.")
+                    RestoreRow { set { it.copy(resamplerType = d.resamplerType, resamplerCutoff = d.resamplerCutoff, dither = d.dither) } }
+                }
+
+                page == SettingsPage.OUTPUTS -> {
+                    NoteBlock(
+                        "Every output has its own settings: equalizer preset, sample rate, no equalizer, no ducking and visualization/lyrics delay",
+                        "Now playing on: ${com.powersound.player.audio.AudioEngine.currentOutput}"
+                    )
+                    OUTPUT_PAGES.forEach { (key, p) ->
+                        val active = com.powersound.player.audio.AudioEngine.outputKey == key
+                        PlainRow(p.title, outputSummary(st, key) + if (active) "\nActive" else "") { onPage(p) }
+                    }
+                    RestoreRow {
+                        set { it.copy(outEqPreset = d.outEqPreset, outNoEq = d.outNoEq, outNoDuck = d.outNoDuck, outDelayMs = d.outDelayMs, outRate = d.outRate) }
+                    }
+                }
+
+                page in OUTPUT_PAGES.map { it.second } -> {
+                    val key = OUTPUT_PAGES.first { it.second == page }.first
+                    OutputPage(st, key, ::set)
+                    RestoreRow {
+                        set {
+                            it.copy(
+                                outEqPreset = it.outEqPreset - key, outNoEq = it.outNoEq - key, outNoDuck = it.outNoDuck - key,
+                                outDelayMs = (it.outDelayMs - key).let { m -> val dv = d.outDelayMs[key]; if (dv != null) m + (key to dv) else m },
+                                outRate = it.outRate - key
+                            )
+                        }
+                    }
+                }
+
+                page == SettingsPage.BIT_PERFECT -> {
+                    NoteBlock(
+                        "PowerSound always processes in 64-bit floating point: equalizer, tone, effects, reverb and resampler",
+                        "When nothing is switched on, the decoded audio goes to the output untouched"
+                    )
+                    SwitchRow(
+                        "Perfect Bit Perfect",
+                        "Direct decoder-to-output path: no Equalizer, no Tone, no effects, no Replay Gain, no resampling, no fades",
+                        st.perfectBitPerfect
+                    ) { v -> set { it.copy(perfectBitPerfect = v) } }
+                    NoteBlock("Android still mixes the sound for the Bluetooth codec or the speaker; use a USB DAC for the cleanest path")
+                    RestoreRow { set { it.copy(perfectBitPerfect = d.perfectBitPerfect) } }
+                }
+
+                page == SettingsPage.TWEAKS -> {
+                    var confirmReverb by remember { mutableStateOf(false) }
+                    SectionLabel("Volume")
+                    SwitchRow("Pause/Resume on Volume", "Pause when the volume is set to 0, resume when it is turned up again", st.pauseOnVolumeZero) { v ->
+                        set { it.copy(pauseOnVolumeZero = v) }
+                    }
+                    SectionLabel("Other")
+                    SwitchRow(
+                        "MusicFX", "Let Android's audio effects (and equalizer apps) work with PowerSound. Adds \"MusicFX\" to the ⋮ menu of the Equalizer",
+                        st.musicFx
+                    ) { v -> set { it.copy(musicFx = v) } }
+                    PlainRow("Restore Reverb Presets", "Your saved reverb presets are removed, built-in ones stay") { confirmReverb = true }
+                    RestoreRow { set { it.copy(pauseOnVolumeZero = d.pauseOnVolumeZero, musicFx = d.musicFx) } }
+                    if (confirmReverb) ConfirmDialog(
+                        "Restore Reverb Presets", "Your saved reverb presets will be removed.",
+                        onOk = { com.powersound.player.audio.AudioEngine.removeCustomReverbs() }
+                    ) { confirmReverb = false }
                 }
 
                 page == SettingsPage.VISUALIZATION -> {
@@ -801,7 +1088,7 @@ private fun SettingsContent(
                         "The lock screen and the notification show Android's media controls for PowerSound: " +
                             "cover, title, artist, a seek bar and play / pause / previous / next. They always follow the song that is playing."
                     )
-                    PlainRow("Notification buttons", "Extra buttons in the media controls") { onPage(SettingsPage.NOTIF_BUTTONS) }
+                    Hint("The extra buttons of these controls are set in Look and Feel → Notifications → Buttons.")
                 }
 
                 page == SettingsPage.MISC -> {
@@ -825,7 +1112,6 @@ private fun SettingsContent(
                     Hint("PowerSound Player $version")
                     ActionRow("Check for updates", "Look for a newer version on GitHub", onClick = onCheckUpdate)
                     ActionRow("Changelog", "What changed in each version", onClick = onChangelog)
-                    ActionRow("Show tips again", "The first-time tips appear again") { HintStore.resetAll() }
                 }
             }
         }
@@ -1069,24 +1355,141 @@ private fun SliderRow(
 
 /** Slider with fixed steps and labels under both ends ("Disabled … Max"). */
 @Composable
-private fun StepSliderRow(title: String, valueText: String, value: Int, min: Int, max: Int, minLabel: String, maxLabel: String, onChange: (Int) -> Unit) {
+private fun StepSliderRow(
+    title: String,
+    valueText: String,
+    value: Int,
+    min: Int,
+    max: Int,
+    minLabel: String,
+    maxLabel: String,
+    enabled: Boolean = true,
+    onChange: (Int) -> Unit
+) {
     val sc = LocalSc.current
     Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)) {
-        Text(title, color = sc.text, fontSize = 18.sp, fontFamily = sc.family, fontWeight = sc.titleWeight)
+        Text(title, color = if (enabled) sc.text else sc.sub.copy(alpha = 0.6f), fontSize = 18.sp, fontFamily = sc.family, fontWeight = sc.titleWeight)
         Text(valueText, color = sc.sub, fontSize = 13.sp, fontFamily = sc.family)
         Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
             Text(minLabel, color = sc.sub, fontSize = 12.sp, modifier = Modifier.weight(1f))
             Text(maxLabel, color = sc.sub, fontSize = 12.sp)
         }
         Slider(
-            value = value.toFloat(),
+            value = value.coerceIn(min, max).toFloat(),
             onValueChange = { onChange(it.roundToInt()) },
             valueRange = min.toFloat()..max.toFloat(),
             steps = (max - min - 1).coerceAtLeast(0),
+            enabled = enabled,
             colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary)
         )
     }
 }
+
+/** Title on the left, a knob with its value on the right (Replay Gain, Resampler). */
+@Composable
+private fun KnobRow(
+    title: String,
+    subtitle: String?,
+    valueText: String,
+    fraction: Float,
+    bipolar: Boolean = true,
+    enabled: Boolean = true,
+    onChange: (Float) -> Unit,
+    onReset: () -> Unit
+) {
+    val sc = LocalSc.current
+    Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = if (enabled) sc.text else sc.sub.copy(alpha = 0.6f), fontSize = 18.sp, fontFamily = sc.family, fontWeight = sc.titleWeight)
+            if (subtitle != null) Text(subtitle, color = sc.sub, fontSize = 13.sp, fontFamily = sc.family)
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            PowerKnob(
+                label = "", valueText = "", fraction = fraction.coerceIn(0f, 1f), bipolar = bipolar, enabled = enabled,
+                sizeDp = 72, onChange = onChange, onReset = onReset
+            )
+            Text(valueText, color = sc.sub, fontSize = 13.sp, fontFamily = sc.family)
+        }
+    }
+}
+
+@Composable
+private fun ConfirmDialog(title: String, text: String, onOk: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1B1B22),
+        title = { Text(title, color = Color.White) },
+        text = { Text(text, color = Color.White.copy(alpha = 0.8f)) },
+        confirmButton = { TextButton(onClick = { onOk(); onDismiss() }) { Text("OK") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+private val OUTPUT_RATES = listOf(0, 1, 44100, 48000, 88200, 96000, 176400, 192000)
+private val OUTPUT_RATE_LABELS = listOf("Follow Track", "Auto", "44.1 kHz", "48 kHz", "88.2 kHz", "96 kHz", "176.4 kHz", "192 kHz")
+
+private fun outputSummary(st: AppSettings, key: String): String {
+    val parts = ArrayList<String>()
+    parts.add(OUTPUT_RATE_LABELS[OUTPUT_RATES.indexOf(st.outRate[key] ?: 0).coerceAtLeast(0)])
+    st.outEqPreset[key]?.let { parts.add("EQ: $it") }
+    if (key in st.outNoEq) parts.add("No Equ/Tone")
+    return parts.joinToString(" • ")
+}
+
+/** One output (Settings → Audio → Audio Outputs → output). */
+@Composable
+private fun OutputPage(st: AppSettings, key: String, set: ((AppSettings) -> AppSettings) -> Unit) {
+    val sc = LocalSc.current
+    val engine = com.powersound.player.audio.AudioEngine
+    val active = engine.outputKey == key
+    val presets by engine.customPresets.collectAsState()
+    var pickPreset by remember { mutableStateOf(false) }
+    val presetNames = listOf("None") + com.powersound.player.audio.BUILT_IN_PRESETS.map { it.name } + presets.map { it.name }
+
+    ActionRow("Equalizer Preset", st.outEqPreset[key] ?: "None — the equalizer stays as it is") { pickPreset = true }
+    Hint("The preset is loaded automatically when this output becomes active.")
+    // status like the reference: device, driver, status
+    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Output Device: " + if (active) engine.currentOutput else OUTPUT_LABEL[key], color = sc.text, fontSize = 14.sp, fontFamily = sc.family)
+        Text("Output Driver: Android AudioTrack, 16-bit PCM", color = sc.sub, fontSize = 13.sp, fontFamily = sc.family)
+        Text(
+            if (active && engine.inputRate > 0) {
+                val inK = engine.inputRate / 1000.0
+                val outK = engine.outputRate / 1000.0
+                "Status: Active • " + if (engine.inputRate == engine.outputRate) "%.1f kHz".format(inK) else "%.1f → %.1f kHz (resampled)".format(inK, outK)
+            } else if (active) "Status: Active" else "Status: Inactive",
+            color = if (active) MaterialTheme.colorScheme.primary else sc.sub, fontSize = 13.sp, fontFamily = sc.family
+        )
+    }
+    val rateIndex = OUTPUT_RATES.indexOf(st.outRate[key] ?: 0).coerceAtLeast(0)
+    ChipRow("Sample Rate", "The sample rate PowerSound sends to this output", OUTPUT_RATE_LABELS, rateIndex) { i ->
+        set { it.copy(outRate = if (i == 0) it.outRate - key else it.outRate + (key to OUTPUT_RATES[i])) }
+    }
+    Hint(
+        "Follow Track: no resampling. Auto: the phone's own rate (${engine.deviceRate / 1000.0} kHz), so Android doesn't resample. " +
+            "A new sample rate starts with the next track."
+    )
+    SwitchRow("No Equ/Tone", "Disable the equalizer and tone for this output", key in st.outNoEq) { v ->
+        set { it.copy(outNoEq = if (v) it.outNoEq + key else it.outNoEq - key) }
+    }
+    SwitchRow("No Duck", "Don't lower the volume for notifications on this output", key in st.outNoDuck) { v ->
+        set { it.copy(outNoDuck = if (v) it.outNoDuck + key else it.outNoDuck - key) }
+    }
+    val delay = st.outDelayMs[key] ?: 0
+    StepSliderRow("Visualization/Lyrics Delay", "Extra delay so the visualization and the lyrics match what you hear: $delay ms", delay / 50, 0, 20, "0", "1000 ms") { v ->
+        set { it.copy(outDelayMs = it.outDelayMs + (key to v * 50)) }
+    }
+    if (pickPreset) {
+        ChoiceDialog(
+            "Equalizer Preset", presetNames,
+            presetNames.indexOf(st.outEqPreset[key] ?: "None").coerceAtLeast(0),
+            onPick = { i -> set { it.copy(outEqPreset = if (i == 0) it.outEqPreset - key else it.outEqPreset + (key to presetNames[i])) } },
+            onDismiss = { pickPreset = false }
+        )
+    }
+}
+
+private val OUTPUT_LABEL = com.powersound.player.data.OUTPUTS.toMap()
 
 @Composable
 private fun TextInputDialog(title: String, initial: String, hint: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {

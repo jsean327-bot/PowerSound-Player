@@ -126,6 +126,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** Set when the app is opened from the media notification (Settings → Notifications → Navigate to the List). */
         val openedFromNotification = kotlinx.coroutines.flow.MutableStateFlow(0L)
+        /** Bumped when the app comes back to the front (Settings → Audio Focus → Resume On Reopen). */
+        val reopened = kotlinx.coroutines.flow.MutableStateFlow(0L)
         const val EXTRA_FROM_NOTIFICATION = "powersound.fromNotification"
     }
 
@@ -152,6 +154,11 @@ class MainActivity : ComponentActivity() {
                 PowerSoundApp()
             }
         }
+    }
+
+    override fun onRestart() {
+        super.onRestart()
+        reopened.value = System.currentTimeMillis()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
@@ -253,6 +260,37 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             }.getOrElse { "Couldn't save the file: ${it.message}" }
         }
     }
+    // Settings → Audio → Equalizer → Import AutoEq Presets ("ParametricEQ.txt" files, or a zip of them)
+    val autoEqLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        val presets = ArrayList<com.powersound.player.audio.EqPreset>()
+        uris.forEach { uri ->
+            runCatching {
+                val name = context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                    ?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: "AutoEq"
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching
+                if (name.endsWith(".zip", ignoreCase = true)) {
+                    java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
+                        var e = zip.nextEntry
+                        while (e != null && presets.size < 500) {
+                            if (!e.isDirectory && e.name.endsWith("ParametricEQ.txt", ignoreCase = true)) {
+                                val text = zip.readBytes().decodeToString()
+                                val title = e.name.substringAfterLast('/').removeSuffix(".txt").removeSuffix(" ParametricEQ")
+                                com.powersound.player.audio.parseAutoEq("AutoEq: $title", text)?.let { presets.add(it) }
+                            }
+                            e = zip.nextEntry
+                        }
+                    }
+                } else {
+                    val title = name.removeSuffix(".txt").removeSuffix(" ParametricEQ")
+                    com.powersound.player.audio.parseAutoEq("AutoEq: $title", bytes.decodeToString())?.let { presets.add(it) }
+                }
+            }
+        }
+        val n = com.powersound.player.audio.AudioEngine.importAutoEq(presets)
+        backupMessage = if (n > 0) "Imported $n AutoEq preset(s). Pick them in the Equalizer → Preset list."
+        else "No AutoEq presets found. Choose a \"ParametricEQ.txt\" file (or a zip with them)."
+    }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             val text = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
@@ -272,6 +310,8 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         kotlinx.coroutines.delay(2500)
         if (!hasSong) showNowPlaying = false
     }
+    val reopenedAt by MainActivity.reopened.collectAsStateWithLifecycle()
+    LaunchedEffect(reopenedAt) { if (reopenedAt != 0L) vm.onAppReopened() }
     // Opened from the notification: the Player Screen, or the track's list (Settings → Notifications)
     val fromNotification by MainActivity.openedFromNotification.collectAsStateWithLifecycle()
     LaunchedEffect(fromNotification) {
@@ -494,7 +534,8 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             onPage = { settingsPage = it },
             onClose = { settingsOpen = false; settingsPage = null },
             onRescan = { vm.loadLibrary(force = true) },
-            onOpenEqualizer = { settingsOpen = false; settingsPage = null; showNowPlaying = false; vm.tab = Tab.EQ },
+            onAudioInfo = { showAudioInfo = true },
+            onImportAutoEq = { autoEqLauncher.launch(arrayOf("text/plain", "application/zip", "application/octet-stream", "*/*")) },
             onCheckUpdate = { vm.checkForUpdate(manual = true) },
             onChangelog = { showChangelog = true },
             onExport = { exportLauncher.launch("PowerSound-backup.json") },
@@ -523,7 +564,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             AlertDialog(
                 onDismissRequest = { backupMessage = null },
                 containerColor = Color(0xFF1B1B22),
-                title = { Text("Settings/Data", color = Color.White) },
+                title = { Text("PowerSound", color = Color.White) },
                 text = { Text(msg, color = Color.White.copy(alpha = 0.8f)) },
                 confirmButton = { TextButton(onClick = { backupMessage = null }) { Text("OK") } }
             )

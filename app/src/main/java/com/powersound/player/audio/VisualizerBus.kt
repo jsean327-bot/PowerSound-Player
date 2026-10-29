@@ -12,7 +12,7 @@ import kotlin.math.sqrt
  */
 object VisualizerBus {
 
-    private const val SIZE = 4096
+    private const val SIZE = 65536 // ~1.4 s at 48 kHz, enough for the Bluetooth delay
     private val ring = FloatArray(SIZE)
 
     @Volatile
@@ -28,9 +28,11 @@ object VisualizerBus {
         writePos = (p + 1) and (SIZE - 1)
     }
 
-    /** Latest [n] samples (oldest first). */
+    /** Latest [n] samples (oldest first), [AudioEngine.outputDelayMs] back in time (Audio Outputs → Visualization Delay). */
     fun latest(n: Int, out: FloatArray) {
-        val end = writePos
+        val rate = AudioEngine.inputRate.takeIf { it > 0 } ?: 48000
+        val delay = (AudioEngine.outputDelayMs.toLong() * rate / 1000).toInt().coerceIn(0, SIZE - n - 1)
+        val end = (writePos - delay + SIZE) and (SIZE - 1)
         for (i in 0 until n) {
             out[i] = ring[(end - n + i + SIZE) and (SIZE - 1)]
         }

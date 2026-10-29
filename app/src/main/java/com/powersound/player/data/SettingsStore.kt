@@ -75,11 +75,50 @@ data class AppSettings(
     val filenameAsTitle: Boolean = false,
     val showTrackNumber: Boolean = false,
     // ---- Audio ----
-    val replayGain: Int = 0,             // 0 off, 1 track, 2 album
+    val replayGain: Int = 0,             // 0 don't apply, 1 apply gain, 2 apply gain and prevent clipping (peak)
+    val rgSource: Int = 0,               // 0 album, 1 track
     val replayGainPreamp: Double = 0.0,  // dB added to the ReplayGain value
     val replayGainNoTagDb: Double = 0.0, // gain for files without ReplayGain tags
     val fadeOnPause: Boolean = true,
     val fadeMs: Int = 350,
+    // ---- Audio → Crossfade, Fade, and Gapless ----
+    val autoFade: Int = 0,                   // 0 no fading, 1 non-gapless tracks, 2 all songs, 3 shuffled songs
+    val crossfadeSec: Float = 5f,
+    val manualFade: Int = 1,                 // 0 no fading, 1 short crossfade, 2 crossfade
+    val fadeOnSeek: Boolean = true,
+    val silenceMs: Int = 0,
+    // ---- Audio → Audio Focus ----
+    val resumeAfterCall: Boolean = true,
+    val resumeOnStart: Boolean = false,
+    val resumeOnReopen: Boolean = false,
+    val pauseOnShortFocus: Boolean = true,
+    val resumeOnFocusGain: Boolean = true,
+    val duckVolume: Boolean = true,
+    val pauseOnPermanentFocus: Boolean = true,
+    // ---- Audio → Equalizer ----
+    val eqBandCount: Int = 10,
+    val eqCustomBands: Boolean = false,
+    val eqCustomCount: Int = 10,
+    val eqFirstFreq: Int = 20,
+    val eqLastFreq: Int = 16000,
+    val eqValues: Int = 1,                   // 0 hidden, 1 dB, 2 %
+    val toneValues: Int = 2,                 // 0 hidden, 1 dB, 2 %
+    val eqAutoSave: Boolean = true,
+    // ---- Audio → Resampler ----
+    val resamplerType: Int = 0,              // 0 high quality, 1 very high quality
+    val resamplerCutoff: Float = 0.97f,
+    val dither: Int = 2,                     // index in Ditherer.NAMES (triangular)
+    // ---- Audio → Audio Outputs (per output: wired, speaker, bt, usb, other) ----
+    val outEqPreset: Map<String, String> = emptyMap(),
+    val outNoEq: Set<String> = emptySet(),
+    val outNoDuck: Set<String> = emptySet(),
+    val outDelayMs: Map<String, Int> = mapOf("bt" to 300),
+    val outRate: Map<String, Int> = emptyMap(),   // 0 follow track, 1 phone's native rate, else Hz
+    // ---- Audio → Bit Perfect ----
+    val perfectBitPerfect: Boolean = false,
+    // ---- Audio → Advanced Tweaks ----
+    val pauseOnVolumeZero: Boolean = false,
+    val musicFx: Boolean = false,
     // ---- Visualization ----
     val vizFadedOpacity: Float = 0.42f,
     val vizPresetSeconds: Int = 0,       // 0 = keep the same preset
@@ -105,6 +144,17 @@ data class AppSettings(
     val confirmDelete: Boolean = true,
     val keepCrashLog: Boolean = true
 )
+
+/** Settings → Audio → Audio Outputs: the outputs that have their own settings. */
+val OUTPUTS = listOf("wired" to "Wired Headset/AUX", "speaker" to "Speaker", "bt" to "Bluetooth", "usb" to "USB DAC", "other" to "Other Output Devices")
+
+/** Equalizer band layout chosen in Settings → Equalizer → Graphic Equalizer Bands: (count, first Hz, last Hz). */
+fun AppSettings.eqLayout(): Triple<Int, Double, Double> = when {
+    eqCustomBands -> Triple(eqCustomCount, eqFirstFreq.toDouble(), eqLastFreq.toDouble())
+    eqBandCount == 31 -> Triple(31, 20.0, 20000.0)
+    eqBandCount == 5 -> Triple(5, 60.0, 12000.0)
+    else -> Triple(eqBandCount, 31.0, 16000.0)
+}
 
 val DEFAULT_PLAYER_BUTTONS = listOf("viz", "sleep", "repeat", "shuffle")
 val DEFAULT_NOTIF_BUTTONS = listOf(2, 3, 1, 7, 8, 0) // shuffle, close | repeat, -10, +10, none
@@ -168,7 +218,7 @@ object SettingsStore {
 
     private fun toJson(s: AppSettings) = JSONObject().apply {
         put("accent", s.accent); put("keepScreenOn", s.keepScreenOn)
-        put("rg", s.replayGain); put("rgPre", s.replayGainPreamp); put("rgNoTag", s.replayGainNoTagDb)
+        put("rgMode", s.replayGain); put("rgSrc", s.rgSource); put("rgPre", s.replayGainPreamp); put("rgNoTag", s.replayGainNoTagDb)
         put("fade", s.fadeOnPause); put("fadeMs", s.fadeMs)
         put("vizOpacity", s.vizFadedOpacity.toDouble()); put("vizSec", s.vizPresetSeconds)
         put("bg", s.bgEnabled); put("bgBlur", s.bgBlur); put("bgInt", s.bgIntensity.toDouble()); put("bgSat", s.bgSaturation.toDouble())
@@ -197,6 +247,20 @@ object SettingsStore {
         put("notifButtons", JSONArray().apply { s.notifButtons.forEach { put(it) } })
         put("notifNav", s.notifNavigateToList); put("keepNotif", s.keepNotification); put("notifDisc", s.removeNotifOnDisconnect)
         put("fileTitle", s.filenameAsTitle); put("trackNo", s.showTrackNumber)
+        put("autoFade", s.autoFade); put("xfadeSec", s.crossfadeSec.toDouble()); put("manualFade", s.manualFade)
+        put("fadeSeek", s.fadeOnSeek); put("silenceMs", s.silenceMs)
+        put("resCall", s.resumeAfterCall); put("resStart", s.resumeOnStart); put("resReopen", s.resumeOnReopen)
+        put("shortFocus", s.pauseOnShortFocus); put("resFocus", s.resumeOnFocusGain); put("duck", s.duckVolume); put("permFocus", s.pauseOnPermanentFocus)
+        put("eqBands", s.eqBandCount); put("eqCustom", s.eqCustomBands); put("eqCustomN", s.eqCustomCount)
+        put("eqFirst", s.eqFirstFreq); put("eqLast", s.eqLastFreq); put("eqValues", s.eqValues); put("toneValues", s.toneValues)
+        put("eqAutoSave", s.eqAutoSave)
+        put("resType", s.resamplerType); put("resCut", s.resamplerCutoff.toDouble()); put("dither", s.dither)
+        put("outEq", JSONObject().apply { s.outEqPreset.forEach { (k, v) -> put(k, v) } })
+        put("outNoEq", JSONArray().apply { s.outNoEq.forEach { put(it) } })
+        put("outNoDuck", JSONArray().apply { s.outNoDuck.forEach { put(it) } })
+        put("outDelay", JSONObject().apply { s.outDelayMs.forEach { (k, v) -> put(k, v) } })
+        put("outRate", JSONObject().apply { s.outRate.forEach { (k, v) -> put(k, v) } })
+        put("bitPerfect", s.perfectBitPerfect); put("volZero", s.pauseOnVolumeZero); put("musicFx", s.musicFx)
     }
 
     private fun fromJson(o: JSONObject): AppSettings {
@@ -208,7 +272,9 @@ object SettingsStore {
         return AppSettings(
             accent = o.optInt("accent", d.accent),
             keepScreenOn = o.optBoolean("keepScreenOn", d.keepScreenOn),
-            replayGain = o.optInt("rg", d.replayGain),
+            // older versions stored "rg": 1 = track gain, 2 = album gain
+            replayGain = if (o.has("rgMode")) o.optInt("rgMode", d.replayGain) else if (o.optInt("rg", 0) > 0) 1 else 0,
+            rgSource = if (o.has("rgSrc")) o.optInt("rgSrc", d.rgSource) else if (o.optInt("rg", 0) == 1) 1 else 0,
             replayGainPreamp = o.optDouble("rgPre", d.replayGainPreamp),
             replayGainNoTagDb = o.optDouble("rgNoTag", d.replayGainNoTagDb),
             fadeOnPause = o.optBoolean("fade", d.fadeOnPause),
@@ -286,7 +352,38 @@ object SettingsStore {
             keepNotification = o.optBoolean("keepNotif", d.keepNotification),
             removeNotifOnDisconnect = o.optBoolean("notifDisc", d.removeNotifOnDisconnect),
             filenameAsTitle = o.optBoolean("fileTitle", d.filenameAsTitle),
-            showTrackNumber = o.optBoolean("trackNo", d.showTrackNumber)
+            showTrackNumber = o.optBoolean("trackNo", d.showTrackNumber),
+            autoFade = o.optInt("autoFade", d.autoFade),
+            crossfadeSec = o.optDouble("xfadeSec", d.crossfadeSec.toDouble()).toFloat(),
+            manualFade = o.optInt("manualFade", d.manualFade),
+            fadeOnSeek = o.optBoolean("fadeSeek", d.fadeOnSeek),
+            silenceMs = o.optInt("silenceMs", d.silenceMs),
+            resumeAfterCall = o.optBoolean("resCall", d.resumeAfterCall),
+            resumeOnStart = o.optBoolean("resStart", d.resumeOnStart),
+            resumeOnReopen = o.optBoolean("resReopen", d.resumeOnReopen),
+            pauseOnShortFocus = o.optBoolean("shortFocus", d.pauseOnShortFocus),
+            resumeOnFocusGain = o.optBoolean("resFocus", d.resumeOnFocusGain),
+            duckVolume = o.optBoolean("duck", d.duckVolume),
+            pauseOnPermanentFocus = o.optBoolean("permFocus", d.pauseOnPermanentFocus),
+            eqBandCount = o.optInt("eqBands", d.eqBandCount),
+            eqCustomBands = o.optBoolean("eqCustom", d.eqCustomBands),
+            eqCustomCount = o.optInt("eqCustomN", d.eqCustomCount),
+            eqFirstFreq = o.optInt("eqFirst", d.eqFirstFreq),
+            eqLastFreq = o.optInt("eqLast", d.eqLastFreq),
+            eqValues = o.optInt("eqValues", d.eqValues),
+            toneValues = o.optInt("toneValues", d.toneValues),
+            eqAutoSave = o.optBoolean("eqAutoSave", d.eqAutoSave),
+            resamplerType = o.optInt("resType", d.resamplerType),
+            resamplerCutoff = o.optDouble("resCut", d.resamplerCutoff.toDouble()).toFloat(),
+            dither = o.optInt("dither", d.dither),
+            outEqPreset = o.optJSONObject("outEq")?.let { j -> j.keys().asSequence().associateWith { j.optString(it) } } ?: d.outEqPreset,
+            outNoEq = strings("outNoEq"),
+            outNoDuck = strings("outNoDuck"),
+            outDelayMs = o.optJSONObject("outDelay")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: d.outDelayMs,
+            outRate = o.optJSONObject("outRate")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: d.outRate,
+            perfectBitPerfect = o.optBoolean("bitPerfect", d.perfectBitPerfect),
+            pauseOnVolumeZero = o.optBoolean("volZero", d.pauseOnVolumeZero),
+            musicFx = o.optBoolean("musicFx", d.musicFx)
         )
     }
 }

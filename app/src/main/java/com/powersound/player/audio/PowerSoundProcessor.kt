@@ -15,8 +15,10 @@ import kotlin.random.Random
  *   preamp -> bass shelf -> parametric bands -> treble shelf      (EQ page)
  *   -> mono / stereo expand / balance                             (Effects page)
  *   -> reverb                                                     (Reverb page)
- *   -> volume -> limiter -> 16-bit with TPDF dither.
- * All math runs in 64-bit floating point. When nothing is switched on the audio passes through untouched.
+ *   -> volume -> limiter -> resampler (Settings → Audio → Outputs → Sample Rate)
+ *   -> 16-bit with the chosen dither (Settings → Audio → Resampler).
+ * All math runs in 64-bit floating point. When nothing is switched on the audio passes through untouched
+ * ("Perfect Bit Perfect" forces that).
  */
 @UnstableApi
 class PowerSoundProcessor : BaseAudioProcessor() {
@@ -52,13 +54,31 @@ class PowerSoundProcessor : BaseAudioProcessor() {
     private var frameBuf = DoubleArray(2)
     private val rng = Random(1234)
 
+    // resampler (null = output at the track's own rate)
+    private var resampler: Resampler? = null
+    private var rsIn = DoubleArray(0)
+    private var rsOut = DoubleArray(0)
+    private var ditherer: Ditherer? = null
+    private var ditherType = -1
+    private var bitPerfect = false
+
+    // short fade-in after a seek / track change (Settings → Audio → Crossfade → Fade on Seek)
+    private var fadeInTotal = 0
+    private var fadeInLeft = 0
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         val enc = inputAudioFormat.encoding
         if (enc != C.ENCODING_PCM_16BIT && enc != C.ENCODING_PCM_FLOAT) {
             throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
+        bitPerfect = AudioEngine.bitPerfect
+        val target = if (bitPerfect) inputAudioFormat.sampleRate else AudioEngine.outputRateFor(inputAudioFormat.sampleRate)
+        resampler = if (target != inputAudioFormat.sampleRate && target > 0) {
+            Resampler(inputAudioFormat.sampleRate, target, inputAudioFormat.channelCount, AudioEngine.resamplerVeryHigh, AudioEngine.resamplerCutoff)
+        } else null
+        AudioEngine.reportFormat(inputAudioFormat.sampleRate, if (resampler != null) target else inputAudioFormat.sampleRate, inputAudioFormat.channelCount)
         return AudioProcessor.AudioFormat(
-            inputAudioFormat.sampleRate,
+            if (resampler != null) target else inputAudioFormat.sampleRate,
             inputAudioFormat.channelCount,
             C.ENCODING_PCM_16BIT
         )
@@ -69,6 +89,25 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         state.fill(0.0)
         reverb?.reset()
         limiterGain = 1.0
+        resampler?.reset()
+        ditherer?.reset()
+        if (AudioEngine.fadeOnSeek && !bitPerfect) {
+            fadeInTotal = (inputAudioFormat.sampleRate * 0.06).toInt().coerceAtLeast(1)
+            fadeInLeft = fadeInTotal
+        }
+    }
+
+    override fun onQueueEndOfStream() {
+        // let the last few milliseconds out of the resampler
+        val r = resampler ?: return
+        val ch = inputAudioFormat.channelCount
+        if (rsOut.size < (r.maxOutputFrames(64) + 64) * ch) rsOut = DoubleArray((r.maxOutputFrames(64) + 64) * ch)
+        val n = r.drain(rsOut)
+        if (n <= 0) return
+        val out = replaceOutputBuffer(n * ch * 2)
+        val d = ditherer ?: Ditherer(ch, AudioEngine.ditherType).also { ditherer = it }
+        for (i in 0 until n * ch) out.putShort(d.quantize(rsOut[i] * 32767.0, i % ch))
+        out.flip()
     }
 
     override fun onReset() {
@@ -80,6 +119,9 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         sectionCount = 0
         reverb = null
         limiterGain = 1.0
+        resampler = null
+        ditherer = null
+        ditherType = -1
     }
 
     private fun rebuildIfNeeded(sampleRate: Int, channels: Int) {
@@ -88,7 +130,9 @@ class PowerSoundProcessor : BaseAudioProcessor() {
 
         // ---- EQ ----
         val s = AudioEngine.snapshot
-        val filters = if (s.enabled) AudioEngine.filtersFor(s, sampleRate.toDouble()) else emptyList()
+        // Settings → Audio → Outputs → "No Equ/Tone" for this output, or Perfect Bit Perfect
+        val eqAllowed = s.enabled && !AudioEngine.eqBlocked && !bitPerfect
+        val filters = if (eqAllowed) AudioEngine.filtersFor(s, sampleRate.toDouble()) else emptyList()
         val newCoeffs = DoubleArray(filters.size * 5)
         filters.forEachIndexed { i, c ->
             newCoeffs[i * 5] = c.b0
@@ -103,19 +147,19 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         }
         coeffs = newCoeffs
         sectionCount = filters.size
-        preampGain = if (s.enabled) linearGain(s.preampDb + AudioEngine.headroomDb) else 1.0
-        eqOn = s.enabled && (sectionCount > 0 || preampGain != 1.0)
+        preampGain = if (eqAllowed) linearGain(s.preampDb + AudioEngine.headroomDb) else 1.0
+        eqOn = eqAllowed && (sectionCount > 0 || preampGain != 1.0)
 
         // ---- effects & reverb ----
         val fx = AudioEngine.fxSnapshot
-        val rg = AudioEngine.replayGainDb
-        fxOn = fx.active || kotlin.math.abs(rg) > 0.01
+        val rg = if (bitPerfect) 0.0 else AudioEngine.replayGainDb
+        fxOn = !bitPerfect && (fx.active || kotlin.math.abs(rg) > 0.01)
         mono = fx.mono
         sideGain = 1.0 + 1.5 * fx.stereoExpand
         gainL = min(1.0, 1.0 - fx.balance)
         gainR = min(1.0, 1.0 + fx.balance)
         volume = fx.volume.coerceIn(0.0, 1.0) * linearGain(rg)
-        reverbOn = fx.reverbEnabled
+        reverbOn = fx.reverbEnabled && !bitPerfect
         if (reverbOn) {
             val r = reverb?.takeIf { sampleRate == configuredRate } ?: Reverb(sampleRate)
             r.configure(fx)
@@ -129,6 +173,10 @@ class PowerSoundProcessor : BaseAudioProcessor() {
             releaseCoef = 1.0 - exp(-1.0 / (0.15 * sampleRate)) // 150 ms release
         }
         if (frameBuf.size < channels) frameBuf = DoubleArray(channels)
+        if (AudioEngine.ditherType != ditherType || ditherer == null) {
+            ditherType = AudioEngine.ditherType
+            ditherer = Ditherer(channels, ditherType)
+        }
 
         configuredRate = sampleRate
         configuredChannels = channels
@@ -147,10 +195,14 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         }
 
         rebuildIfNeeded(fmt.sampleRate, channels)
-        val out = replaceOutputBuffer(frames * channels * 2)
+        val rs = resampler
+        val duck = if (bitPerfect) 1.0 else AudioEngine.duckGain
+        val out = replaceOutputBuffer(
+            (if (rs != null) rs.maxOutputFrames(frames) else frames) * channels * 2
+        )
 
         // Fast path: nothing switched on and already 16-bit -> copy untouched (bit-exact).
-        if (!isFloat && !eqOn && !fxOn) {
+        if (!isFloat && !eqOn && !fxOn && rs == null && duck >= 0.999 && fadeInLeft == 0) {
             val bytes = frames * channels * 2
             if (VisualizerBus.active) {
                 val view = inputBuffer.duplicate().order(java.nio.ByteOrder.nativeOrder()).asShortBuffer()
@@ -175,6 +227,8 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         val stereo = channels == 2
         val rev = reverb
         val viz = VisualizerBus.active
+        val dith = ditherer ?: Ditherer(channels, AudioEngine.ditherType).also { ditherer = it }
+        if (rs != null && rsIn.size < frames * channels) rsIn = DoubleArray(frames * channels)
 
         for (f in 0 until frames) {
             // ---- EQ per channel ----
@@ -252,13 +306,25 @@ class PowerSoundProcessor : BaseAudioProcessor() {
                 VisualizerBus.write((sum / channels * limiterGain).toFloat())
             }
 
-            for (ch in 0 until channels) {
-                // TPDF dither (±1 LSB) when reducing to 16-bit
-                val dither = (rng.nextDouble() - rng.nextDouble())
-                var v = buf[ch] * limiterGain * 32767.0 + dither
-                if (v > 32767.0) v = 32767.0 else if (v < -32768.0) v = -32768.0
-                out.putShort(Math.round(v).toInt().toShort())
+            // ducking (Audio Focus) and the fade-in after a seek
+            var g = limiterGain * duck
+            if (fadeInLeft > 0) {
+                val p = 1.0 - fadeInLeft.toDouble() / fadeInTotal
+                g *= p * p
+                fadeInLeft--
             }
+            if (rs != null) {
+                for (ch in 0 until channels) rsIn[f * channels + ch] = buf[ch] * g
+            } else {
+                for (ch in 0 until channels) out.putShort(dith.quantize(buf[ch] * g * 32767.0, ch))
+            }
+        }
+
+        if (rs != null) {
+            val need = (rs.maxOutputFrames(frames) + 8) * channels
+            if (rsOut.size < need) rsOut = DoubleArray(need)
+            val n = rs.process(rsIn, frames, rsOut)
+            for (i in 0 until n * channels) out.putShort(dith.quantize(rsOut[i] * 32767.0, i % channels))
         }
 
         inputBuffer.position(inputBuffer.limit())

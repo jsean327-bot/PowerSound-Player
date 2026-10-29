@@ -217,6 +217,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             val queueChanged = events.contains(Player.EVENT_TIMELINE_CHANGED) ||
                 events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
             refresh(queueChanged)
+            if (queueChanged || events.contains(Player.EVENT_IS_PLAYING_CHANGED)) scheduleQueueSave()
         }
     }
 
@@ -262,7 +263,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 if (prev.minDurationSec != st.minDurationSec || prev.excludedFolders != st.excludedFolders) {
                     if (_library.value.loaded) loadLibrary(force = true)
                 }
-                if (prev.replayGain != st.replayGain || prev.replayGainPreamp != st.replayGainPreamp ||
+                if (prev.replayGain != st.replayGain || prev.rgSource != st.rgSource || prev.replayGainPreamp != st.replayGainPreamp ||
                     prev.replayGainNoTagDb != st.replayGainNoTagDb
                 ) {
                     gainForId = null
@@ -273,6 +274,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             while (isActive) {
                 val c = controller
+                // no crossfade into the next song when this one must be the last
+                PlayerCommands.stopAfterCurrent = _player.value.repeat == RepeatMode.SONG_STOP || stopAtSongEnd
                 if (c != null && c.isPlaying) {
                     _position.value = PlaybackPos(c.currentPosition, durationOf(c))
                     tick++
@@ -300,6 +303,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 applyTempo()
                 applyModes()
                 refresh(true)
+                tryRestoreQueue()
             }
         }, ContextCompat.getMainExecutor(app))
     }
@@ -331,7 +335,56 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             )
             infoForId = null
             refresh(true)
+            tryRestoreQueue()
         }
+    }
+
+    // ---- last queue (restored when the app starts; Settings → Audio Focus → Resume On Start / Reopen) ----
+
+    private var restored = false
+    private var saveJob: Job? = null
+
+    private fun scheduleQueueSave() {
+        saveJob?.cancel()
+        saveJob = viewModelScope.launch {
+            delay(1500)
+            val c = controller ?: return@launch
+            if (c.mediaItemCount == 0) return@launch
+            val ids = (0 until minOf(c.mediaItemCount, 3000)).mapNotNull { c.getMediaItemAt(it).mediaId.toLongOrNull() }
+            if (ids.size != c.mediaItemCount) return@launch // streams are not restored
+            modePrefs.edit()
+                .putString("queueIds", ids.joinToString(","))
+                .putInt("queueIndex", c.currentMediaItemIndex)
+                .putLong("queuePos", c.currentPosition)
+                .putString("queueSource", _player.value.sourceKey ?: "")
+                .apply()
+        }
+    }
+
+    private fun tryRestoreQueue() {
+        if (restored) return
+        val c = controller ?: return
+        if (!_library.value.loaded) return
+        restored = true
+        if (c.mediaItemCount > 0) return // the service is still playing from before
+        val ids = modePrefs.getString("queueIds", null)?.split(',')?.mapNotNull { it.toLongOrNull() } ?: return
+        val songs = ids.mapNotNull { songById[it] }
+        if (songs.isEmpty()) return
+        val savedIndex = modePrefs.getInt("queueIndex", 0)
+        val currentId = ids.getOrNull(savedIndex)
+        val index = songs.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
+        val pos = if (songs.getOrNull(index)?.id == currentId) modePrefs.getLong("queuePos", 0L) else 0L
+        c.setMediaItems(songs.map { it.toMediaItem() }, index, pos)
+        c.prepare()
+        _player.value = _player.value.copy(sourceKey = modePrefs.getString("queueSource", "")?.ifBlank { null })
+        if (com.powersound.player.data.SettingsStore.value.resumeOnStart) c.play()
+    }
+
+    /** The app came back to the front while the process was still alive (Resume On Reopen). */
+    fun onAppReopened() {
+        val c = controller ?: return
+        val st = com.powersound.player.data.SettingsStore.value
+        if (st.resumeOnStart && st.resumeOnReopen && c.mediaItemCount > 0 && !c.isPlaying) togglePlay()
     }
 
     fun song(id: Long?): Song? = id?.let { songById[it] }
@@ -616,8 +669,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 val rg = com.powersound.player.data.TagReader.replayGain(
                     com.powersound.player.data.TagReader.read(getApplication(), songId)
                 )
-                val db = if (st.replayGain == 2) rg.albumDb ?: rg.trackDb else rg.trackDb ?: rg.albumDb
-                AudioEngine.setReplayGain(if (db != null) db + st.replayGainPreamp else st.replayGainNoTagDb)
+                // Settings → Audio → Replay Gain: source album / track, optional clipping prevention by the peak tag
+                val album = st.rgSource == 0
+                val db = if (album) rg.albumDb ?: rg.trackDb else rg.trackDb ?: rg.albumDb
+                val peak = if (album) rg.albumPeak ?: rg.trackPeak else rg.trackPeak ?: rg.albumPeak
+                var gain = if (db != null) db + st.replayGainPreamp else st.replayGainNoTagDb
+                if (st.replayGain == 2 && db != null && peak != null && peak > 0.0) {
+                    val maxGain = -20.0 * kotlin.math.log10(peak)
+                    if (gain > maxGain) gain = maxGain
+                }
+                AudioEngine.setReplayGain(gain)
             }
         }
         // Settings → Misc: long songs continue where you left them
@@ -931,6 +992,7 @@ private fun Song.toMediaItem(): MediaItem =
                 .setArtist(artist)
                 .setAlbumTitle(album)
                 .setAlbumArtist(albumArtist)
+                .setTrackNumber(trackNumber)
                 .build()
         )
         .build()

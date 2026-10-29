@@ -16,7 +16,7 @@ data class Lyrics(val lines: List<LyricLine>) {
 }
 
 /** ReplayGain values (dB) read from the file's tags. */
-data class ReplayGainInfo(val trackDb: Double?, val albumDb: Double?)
+data class ReplayGainInfo(val trackDb: Double?, val albumDb: Double?, val trackPeak: Double? = null, val albumPeak: Double? = null)
 
 /**
  * Reads the tags embedded in a song file:
@@ -210,7 +210,7 @@ object TagReader {
     fun replayGain(tags: Map<String, String>): ReplayGainInfo {
         fun db(key: String): Double? = tags[key]?.trim()
             ?.replace("dB", "", ignoreCase = true)?.trim()?.replace(',', '.')?.toDoubleOrNull()
-        return ReplayGainInfo(db("REPLAYGAIN_TRACK_GAIN"), db("REPLAYGAIN_ALBUM_GAIN"))
+        return ReplayGainInfo(db("REPLAYGAIN_TRACK_GAIN"), db("REPLAYGAIN_ALBUM_GAIN"), db("REPLAYGAIN_TRACK_PEAK"), db("REPLAYGAIN_ALBUM_PEAK"))
     }
 }
 

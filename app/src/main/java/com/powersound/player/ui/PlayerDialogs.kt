@@ -337,21 +337,70 @@ fun InfoTagsDialog(song: Song, audioInfo: String, onDismiss: () -> Unit) {
 
 @Composable
 fun AudioInfoDialog(song: Song?, audioInfo: String, dspSummary: String, onDismiss: () -> Unit) {
+    val engine = com.powersound.player.audio.AudioEngine
+    val st = com.powersound.player.data.SettingsStore.value
+    val eq = engine.settings.value
+    val fx = engine.fx.value
+    fun khz(r: Int) = if (r % 1000 == 0) "${r / 1000} kHz" else "%.1f kHz".format(r / 1000.0)
+    // the audio path, step by step (like Settings → Audio → Audio Info)
+    val steps = buildList {
+        add("Track" to listOfNotNull(audioInfo.ifBlank { song?.formatLabel }, song?.let { "%.1f MB • %s".format(it.size / 1_048_576.0, formatTime(it.durationMs)) }).joinToString("\n"))
+        add("Decoder" to (engine.decoderName.ifBlank { "Android MediaCodec" } + "\n16-bit PCM"))
+        if (st.perfectBitPerfect) {
+            add("DSP" to "Perfect Bit Perfect: no processing")
+        } else {
+            val dsp = ArrayList<String>()
+            if (engine.inputRate > 0) dsp.add("${khz(engine.inputRate)} • Float64")
+            if (eq.enabled && !engine.eqBlocked) {
+                val parametric = eq.bands.any { it.type != com.powersound.player.audio.BandType.PEAK }
+                dsp.add("Equalizer: ${if (parametric) "parametric" else "graphic"}, ${eq.bands.size} bands (${eq.presetName})")
+                if (eq.preampDb != 0.0) dsp.add("Preamp %+.1f dB".format(eq.preampDb))
+                if (eq.toneEnabled && (eq.bassDb != 0.0 || eq.trebleDb != 0.0)) {
+                    dsp.add("Tone: Bass ${eq.bassFreq.toInt()} Hz %+.1f dB, Treble %.1f kHz %+.1f dB".format(eq.bassDb, eq.trebleFreq / 1000, eq.trebleDb))
+                }
+                if (eq.limiter) dsp.add("Limiter")
+                if (eq.autoHeadroom && engine.headroomDb < -0.05) dsp.add("Headroom %.1f dB".format(engine.headroomDb))
+            } else if (engine.eqBlocked) dsp.add("Equalizer off for this output")
+            if (engine.replayGainDb != 0.0) dsp.add("Replay Gain %+.1f dB".format(engine.replayGainDb))
+            val effects = listOfNotNull(
+                if (fx.reverbEnabled) "Reverb (${fx.reverbPreset})" else null,
+                if (fx.tempoEnabled && fx.tempo != 1.0) "Tempo %.2fx".format(fx.tempo) else null,
+                if (fx.mono) "Mono" else null,
+                if (fx.stereoExpand > 0.0) "Stereo expand" else null,
+                if (fx.balance != 0.0) "Balance %+d%%".format((fx.balance * 100).toInt()) else null,
+                if (fx.volume < 1.0) "Volume ${(fx.volume * 100).toInt()}%" else null
+            )
+            if (effects.isNotEmpty()) dsp.add("Effects: " + effects.joinToString(", "))
+            add("DSP" to dsp.joinToString("\n").ifBlank { "Nothing switched on — bit-exact pass-through" })
+            val fade = listOf("No fading", "Non-gapless tracks", "All songs", "Shuffled songs")[st.autoFade] + " / " +
+                listOf("No fading", "Short crossfade", "Crossfade")[st.manualFade]
+            add("Crossfade" to fade)
+            if (engine.outputRate > 0 && engine.outputRate != engine.inputRate) {
+                add("Resampler" to "${khz(engine.inputRate)} → ${khz(engine.outputRate)}, ${if (st.resamplerType == 1) "very high" else "high"} quality")
+            } else add("Resampler" to "No resampling")
+            add("Dither" to com.powersound.player.audio.Ditherer.NAMES.getOrElse(st.dither) { "" })
+        }
+        add("Output" to "${engine.currentOutput}\nAndroid AudioTrack • 16-bit" + if (engine.outputRate > 0) " • ${khz(engine.outputRate)}" else "")
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = CardBg,
         title = { Text("Audio Info", color = Color.White) },
         text = {
-            Column {
-                Text("Source", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Text(audioInfo.ifBlank { song?.formatLabel ?: "—" }, color = Color.White, fontSize = 13.sp)
-                if (song != null) Text("%.1f MB • %s".format(song.size / 1_048_576.0, formatTime(song.durationMs)), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-                Spacer(Modifier.height(10.dp))
-                Text("Processing", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Text(dspSummary, color = Color.White, fontSize = 13.sp)
-                Spacer(Modifier.height(10.dp))
-                Text("Output", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Text("16-bit PCM • Android audio output (Bluetooth codec chosen by the phone)", color = Color.White, fontSize = 13.sp)
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+                steps.forEachIndexed { i, (title, body) ->
+                    Row {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(18.dp)) {
+                            Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                            if (i < steps.lastIndex) Box(Modifier.width(2.dp).height(44.dp).background(Color.White.copy(alpha = 0.25f)))
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.padding(bottom = 8.dp)) {
+                            Text(title, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(body, color = Color.White, fontSize = 12.sp)
+                        }
+                    }
+                }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
@@ -421,7 +470,7 @@ fun LyricsSheet(song: Song, position: StateFlow<PlaybackPos>, onSeek: (Long) -> 
             }
             else -> {
                 // Settings → Lyrics → Lyrics Time Offset (positive = earlier)
-                val t = pos.positionMs + st.lyricsOffsetMs
+                val t = pos.positionMs + st.lyricsOffsetMs - com.powersound.player.audio.AudioEngine.outputDelayMs
                 val current = if (l.synced) l.lines.indexOfLast { (it.timeMs ?: 0L) <= t } else -1
                 val state = rememberLazyListState()
                 LaunchedEffect(current) {
