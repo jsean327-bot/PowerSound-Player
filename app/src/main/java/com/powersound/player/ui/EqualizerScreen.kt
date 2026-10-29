@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
@@ -88,7 +89,7 @@ private val Panel = Color(0xFF16161D).copy(alpha = 0.92f)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EqualizerScreen(bottomInset: Dp) {
+fun EqPage(bottomInset: Dp) {
     val settings by AudioEngine.settings.collectAsState()
     var editBand by remember { mutableIntStateOf(-1) }
     var showPresets by remember { mutableStateOf(false) }
@@ -104,8 +105,7 @@ fun EqualizerScreen(bottomInset: Dp) {
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
-            .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = bottomInset + 10.dp)
+            .padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = bottomInset + 10.dp)
     ) {
         // ---- sliders panel ----
         Column(
@@ -119,6 +119,7 @@ fun EqualizerScreen(bottomInset: Dp) {
                 Modifier
                     .fillMaxWidth()
                     .height(250.dp)
+                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 4.dp)
             ) {
                 SliderColumn(
@@ -127,7 +128,7 @@ fun EqualizerScreen(bottomInset: Dp) {
                     enabled = settings.enabled,
                     onLabel = null,
                     onChange = { v -> edit { it.copy(preampDb = v) } },
-                    modifier = Modifier.weight(1.25f)
+                    modifier = Modifier.width(58.dp)
                 )
                 Box(
                     Modifier
@@ -143,7 +144,8 @@ fun EqualizerScreen(bottomInset: Dp) {
                         enabled = settings.enabled,
                         onLabel = { editBand = i },
                         onChange = { v -> editBandAt(i) { it.copy(gainDb = v) } },
-                        modifier = Modifier.weight(1f)
+                        selected = editBand == i,
+                        modifier = Modifier.width(46.dp)
                     )
                 }
             }
@@ -219,8 +221,26 @@ fun EqualizerScreen(bottomInset: Dp) {
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
-                    Knob("Bass", settings.bassDb, settings.enabled && settings.toneEnabled) { v -> edit { it.copy(bassDb = v) } }
-                    Knob("Treble", settings.trebleDb, settings.enabled && settings.toneEnabled) { v -> edit { it.copy(trebleDb = v) } }
+                    PowerKnob(
+                        label = "Bass",
+                        valueText = dbText(settings.bassDb),
+                        fraction = ((settings.bassDb + MAX_GAIN_DB) / (2 * MAX_GAIN_DB)).toFloat(),
+                        bipolar = true,
+                        enabled = settings.enabled && settings.toneEnabled,
+                        sizeDp = 74,
+                        onChange = { f -> edit { it.copy(bassDb = ((f * 2 - 1) * MAX_GAIN_DB * 2).roundToInt() / 2.0) } },
+                        onReset = { edit { it.copy(bassDb = 0.0) } }
+                    )
+                    PowerKnob(
+                        label = "Treble",
+                        valueText = dbText(settings.trebleDb),
+                        fraction = ((settings.trebleDb + MAX_GAIN_DB) / (2 * MAX_GAIN_DB)).toFloat(),
+                        bipolar = true,
+                        enabled = settings.enabled && settings.toneEnabled,
+                        sizeDp = 74,
+                        onChange = { f -> edit { it.copy(trebleDb = ((f * 2 - 1) * MAX_GAIN_DB * 2).roundToInt() / 2.0) } },
+                        onReset = { edit { it.copy(trebleDb = 0.0) } }
+                    )
                 }
             }
         }
@@ -349,6 +369,7 @@ private fun SliderColumn(
     enabled: Boolean,
     onLabel: (() -> Unit)?,
     onChange: (Double) -> Unit,
+    selected: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -362,6 +383,7 @@ private fun SliderColumn(
             maxLines = 1,
             modifier = if (onLabel != null) Modifier
                 .clip(RoundedCornerShape(6.dp))
+                .background(if (selected) Color.White.copy(alpha = 0.18f) else Color.Transparent)
                 .clickable(onClick = onLabel)
                 .padding(horizontal = 2.dp, vertical = 2.dp) else Modifier.padding(vertical = 2.dp)
         )
@@ -401,6 +423,8 @@ private fun VerticalGainSlider(
                         val c = event.changes.firstOrNull() ?: break
                         if (!c.pressed) break
                         val dy = c.position.y - startY
+                        val dx = c.position.x - down.position.x
+                        if (!moved && kotlin.math.abs(dx) > viewConfiguration.touchSlop) break // sideways: let the row / pages scroll
                         if (!moved && kotlin.math.abs(dy) > viewConfiguration.touchSlop) moved = true
                         if (moved) {
                             c.consume()
@@ -428,10 +452,9 @@ private fun VerticalGainSlider(
             val len = if (db == 0.0) 10.dp.toPx() else 5.dp.toPx()
             drawLine(Color.White.copy(alpha = 0.3f), Offset(cx - len, y), Offset(cx - track, y), strokeWidth = 1.dp.toPx())
         }
-        // fill from 0 dB to the value
-        val y0 = yOf(0.0)
+        // fill from the bottom up to the value
         val yv = yOf(value)
-        drawRoundRect(fill, Offset(cx - track / 2, minOf(y0, yv)), Size(track, kotlin.math.abs(yv - y0)), CornerRadius(track))
+        drawRoundRect(fill, Offset(cx - track / 2, yv), Size(track, bottom - yv), CornerRadius(track))
         // thumb
         val tw = (w * 0.62f).coerceAtMost(28.dp.toPx())
         val th = 16.dp.toPx()
@@ -440,83 +463,7 @@ private fun VerticalGainSlider(
     }
 }
 
-/** Rotary knob for Bass / Treble: drag up or down, double-tap = 0 dB. */
-@Composable
-private fun Knob(label: String, value: Double, enabled: Boolean, onChange: (Double) -> Unit) {
-    val current by rememberUpdatedState(value)
-    val change by rememberUpdatedState(onChange)
-    val primary = MaterialTheme.colorScheme.primary
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Text(
-            if (value > 0) "+%.1f dB".format(value) else "%.1f dB".format(value),
-            color = if (value == 0.0) Color.White.copy(alpha = 0.5f) else primary,
-            fontSize = 11.sp
-        )
-        Spacer(Modifier.height(6.dp))
-        Canvas(
-            Modifier
-                .size(78.dp)
-                .pointerInput(Unit) {
-                    detectTapGestures(onDoubleTap = { change(0.0) })
-                }
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val startY = down.position.y
-                        val startValue = current
-                        var moved = false
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val c = event.changes.firstOrNull() ?: break
-                            if (!c.pressed) break
-                            val dy = c.position.y - startY
-                            if (!moved && kotlin.math.abs(dy) > viewConfiguration.touchSlop) moved = true
-                            if (moved) {
-                                c.consume()
-                                val v = (startValue - dy / (160.dp.toPx()) * (2 * MAX_GAIN_DB)).coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)
-                                change((v * 2).roundToInt() / 2.0)
-                            }
-                        }
-                    }
-                }
-        ) {
-            val r = size.minDimension / 2f
-            val c = Offset(size.width / 2f, size.height / 2f)
-            val stroke = 4.dp.toPx()
-            // body
-            drawCircle(Brush.radialGradient(listOf(Color(0xFF3A3A45), Color(0xFF15151B)), c, r), r * 0.78f, c)
-            // range arc (270° starting bottom-left)
-            drawArc(
-                Color.White.copy(alpha = 0.15f), 135f, 270f, false,
-                topLeft = Offset(c.x - r + stroke, c.y - r + stroke),
-                size = Size((r - stroke) * 2, (r - stroke) * 2),
-                style = Stroke(stroke, cap = StrokeCap.Round)
-            )
-            // value arc from the top (0 dB)
-            val sweep = (value / MAX_GAIN_DB * 135.0).toFloat()
-            if (kotlin.math.abs(sweep) > 0.5f) {
-                drawArc(
-                    if (enabled) primary else Color.White.copy(alpha = 0.35f), 270f, sweep, false,
-                    topLeft = Offset(c.x - r + stroke, c.y - r + stroke),
-                    size = Size((r - stroke) * 2, (r - stroke) * 2),
-                    style = Stroke(stroke, cap = StrokeCap.Round)
-                )
-            }
-            // pointer
-            val angle = Math.toRadians(270.0 + value / MAX_GAIN_DB * 135.0)
-            val inner = r * 0.30f
-            val outer = r * 0.66f
-            drawLine(
-                Color.White,
-                Offset(c.x + (inner * cos(angle)).toFloat(), c.y + (inner * sin(angle)).toFloat()),
-                Offset(c.x + (outer * cos(angle)).toFloat(), c.y + (outer * sin(angle)).toFloat()),
-                strokeWidth = 3.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-        }
-    }
-}
+private fun dbText(v: Double) = if (v > 0) "+%.1f dB".format(v) else "%.1f dB".format(v)
 
 @Composable
 private fun ResponseCurve(settings: EqSettings) {

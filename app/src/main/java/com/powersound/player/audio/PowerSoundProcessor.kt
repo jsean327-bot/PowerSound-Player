@@ -7,11 +7,16 @@ import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import kotlin.math.abs
 import kotlin.math.exp
+import kotlin.math.min
 import kotlin.random.Random
 
 /**
- * PowerSound DSP: preamp -> bass shelf -> parametric bands -> treble shelf -> limiter.
- * All math runs in 64-bit floating point; output is 16-bit PCM with TPDF dither.
+ * PowerSound DSP chain:
+ *   preamp -> bass shelf -> parametric bands -> treble shelf      (EQ page)
+ *   -> mono / stereo expand / balance                             (Effects page)
+ *   -> reverb                                                     (Reverb page)
+ *   -> volume -> limiter -> 16-bit with TPDF dither.
+ * All math runs in 64-bit floating point. When nothing is switched on the audio passes through untouched.
  */
 @UnstableApi
 class PowerSoundProcessor : BaseAudioProcessor() {
@@ -27,8 +32,18 @@ class PowerSoundProcessor : BaseAudioProcessor() {
     private var state = DoubleArray(0)
 
     private var preampGain = 1.0
-    private var processing = false
+    private var eqOn = false
     private var useLimiter = true
+
+    // effects
+    private var fxOn = false
+    private var mono = false
+    private var sideGain = 1.0
+    private var gainL = 1.0
+    private var gainR = 1.0
+    private var volume = 1.0
+    private var reverbOn = false
+    private var reverb: Reverb? = null
 
     private var limiterGain = 1.0
     private var releaseCoef = 0.0
@@ -52,6 +67,7 @@ class PowerSoundProcessor : BaseAudioProcessor() {
     override fun onFlush() {
         seenVersion = -1
         state.fill(0.0)
+        reverb?.reset()
         limiterGain = 1.0
     }
 
@@ -62,6 +78,7 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         coeffs = DoubleArray(0)
         state = DoubleArray(0)
         sectionCount = 0
+        reverb = null
         limiterGain = 1.0
     }
 
@@ -69,6 +86,7 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         val version = AudioEngine.version
         if (version == seenVersion && sampleRate == configuredRate && channels == configuredChannels) return
 
+        // ---- EQ ----
         val s = AudioEngine.snapshot
         val filters = if (s.enabled) AudioEngine.filtersFor(s, sampleRate.toDouble()) else emptyList()
         val newCoeffs = DoubleArray(filters.size * 5)
@@ -86,8 +104,26 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         coeffs = newCoeffs
         sectionCount = filters.size
         preampGain = if (s.enabled) linearGain(s.preampDb + AudioEngine.headroomDb) else 1.0
-        processing = s.enabled
-        useLimiter = s.enabled && s.limiter
+        eqOn = s.enabled && (sectionCount > 0 || preampGain != 1.0)
+
+        // ---- effects & reverb ----
+        val fx = AudioEngine.fxSnapshot
+        fxOn = fx.active
+        mono = fx.mono
+        sideGain = 1.0 + 1.5 * fx.stereoExpand
+        gainL = min(1.0, 1.0 - fx.balance)
+        gainR = min(1.0, 1.0 + fx.balance)
+        volume = fx.volume.coerceIn(0.0, 1.0)
+        reverbOn = fx.reverbEnabled
+        if (reverbOn) {
+            val r = reverb?.takeIf { sampleRate == configuredRate } ?: Reverb(sampleRate)
+            r.configure(fx)
+            reverb = r
+        } else {
+            reverb = null
+        }
+
+        useLimiter = (eqOn && s.limiter) || reverbOn || sideGain > 1.0
         if (sampleRate != configuredRate) {
             releaseCoef = 1.0 - exp(-1.0 / (0.15 * sampleRate)) // 150 ms release
         }
@@ -112,9 +148,8 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         rebuildIfNeeded(fmt.sampleRate, channels)
         val out = replaceOutputBuffer(frames * channels * 2)
 
-        // Fast path: engine off (or completely flat) and already 16-bit -> copy untouched (bit-exact).
-        val passthrough = !isFloat && (!processing || (sectionCount == 0 && preampGain == 1.0))
-        if (passthrough) {
+        // Fast path: nothing switched on and already 16-bit -> copy untouched (bit-exact).
+        if (!isFloat && !eqOn && !fxOn) {
             val bytes = frames * channels * 2
             val slice = inputBuffer.duplicate()
             slice.limit(slice.position() + bytes)
@@ -128,12 +163,14 @@ class PowerSoundProcessor : BaseAudioProcessor() {
         val st = state
         val sections = sectionCount
         val buf = frameBuf
+        val stereo = channels == 2
+        val rev = reverb
 
         for (f in 0 until frames) {
-            var peak = 0.0
+            // ---- EQ per channel ----
             for (ch in 0 until channels) {
                 var x = if (isFloat) inputBuffer.float.toDouble() else inputBuffer.short / 32768.0
-                if (processing) {
+                if (eqOn) {
                     x *= preampGain
                     var si = 0
                     while (si < sections) {
@@ -148,10 +185,45 @@ class PowerSoundProcessor : BaseAudioProcessor() {
                     }
                 }
                 buf[ch] = x
-                val a = abs(x)
-                if (a > peak) peak = a
             }
 
+            // ---- effects (stereo) ----
+            if (fxOn && stereo) {
+                var l = buf[0]
+                var r = buf[1]
+                if (mono) {
+                    val m = (l + r) * 0.5
+                    l = m; r = m
+                } else if (sideGain != 1.0) {
+                    val mid = (l + r) * 0.5
+                    val side = (l - r) * 0.5 * sideGain
+                    l = mid + side
+                    r = mid - side
+                }
+                if (rev != null) {
+                    rev.process(l, r)
+                    l = rev.outL
+                    r = rev.outR
+                }
+                buf[0] = l * gainL * volume
+                buf[1] = r * gainR * volume
+            } else if (fxOn) {
+                for (ch in 0 until channels) {
+                    var x = buf[ch]
+                    if (rev != null) {
+                        rev.process(x, x)
+                        x = (rev.outL + rev.outR) * 0.5
+                    }
+                    buf[ch] = x * volume
+                }
+            }
+
+            // ---- limiter ----
+            var peak = 0.0
+            for (ch in 0 until channels) {
+                val a = abs(buf[ch])
+                if (a > peak) peak = a
+            }
             if (useLimiter) {
                 // Instant attack, smooth release: never lets a peak pass the ceiling.
                 if (peak * limiterGain > ceiling) {

@@ -144,6 +144,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         StatsStore.init(app)
         connect()
         checkForUpdate(manual = false)
+        // Tempo from the Effects page is applied to the player (pitch is kept).
+        viewModelScope.launch {
+            AudioEngine.fx.collect { applyTempo() }
+        }
         viewModelScope.launch {
             while (isActive) {
                 val c = controller
@@ -169,6 +173,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             if (c != null) {
                 controller = c
                 c.addListener(listener)
+                applyTempo()
                 refresh(true)
             }
         }, ContextCompat.getMainExecutor(app))
@@ -377,6 +382,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             controller?.pause()
             _player.value = _player.value.copy(sleepEndsAt = null)
         }
+    }
+
+    private fun applyTempo() {
+        val c = controller ?: return
+        val fx = AudioEngine.fx.value
+        val speed = if (fx.tempoEnabled) fx.tempo.toFloat() else 1f
+        if (c.playbackParameters.speed != speed) c.setPlaybackSpeed(speed)
     }
 
     // ---- in-app updates ----

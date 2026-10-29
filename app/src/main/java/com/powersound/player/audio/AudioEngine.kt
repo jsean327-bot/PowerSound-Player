@@ -19,6 +19,8 @@ object AudioEngine {
     private const val PREFS = "powersound_audio"
     private const val KEY_SETTINGS = "settings"
     private const val KEY_PRESETS = "custom_presets"
+    private const val KEY_FX = "fx"
+    private const val KEY_REVERBS = "custom_reverbs"
     private const val PREVIEW_FS = 48000.0
 
     private var prefs: SharedPreferences? = null
@@ -28,6 +30,17 @@ object AudioEngine {
 
     private val _customPresets = MutableStateFlow<List<EqPreset>>(emptyList())
     val customPresets: StateFlow<List<EqPreset>> = _customPresets.asStateFlow()
+
+    private val _fx = MutableStateFlow(FxSettings())
+    val fx: StateFlow<FxSettings> = _fx.asStateFlow()
+
+    private val _customReverbs = MutableStateFlow<List<ReverbPreset>>(emptyList())
+    val customReverbs: StateFlow<List<ReverbPreset>> = _customReverbs.asStateFlow()
+
+    /** Effects + reverb settings read by the audio thread. */
+    @Volatile
+    var fxSnapshot: FxSettings = FxSettings()
+        private set
 
     /** Read by the audio thread. */
     @Volatile
@@ -59,6 +72,54 @@ object AudioEngine {
                 (0 until arr.length()).map { eqPresetFromJson(arr.getJSONObject(it)) }
             }.getOrNull()
         } ?: emptyList()
+        val fxLoaded = p.getString(KEY_FX, null)?.let { runCatching { fxFromJson(JSONObject(it)) }.getOrNull() } ?: FxSettings()
+        _fx.value = fxLoaded
+        fxSnapshot = fxLoaded
+        _customReverbs.value = p.getString(KEY_REVERBS, null)?.let { raw ->
+            runCatching {
+                val arr = JSONArray(raw)
+                (0 until arr.length()).map { reverbPresetFromJson(arr.getJSONObject(it)) }
+            }.getOrNull()
+        } ?: emptyList()
+        version += 1
+    }
+
+    // ---- effects & reverb ----
+
+    fun updateFx(transform: (FxSettings) -> FxSettings) {
+        val next = transform(_fx.value)
+        _fx.value = next
+        fxSnapshot = next
+        version += 1
+        prefs?.edit()?.putString(KEY_FX, next.toJson().toString())?.apply()
+    }
+
+    fun resetEffects() = updateFx {
+        val d = FxSettings()
+        it.copy(balance = d.balance, stereoExpand = d.stereoExpand, mono = d.mono,
+            tempoEnabled = d.tempoEnabled, tempo = d.tempo, volume = d.volume)
+    }
+
+    fun resetReverb() = updateFx {
+        val d = FxSettings()
+        it.copy(damp = d.damp, filter = d.filter, fade = d.fade, preDelay = d.preDelay,
+            preDelayMix = d.preDelayMix, size = d.size, mix = d.mix, reverbPreset = "Custom")
+    }
+
+    fun saveReverbPreset(name: String) {
+        val clean = name.trim().ifBlank { return }
+        val f = _fx.value
+        val preset = ReverbPreset(clean, f.damp, f.filter, f.fade, f.preDelay, f.preDelayMix, f.size, f.mix, builtIn = false)
+        val list = _customReverbs.value.filterNot { it.name == clean } + preset
+        _customReverbs.value = list
+        prefs?.edit()?.putString(KEY_REVERBS, JSONArray().apply { list.forEach { put(it.toJson()) } }.toString())?.apply()
+        updateFx { it.copy(reverbPreset = clean) }
+    }
+
+    fun deleteReverbPreset(name: String) {
+        val list = _customReverbs.value.filterNot { it.name == name }
+        _customReverbs.value = list
+        prefs?.edit()?.putString(KEY_REVERBS, JSONArray().apply { list.forEach { put(it.toJson()) } }.toString())?.apply()
     }
 
     fun update(transform: (EqSettings) -> EqSettings) {
