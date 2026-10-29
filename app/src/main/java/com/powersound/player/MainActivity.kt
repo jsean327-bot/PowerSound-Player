@@ -330,7 +330,7 @@ private fun LibraryHost(
     val stack = vm.stack
     val canGoBack = enabled && stack.size > 1
 
-    var systemBack by remember { mutableFloatStateOf(0f) }
+    // 0 = page fully shown, 1 = page gone (previous page fully shown).
     val swipe = remember { Animatable(0f) }
     var dirX by remember { mutableFloatStateOf(1f) }
     var dirY by remember { mutableFloatStateOf(0f) }
@@ -341,11 +341,12 @@ private fun LibraryHost(
         try {
             dirX = 1f
             dirY = 0f
-            progress.collect { systemBack = it.progress }
+            progress.collect { swipe.snapTo(it.progress) }
+            swipe.animateTo(1f, tween(170))
             vm.pop()
-            systemBack = 0f
+            swipe.snapTo(0f)
         } catch (e: CancellationException) {
-            systemBack = 0f
+            scope.launch { swipe.animateTo(0f, tween(200)) }
             throw e
         }
     }
@@ -353,11 +354,11 @@ private fun LibraryHost(
     fun finish(commit: Boolean) {
         scope.launch {
             if (commit) {
-                swipe.animateTo(1f, tween(160))
+                swipe.animateTo(1f, tween(180))
                 vm.pop()
                 swipe.snapTo(0f)
             } else {
-                swipe.animateTo(0f, tween(200))
+                swipe.animateTo(0f, tween(220))
             }
         }
     }
@@ -411,7 +412,7 @@ private fun LibraryHost(
         }
     }
 
-    val p = max(systemBack, swipe.value)
+    val p = swipe.value
     val bg = MaterialTheme.colorScheme.background
     // Only the top page is shown; while going back the page underneath is shown too.
     // Each page is keyed by its id so it keeps its scroll position when it moves.
@@ -431,14 +432,22 @@ private fun LibraryHost(
                     Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            val q = if (isTop) max(systemBack, swipe.value) else 0f
-                            scaleX = 1f - 0.14f * q
-                            scaleY = 1f - 0.14f * q
-                            translationX = dirX * 56.dp.toPx() * q
-                            translationY = dirY * 90.dp.toPx() * q
-                            alpha = 1f - 0.3f * q
-                            shape = RoundedCornerShape(34.dp.toPx() * q)
-                            clip = q > 0f
+                            val q = swipe.value
+                            if (isTop) {
+                                // the page you drag shrinks and fades out completely
+                                scaleX = 1f - 0.16f * q
+                                scaleY = 1f - 0.16f * q
+                                translationX = dirX * 56.dp.toPx() * q
+                                translationY = dirY * 90.dp.toPx() * q
+                                alpha = (1f - q).coerceIn(0f, 1f)
+                                shape = RoundedCornerShape(34.dp.toPx() * q)
+                                clip = q > 0f
+                            } else {
+                                // the page behind starts faint and slightly small, then comes to full strength
+                                scaleX = 0.94f + 0.06f * q
+                                scaleY = 0.94f + 0.06f * q
+                                alpha = (0.15f + 0.85f * q).coerceIn(0f, 1f)
+                            }
                         }
                         .then(if (isTop && p > 0f) Modifier.background(bg) else Modifier)
                         .then(
