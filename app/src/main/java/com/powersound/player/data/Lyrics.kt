@@ -135,7 +135,9 @@ object TagReader {
     }
 
     private fun charsetOf(enc: Int): Charset = when (enc) {
-        0 -> Charsets.ISO_8859_1
+        // Settings → Library → Scanner → Tag Encoding (ID3 "ISO-8859-1" tags often hold Arabic etc.)
+        0 -> runCatching { Charset.forName(TAG_ENCODINGS[SettingsStore.value.tagEncoding.coerceIn(0, TAG_ENCODINGS.lastIndex)].second) }
+            .getOrDefault(Charsets.ISO_8859_1)
         1 -> Charsets.UTF_16
         2 -> Charsets.UTF_16BE
         else -> Charsets.UTF_8

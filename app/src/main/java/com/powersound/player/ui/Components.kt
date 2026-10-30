@@ -430,15 +430,34 @@ fun CategoryIcon(icon: ImageVector, color: Color, size: Int = 34) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit, onLongClick: () -> Unit = {}, zoom: Int = 1, extra: String? = null) {
+fun SongRow(
+    song: Song,
+    isCurrent: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+    zoom: Int = 1,
+    extra: String? = null,
+    /** "album", "folder" or "albumartist": the list the row is shown in (Settings → Library → Lists). */
+    listKind: String = ""
+) {
     val artDp = when (zoom) { 0 -> 42; 2 -> 78; else -> 56 }
     val titleSp = when (zoom) { 0 -> 13; 2 -> 17; else -> 15 }
     val colors = MaterialTheme.colorScheme
     val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
-    // Settings → Look and Feel → List UI / Player Screen → Animate Long Labels Everywhere
+    // Settings → Library → Lists / Player Screen → Animate Long Labels Everywhere
+    // Settings → Library → Lists → Show Track Number: 1 separate number in album / folder lists, 2 in the meta line, 3 in the title
+    val num = song.trackNumber
+    val separateNumber = st.trackNumberMode == 1 && num > 0 && (listKind == "album" || listKind == "folder")
     val shownTitle = (if (st.filenameAsTitle) song.fileName else song.title).let { t ->
-        if (st.showTrackNumber && song.trackNumber > 0) "${song.trackNumber}. $t" else t
+        if (st.trackNumberMode == 3 && num > 0) "$num. $t" else t
     }
+    // Album Artist Label for Tracks / for Album Artist Tracks; Hide Unknown Album / Artist
+    val useAlbumArtist = if (listKind == "albumartist") st.albumArtistAATracks else st.albumArtistTracks
+    val artistLabel = (if (useAlbumArtist) song.albumArtist else song.artist)
+        .takeUnless { st.hideUnknownArtist && it == "Unknown artist" }
+    val albumLabel = song.album.takeUnless { st.hideUnknownAlbum && it == "Unknown album" }
+    val subLine = listOfNotNull(artistLabel, albumLabel).joinToString(" - ")
+    val metaPrefix = if (st.trackNumberMode == 2 && num > 0) "#$num  " else ""
     val marquee = st.marqueeEverywhere && isCurrent
     Row(
         modifier = Modifier
@@ -450,6 +469,17 @@ fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit, onLongClick: ()
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (separateNumber) {
+            Text(
+                num.toString(),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isCurrent) colors.primary else Color.White.copy(alpha = 0.7f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.width(28.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+        }
         Artwork(songId = song.id, modifier = Modifier.size(artDp.dp), sizePx = if (zoom == 2) 240 else 168, cornerDp = 10)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -462,8 +492,8 @@ fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit, onLongClick: ()
                 overflow = if (marquee) TextOverflow.Clip else TextOverflow.Ellipsis,
                 modifier = if (marquee) Modifier.basicMarquee(iterations = Int.MAX_VALUE) else Modifier
             )
-            Text(
-                text = "${song.artist} - ${song.album}",
+            if (subLine.isNotEmpty()) Text(
+                text = subLine,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White.copy(alpha = 0.80f),
@@ -471,7 +501,7 @@ fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit, onLongClick: ()
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "♪ ${formatTime(song.durationMs)} | ${song.formatLabel.lowercase()}" + (extra?.let { "  •  $it" } ?: ""),
+                text = "$metaPrefix♪ ${formatTime(song.durationMs)} | ${song.formatLabel.lowercase()}" + (extra?.let { "  •  $it" } ?: ""),
                 fontSize = 10.sp,
                 color = Color.White.copy(alpha = 0.55f),
                 maxLines = 1

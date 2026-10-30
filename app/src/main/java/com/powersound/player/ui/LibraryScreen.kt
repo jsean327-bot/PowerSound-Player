@@ -47,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -57,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -150,6 +152,7 @@ fun GroupGridScreen(
     extraMenu: List<Pair<String, () -> Unit>> = emptyList()
 ) {
     val state = rememberLazyGridState()
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
     var columns by rememberSaveable { mutableIntStateOf(2) }
     var sort by rememberSaveable { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -166,14 +169,21 @@ fun GroupGridScreen(
         }
     }
     val allSongs = remember(shown) { shown.flatMap { it.songs } }
-    val keys = remember(shown) { shown.map { letterKey(it.title) } }
+    val keys = remember(shown) { shown.map { letterKey(com.powersound.player.data.MusicRepository.sortKey(it.title)) } }
     val headerItems = if (query != null) 2 else 1
     val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
 
     val pills: @Composable (Modifier) -> Unit = { m ->
         Box(m) {
             ActionPills(
-                onShuffle = { onShuffle(allSongs) },
+                // Settings → Library → Shuffle → Category Items Shuffle
+                onShuffle = {
+                    when (st.categoryShuffle) {
+                        1 -> onPlay(shown.shuffled().flatMap { it.songs })
+                        2 -> onPlay(shown.flatMap { it.songs.shuffled() })
+                        else -> onShuffle(allSongs)
+                    }
+                },
                 onPlay = { onPlay(allSongs) },
                 onSearch = { query = if (query == null) "" else null },
                 onMore = { menu = true },
@@ -213,7 +223,7 @@ fun GroupGridScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                PageHeader(backLabel, title, icon, iconColor, onBack) { pills(Modifier) }
+                PageHeader(backLabel, title, icon, iconColor, onBack) { if (st.headerButtons) pills(Modifier) }
             }
             if (query != null) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
@@ -225,7 +235,7 @@ fun GroupGridScreen(
             }
         }
 
-        if (sort == 0) {
+        if (sort == 0 && st.azScroll) {
             FastScroller(
                 itemKeys = keys,
                 onJump = { i -> scope.launch { state.scrollToItem(i + headerItems) } },
@@ -237,7 +247,16 @@ fun GroupGridScreen(
             )
         }
 
-        FloatingPills(visible = scrolled, bottomInset = bottomInset) { pills(Modifier) }
+        BottomPills(st.bottomButtons, scrolled || !st.headerButtons, bottomInset) { pills(Modifier) }
+    }
+}
+
+/** Settings → Library → Lists → Bottom Buttons: 0 off, 1 semi-transparent, 2 on. Shown while scrolled, or always without header buttons. */
+@Composable
+fun BottomPills(mode: Int, visible: Boolean, bottomInset: Dp, content: @Composable () -> Unit) {
+    if (mode == 0) return
+    FloatingPills(visible = visible, bottomInset = bottomInset) {
+        Box(Modifier.alpha(if (mode == 1) 0.55f else 1f)) { content() }
     }
 }
 
@@ -312,9 +331,12 @@ fun SongListScreen(
     onAddToQueue: (List<Song>) -> Unit,
     extraMenu: List<Pair<String, () -> Unit>> = emptyList(),
     rowExtra: ((Song) -> String?)? = null,
+    /** "album", "folder", "albumartist" or "" (for the Settings → Library → Lists labels). */
+    listKind: String = "",
     header: @Composable (pills: @Composable () -> Unit) -> Unit
 ) {
     val state = rememberLazyListState()
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
     var zoom by rememberSaveable { mutableIntStateOf(1) }
     var sort by rememberSaveable { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -335,7 +357,7 @@ fun SongListScreen(
             else -> list
         }
     }
-    val indexOn = showIndex && (sort == 0 || sort == 1)
+    val indexOn = showIndex && st.azScroll && (sort == 0 || sort == 1)
     val keys = remember(shown, indexOn) { if (indexOn) shown.map { letterKey(it.title) } else emptyList() }
     val headerItems = if (query != null) 2 else 1
     val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
@@ -379,7 +401,7 @@ fun SongListScreen(
                 .pinchToZoom(zoom, onZoomIn = { if (zoom < 2) zoom++ }, onZoomOut = { if (zoom > 0) zoom-- }),
             contentPadding = PaddingValues(end = if (indexOn) 18.dp else 0.dp, bottom = bottomInset + 70.dp)
         ) {
-            item { header(pills) }
+            item { header(if (st.headerButtons) pills else NoPills) }
             if (query != null) {
                 item { FilterField(query ?: "", { query = it }, { query = null }) }
             }
@@ -402,7 +424,8 @@ fun SongListScreen(
                     onClick = { onPlay(shown, i) },
                     onLongClick = { onSongMenu(s) },
                     zoom = zoom,
-                    extra = rowExtra?.invoke(s)
+                    extra = rowExtra?.invoke(s),
+                    listKind = listKind
                 )
             }
         }
@@ -419,9 +442,7 @@ fun SongListScreen(
             )
         }
 
-        FloatingPills(visible = scrolled, bottomInset = bottomInset) {
-            Box(Modifier.padding(end = 0.dp)) { pills() }
-        }
+        BottomPills(st.bottomButtons, scrolled || !st.headerButtons, bottomInset) { pills() }
     }
 }
 
@@ -429,6 +450,7 @@ fun SongListScreen(
 @Composable
 fun ArtHeader(group: Group, backLabel: String, onBack: () -> Unit, pills: @Composable () -> Unit) {
     val bg = MaterialTheme.colorScheme.background
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
     Box(
         Modifier
             .fillMaxWidth()
@@ -466,12 +488,17 @@ fun ArtHeader(group: Group, backLabel: String, onBack: () -> Unit, pills: @Compo
             Spacer(Modifier.height(4.dp))
             OverlayChip(group.subtitle)
             Spacer(Modifier.height(4.dp))
-            OverlayChip("♪ ${group.songs.size} | ${formatTime(group.totalMs)}")
+            // Settings → Library → Lists → Headers With Meta
+            if (st.headersMeta) {
+                OverlayChip("♪ ${group.songs.size} | ${formatTime(group.totalMs)}")
+            }
             Spacer(Modifier.height(10.dp))
             pills()
         }
     }
 }
+
+private val NoPills: @Composable () -> Unit = {}
 
 // ================================================================= folders hierarchy
 
@@ -490,7 +517,10 @@ fun TreeScreen(
     onSongMenu: (Song) -> Unit
 ) {
     val state = rememberLazyGridState()
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
     val all = remember(folders, songs) { songs + folders.flatMap { it.songs } }
+    // Settings → Library → Shuffle → Shuffle All Songs In Folder Hierarchy (off: only this folder's own songs)
+    val shuffleList = if (st.shuffleAllHier || songs.isEmpty()) all else songs
     Box(Modifier.fillMaxSize()) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -503,7 +533,7 @@ fun TreeScreen(
             item(span = { GridItemSpan(maxLineSpan) }) {
                 PageHeader(backLabel, title, Icons.Rounded.Folder, Category.FOLDERS_HIERARCHY.color(), onBack) {
                     ActionPills(
-                        onShuffle = { onShuffle(all) },
+                        onShuffle = { onShuffle(shuffleList) },
                         onPlay = { onPlay(all, 0) },
                         onSearch = null,
                         onMore = null,
@@ -515,7 +545,7 @@ fun TreeScreen(
                 GroupTile(g.title, g.subtitle, g.coverId) { onOpenFolder(g) }
             }
             itemsIndexed(songs, key = { _, s -> "song:${s.id}" }, span = { _, _ -> GridItemSpan(maxLineSpan) }) { i, s ->
-                SongRow(s, s.id == currentId, onClick = { onPlay(songs, i) }, onLongClick = { onSongMenu(s) })
+                SongRow(s, s.id == currentId, onClick = { onPlay(songs, i) }, onLongClick = { onSongMenu(s) }, listKind = "folder")
             }
         }
     }

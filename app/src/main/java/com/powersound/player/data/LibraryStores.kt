@@ -83,15 +83,69 @@ object LibraryStores {
     // ---- playlists ----
 
     fun createPlaylist(name: String, songIds: List<Long> = emptyList()): Playlist {
-        val pl = Playlist(System.currentTimeMillis(), name.trim().ifBlank { "Playlist" }, songIds.distinct())
+        val pl = Playlist(maxOf(System.currentTimeMillis(), (_playlists.value.maxOfOrNull { it.id } ?: 0L) + 1), name.trim().ifBlank { "Playlist" }, songIds.distinct())
         savePlaylists(_playlists.value + pl)
         return pl
     }
 
+    /** Settings → Library → Playlists: Playlist Insert Position and Don't Add Duplicates. */
     fun addToPlaylist(id: Long, songIds: List<Long>) {
+        val st = SettingsStore.value
         savePlaylists(_playlists.value.map { p ->
-            if (p.id == id) p.copy(songIds = (p.songIds + songIds).distinct()) else p
+            if (p.id != id) return@map p
+            val add = if (st.playlistNoDuplicates) songIds.distinct().filterNot { it in p.songIds } else songIds
+            val merged = when (st.playlistInsert) {
+                0 -> add + p.songIds
+                2 -> {
+                    val out = p.songIds.toMutableList()
+                    add.forEach { out.add((0..out.size).random(), it) }
+                    out
+                }
+                else -> p.songIds + add
+            }
+            p.copy(songIds = merged)
         })
+    }
+
+    fun replacePlaylistSongs(id: Long, songIds: List<Long>) {
+        savePlaylists(_playlists.value.map { if (it.id == id) it.copy(songIds = songIds) else it })
+    }
+
+    /** A deleted song leaves every playlist. */
+    fun removeSongEverywhere(songId: Long) {
+        if (_playlists.value.none { songId in it.songIds }) return
+        savePlaylists(_playlists.value.map { p -> p.copy(songIds = p.songIds.filterNot { it == songId }) })
+    }
+
+    // ---- m3u / m3u8 (Settings → Library → Playlists) ----
+
+    /** Reads an .m3u / .m3u8 file; entries are matched to library songs by path, then by file name. */
+    fun importM3u(name: String, bytes: ByteArray, isUtf8File: Boolean, songs: List<Song>): Int {
+        val st = SettingsStore.value
+        val charset = if (isUtf8File || st.m3uUtf8) Charsets.UTF_8
+        else runCatching { java.nio.charset.Charset.forName(TAG_ENCODINGS[st.tagEncoding.coerceIn(0, TAG_ENCODINGS.lastIndex)].second) }
+            .getOrDefault(Charsets.ISO_8859_1)
+        val byPath = songs.associateBy { it.path.lowercase() }
+        val byName = songs.groupBy { it.path.substringAfterLast('/').lowercase() }
+        val ids = String(bytes, charset).removePrefix("\uFEFF").lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .mapNotNull { line ->
+                val path = line.replace('\\', '/').removePrefix("file://")
+                byPath[path.lowercase()]?.id ?: byName[path.substringAfterLast('/').lowercase()]?.firstOrNull()?.id
+            }.toList()
+        if (ids.isEmpty()) return 0
+        replacePlaylistSongs(createPlaylist(name).id, ids)
+        return ids.size
+    }
+
+    /** One .m3u8 text per playlist (UTF-8, with #EXTINF lines). */
+    fun toM3u8(p: Playlist, songOf: (Long) -> Song?): String = buildString {
+        append("#EXTM3U\n")
+        p.songIds.mapNotNull(songOf).forEach { s ->
+            append("#EXTINF:").append(s.durationMs / 1000).append(',').append(s.artist).append(" - ").append(s.title).append('\n')
+            append(s.path).append('\n')
+        }
     }
 
     fun removeFromPlaylist(id: Long, songId: Long) {

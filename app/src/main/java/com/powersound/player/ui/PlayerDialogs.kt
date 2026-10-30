@@ -159,7 +159,8 @@ fun SongMenuDialog(
             if (onPlayNext != null && onAddToQueue != null) {
                 MenuRow(Icons.Rounded.PlaylistPlay, "Play next", act(onPlayNext), Icons.Rounded.Add, "Add to queue", act(onAddToQueue))
             }
-            MenuRow(Icons.Rounded.Delete, "Delete", act(onDelete))
+            // Settings → Library → Lists → Delete Action
+            if (com.powersound.player.data.SettingsStore.value.deleteAction) MenuRow(Icons.Rounded.Delete, "Delete", act(onDelete))
             MenuRow(Icons.Rounded.PlaylistAdd, "Playlist", act(onPlaylist), Icons.Rounded.Bookmark, "Bookmark", act(onBookmark))
             MenuRow(Icons.Rounded.Image, "Album Art", act(onAlbumArt))
             MenuRow(Icons.Rounded.Info, "Info/Tags", act(onInfo), Icons.Rounded.TextSnippet, "Lyrics", act(onLyrics))

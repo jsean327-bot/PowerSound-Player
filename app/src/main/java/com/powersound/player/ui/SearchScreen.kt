@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,7 +52,8 @@ import com.powersound.player.data.Group
 import com.powersound.player.data.Song
 import kotlinx.coroutines.delay
 
-private val FILTERS = listOf("All", "Songs", "Albums", "Artists", "Album Artists", "Folders")
+/** Search categories (Settings → Library → Search → Search Categories can hide any of them). */
+val SEARCH_CATEGORIES = listOf("Songs", "Albums", "Artists", "Album Artists", "Folders", "Genres", "Composers")
 
 @Composable
 fun SearchScreen(
@@ -64,7 +66,11 @@ fun SearchScreen(
     onSongMenu: (Song) -> Unit
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    var filter by rememberSaveable { mutableIntStateOf(0) }
+    var filterName by rememberSaveable { mutableStateOf("All") }
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
+    val filters = remember(st.searchHidden) { listOf("All") + SEARCH_CATEGORIES.filter { it !in st.searchHidden } }
+    val filter = filterName.takeIf { it in filters } ?: "All"
+    fun on(cat: String) = cat !in st.searchHidden && (filter == "All" || filter == cat)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(150)
@@ -73,21 +79,29 @@ fun SearchScreen(
 
     val q = query.trim().lowercase()
     fun matches(g: Group) = g.title.lowercase().contains(q)
-    val songs = remember(q, filter, library) {
-        if (q.isEmpty() || (filter != 0 && filter != 1)) emptyList()
+    val songs = remember(q, filter, library, st.searchTitlesOnly, st.searchHidden) {
+        if (q.isEmpty() || !on("Songs")) emptyList()
         else library.songs.filter {
-            it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) || it.album.lowercase().contains(q)
+            // Settings → Library → Search → Search Track Titles Only
+            it.title.lowercase().contains(q) ||
+                (!st.searchTitlesOnly && (it.artist.lowercase().contains(q) || it.album.lowercase().contains(q)))
         }
     }
-    val groups: List<Pair<String, Group>> = remember(q, filter, library) {
+    val groups: List<Pair<String, Group>> = remember(q, filter, library, st.searchHidden) {
         if (q.isEmpty()) emptyList() else buildList {
-            if (filter == 0 || filter == 2) library.albums.filter(::matches).forEach { add("Albums" to it) }
-            if (filter == 0 || filter == 3) library.artists.filter(::matches).forEach { add("Artists" to it) }
-            if (filter == 0 || filter == 4) library.albumArtists.filter(::matches).forEach { add("Album Artists" to it) }
-            if (filter == 0 || filter == 5) library.folders.filter(::matches).forEach { add("Folders" to it) }
+            if (on("Albums")) library.albums.filter(::matches).forEach { add("Albums" to it) }
+            if (on("Artists")) library.artists.filter(::matches).forEach { add("Artists" to it) }
+            if (on("Album Artists")) library.albumArtists.filter(::matches).forEach { add("Album Artists" to it) }
+            if (on("Folders")) library.folders.filter(::matches).forEach { add("Folders" to it) }
+            if (on("Genres")) library.genres.filter(::matches).forEach { add("Genres" to it) }
+            if (on("Composers")) library.composers.filter(::matches).forEach { add("Composers" to it) }
         }
     }
-    val playable = remember(songs, groups) { songs.ifEmpty { groups.flatMap { it.second.songs }.distinctBy { it.id } } }
+    // Settings → Library → Search → Play Tracks Only (off: also the songs of the found albums, artists, …)
+    val playable = remember(songs, groups, st.searchTracksOnly) {
+        if (st.searchTracksOnly) songs.ifEmpty { groups.flatMap { it.second.songs }.distinctBy { it.id } }
+        else (songs + groups.flatMap { it.second.songs }).distinctBy { it.id }
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -135,16 +149,16 @@ fun SearchScreen(
                 contentPadding = PaddingValues(horizontal = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                itemsIndexed(FILTERS) { i, label ->
+                itemsIndexed(filters) { _, label ->
                     Text(
                         label,
-                        color = if (filter == i) Color.Black else Color.White,
+                        color = if (filter == label) Color.Black else Color.White,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 13.sp,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .background(if (filter == i) Color.White else Color.White.copy(alpha = 0.08f))
-                            .clickable { filter = i }
+                            .background(if (filter == label) Color.White else Color.White.copy(alpha = 0.08f))
+                            .clickable { filterName = label }
                             .padding(horizontal = 12.dp, vertical = 7.dp)
                     )
                 }

@@ -117,6 +117,55 @@ object MusicRepository {
 
     private val byTrack = compareBy<Song>({ it.album.lowercase() }, { it.track }, { it.title.lowercase() })
 
+    // ---------------------------------------------------------------- Settings → Library helpers
+
+    /** Sort key: "The Beatles" sorts as "beatles" unless "Don't Ignore Articles For Sort" is on. */
+    fun sortKey(title: String): String {
+        val t = title.trim().lowercase()
+        if (SettingsStore.value.keepArticles) return t
+        for (a in listOf("the ", "a ", "an ")) if (t.startsWith(a) && t.length > a.length) return t.substring(a.length)
+        return t
+    }
+
+    /** Splits "A; B" into names by the symbols of Settings → Scanner; names in Unsplit Artists stay whole. */
+    fun splitNames(value: String, symbols: String, unsplit: Set<String> = emptySet()): List<String> {
+        val v = value.trim()
+        if (symbols.isBlank() || v.isEmpty() || unsplit.any { it.equals(v, ignoreCase = true) }) return listOf(v)
+        // protect the unsplit names inside a longer value
+        var work = v
+        val keep = unsplit.filter { it.isNotBlank() && work.contains(it, ignoreCase = true) }
+        keep.forEachIndexed { i, u -> work = work.replace(u, "\u0000$i\u0000", ignoreCase = true) }
+        val parts = work.split(*symbols.split(' ').filter { it.isNotEmpty() }.flatMap { tok -> if (tok.length > 1 && !tok.all { !it.isLetterOrDigit() }) listOf(tok) else tok.map { it.toString() } }.toTypedArray())
+            .map { p ->
+                var r = p
+                keep.forEachIndexed { i, u -> r = r.replace("\u0000$i\u0000", u) }
+                r.trim()
+            }
+            .filter { it.isNotEmpty() }
+        return parts.ifEmpty { listOf(v) }
+    }
+
+    /** Groups songs by one or more names each (split artists / composers / genres). */
+    private fun multiGroup(
+        songs: List<Song>,
+        prefix: String,
+        nameOf: (Song) -> String,
+        symbols: String,
+        unsplit: Set<String>,
+        subtitle: (List<Song>) -> String
+    ): List<Group> {
+        val map = LinkedHashMap<String, ArrayList<Song>>()
+        val showCombined = SettingsStore.value.showUnsplit
+        for (s in songs) {
+            val full = nameOf(s)
+            val names = splitNames(full, symbols, unsplit)
+            for (n in names) map.getOrPut(n) { ArrayList() }.add(s)
+            if (showCombined && names.size > 1) map.getOrPut(full) { ArrayList() }.add(s)
+        }
+        return map.map { (name, list) -> Group("$prefix:$name", name, subtitle(list), list.sortedWith(byTrack)) }
+            .sortedBy { sortKey(it.title) }
+    }
+
     fun folders(songs: List<Song>): List<Group> =
         songs.groupBy { it.folder }.map { (path, list) ->
             Group(
@@ -125,38 +174,50 @@ object MusicRepository {
                 subtitle = artistsLabel(list),
                 songs = list.sortedWith(byTrack)
             )
-        }.sortedBy { it.title.lowercase() }
+        }.sortedBy { sortKey(it.title) }
 
-    fun albums(songs: List<Song>): List<Group> =
-        songs.groupBy { it.albumId }.map { (id, list) ->
-            val artists = list.map { it.albumArtist }.distinct()
+    /**
+     * Albums. "Join Albums" (on): tracks with the same album name and album artist are one album, even when
+     * Android gave them different album ids; tracks without an album artist tag join by name.
+     */
+    fun albums(songs: List<Song>): List<Group> {
+        val st = SettingsStore.value
+        val grouped: Map<Any, List<Song>> = if (st.joinAlbums) {
+            songs.groupBy { s -> s.album.lowercase().trim() + "\u0001" + (if (s.albumArtist != s.artist) s.albumArtist.lowercase() else "") }
+        } else songs.groupBy { it.albumId }
+        return grouped.map { (_, list) ->
+            val first = list.first()
+            // Album Artist Label for Albums: album artist (and sort by it) instead of the track artist
+            val names = if (st.albumArtistAlbums) list.map { it.albumArtist }.distinct() else list.map { it.artist }.distinct()
             Group(
-                key = "album:$id",
-                title = list.first().album,
-                subtitle = if (artists.size == 1) artists.first() else "Various artists",
+                key = "album:${first.albumId}",
+                title = first.album,
+                subtitle = if (names.size == 1) names.first() else "Various artists",
                 songs = list.sortedWith(compareBy({ it.track }, { it.title.lowercase() }))
             )
-        }.sortedBy { it.title.lowercase() }
+        }.let { list ->
+            if (st.albumArtistAlbums) list.sortedWith(compareBy({ sortKey(it.subtitle) }, { sortKey(it.title) }))
+            else list.sortedBy { sortKey(it.title) }
+        }
+    }
 
-    fun artists(songs: List<Song>): List<Group> =
-        songs.groupBy { it.artist }.map { (name, list) ->
-            Group("artist:$name", name, songsLabel(list.size), list.sortedWith(byTrack))
-        }.sortedBy { it.title.lowercase() }
+    fun artists(songs: List<Song>): List<Group> {
+        val st = SettingsStore.value
+        return multiGroup(songs, "artist", { it.artist }, st.splitArtists, st.unsplitArtists) { songsLabel(it.size) }
+    }
 
-    fun albumArtists(songs: List<Song>): List<Group> =
-        songs.groupBy { it.albumArtist }.map { (name, list) ->
+    fun albumArtists(songs: List<Song>): List<Group> {
+        val st = SettingsStore.value
+        return multiGroup(songs, "albumartist", { it.albumArtist }, st.splitArtists, st.unsplitArtists) { list ->
             val albums = list.map { it.albumId }.distinct().size
-            Group(
-                "albumartist:$name", name,
-                if (albums == 1) songsLabel(list.size) else "$albums albums",
-                list.sortedWith(byTrack)
-            )
-        }.sortedBy { it.title.lowercase() }
+            if (albums == 1) songsLabel(list.size) else "$albums albums"
+        }
+    }
 
-    fun genres(songs: List<Song>): List<Group> =
-        songs.groupBy { it.genre.ifBlank { "Unknown genre" } }.map { (name, list) ->
-            Group("genre:$name", name, songsLabel(list.size), list.sortedWith(byTrack))
-        }.sortedBy { it.title.lowercase() }
+    fun genres(songs: List<Song>): List<Group> {
+        val st = SettingsStore.value
+        return multiGroup(songs, "genre", { it.genre.ifBlank { "Unknown genre" } }, st.splitGenres, emptySet()) { songsLabel(it.size) }
+    }
 
     fun years(songs: List<Song>): List<Group> =
         songs.groupBy { it.year }.map { (year, list) ->
@@ -168,10 +229,10 @@ object MusicRepository {
             )
         }.sortedByDescending { it.songs.first().year }
 
-    fun composers(songs: List<Song>): List<Group> =
-        songs.groupBy { it.composer.ifBlank { "Unknown composer" } }.map { (name, list) ->
-            Group("composer:$name", name, songsLabel(list.size), list.sortedWith(byTrack))
-        }.sortedBy { it.title.lowercase() }
+    fun composers(songs: List<Song>): List<Group> {
+        val st = SettingsStore.value
+        return multiGroup(songs, "composer", { it.composer.ifBlank { "Unknown composer" } }, st.splitComposers, emptySet()) { songsLabel(it.size) }
+    }
 
     /**
      * Folder tree: sub-folders of [path] (each with every song below it) and the songs
@@ -196,7 +257,7 @@ object MusicRepository {
         }
         val groups = subs.map { (sub, list) ->
             Group("tree:$sub", sub.substringAfterLast('/'), songsLabel(list.size), list.sortedWith(byTrack))
-        }.sortedBy { it.title.lowercase() }
-        return groups to direct.sortedBy { it.title.lowercase() }
+        }.sortedBy { sortKey(it.title) }
+        return groups to direct.sortedBy { sortKey(it.title) }
     }
 }

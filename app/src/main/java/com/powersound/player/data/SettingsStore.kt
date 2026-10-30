@@ -71,9 +71,8 @@ data class AppSettings(
     val notifNavigateToList: Boolean = false,
     val keepNotification: Boolean = true,
     val removeNotifOnDisconnect: Boolean = false,
-    // ---- Look and Feel → List UI ----
+    // ---- Library → Lists ----
     val filenameAsTitle: Boolean = false,
-    val showTrackNumber: Boolean = false,
     // ---- Audio ----
     val replayGain: Int = 0,             // 0 don't apply, 1 apply gain, 2 apply gain and prevent clipping (peak)
     val rgSource: Int = 0,               // 0 album, 1 track
@@ -164,6 +163,54 @@ data class AppSettings(
     val excludedFolders: Set<String> = emptySet(),
     val longTrackMin: Int = 10,
     val hiddenCategories: Set<String> = emptySet(),
+    // ---- Library ----
+    val ignoreVideo: Boolean = true,
+    val countPlayedPct: Int = 50,
+    // Library → Lists
+    val staticNavbar: Boolean = false,
+    val navbarSeekbar: Boolean = true,
+    val headersMeta: Boolean = true,
+    val azScroll: Boolean = true,
+    val headerButtons: Boolean = true,
+    val bottomButtons: Int = 2,              // 0 disabled, 1 semi-transparent, 2 enabled
+    val trackNumberMode: Int = 0,            // 0 disabled, 1 separate number, 2 in the meta, 3 in the title everywhere
+    val clickRestarts: Boolean = true,
+    val listItemAction: Int = 0,             // 0 play and go to player, 1 play and stay, 2 enqueue and stay
+    val deleteAction: Boolean = true,
+    val joinAlbums: Boolean = true,
+    val albumArtistTracks: Boolean = false,
+    val albumArtistAlbums: Boolean = false,
+    val albumArtistAATracks: Boolean = true,
+    val hideUnknownAlbum: Boolean = true,
+    val hideUnknownArtist: Boolean = false,
+    val showUnsplit: Boolean = false,
+    val hierImmediateRoot: Boolean = false,
+    val keepArticles: Boolean = false,       // "Don't Ignore Articles For Sort"
+    // Library → Search
+    val searchTracksOnly: Boolean = true,
+    val searchTitlesOnly: Boolean = false,
+    val searchHidden: Set<String> = emptySet(),
+    // Library → Queue
+    val queueInsertShuffled: Boolean = false,
+    val playNextShuffled: Boolean = false,
+    // Library → Playlists
+    val playlistInsert: Int = 1,             // 0 start, 1 end, 2 shuffled
+    val playlistRemoveDeleted: Boolean = true,
+    val playlistNoDuplicates: Boolean = false,
+    // Library → Shuffle
+    val noReshuffle: Boolean = false,
+    val noReshuffleLarge: Boolean = true,
+    val categoryShuffle: Int = 0,            // 0 songs/categories, 1 categories, 2 songs
+    val shuffleAllHier: Boolean = true,
+    // Library → Scanner
+    val autoScan: Boolean = true,
+    val rescanImmediately: Boolean = false,
+    val splitArtists: String = "",
+    val splitComposers: String = "",
+    val splitGenres: String = "",
+    val unsplitArtists: Set<String> = setOf("AC/DC", "+/-"),
+    val tagEncoding: Int = 0,                // index in TAG_ENCODINGS
+    val m3uUtf8: Boolean = true,
     // ---- Headset / Bluetooth ----
     val pauseOnDisconnect: Boolean = true,
     val resumeOnBluetooth: Boolean = false,
@@ -173,6 +220,15 @@ data class AppSettings(
     val stopOnSwipeAway: Boolean = false,
     val confirmDelete: Boolean = true,
     val keepCrashLog: Boolean = true
+)
+
+/** Settings → Library → Scanner → Tag Encoding (for tags and playlists that are not Unicode). */
+val TAG_ENCODINGS = listOf(
+    "Default" to "ISO-8859-1", "Arabic (Windows-1256)" to "windows-1256", "Arabic (ISO-8859-6)" to "ISO-8859-6",
+    "Chinese Traditional (Big5)" to "Big5", "Chinese Simplified (GBK)" to "GBK", "Cyrillic (Windows-1251)" to "windows-1251",
+    "Eastern European (Windows-1250)" to "windows-1250", "Greek (Windows-1253)" to "windows-1253", "Hebrew (Windows-1255)" to "windows-1255",
+    "Japanese (Shift_JIS)" to "Shift_JIS", "Korean (EUC-KR)" to "EUC-KR", "Turkish (Windows-1254)" to "windows-1254",
+    "Western (Windows-1252)" to "windows-1252"
 )
 
 /** Settings → Audio → Audio Outputs: the outputs that have their own settings. */
@@ -276,7 +332,19 @@ object SettingsStore {
         put("lyricsUrl", s.lyricsCustomUrl); put("scanLrc", s.scanLrc); put("utf8", s.lyricsUtf8)
         put("notifButtons", JSONArray().apply { s.notifButtons.forEach { put(it) } })
         put("notifNav", s.notifNavigateToList); put("keepNotif", s.keepNotification); put("notifDisc", s.removeNotifOnDisconnect)
-        put("fileTitle", s.filenameAsTitle); put("trackNo", s.showTrackNumber)
+        put("ignVideo", s.ignoreVideo); put("countPct", s.countPlayedPct); put("staticNav", s.staticNavbar); put("navSeek", s.navbarSeekbar)
+        put("hdrMeta", s.headersMeta); put("az", s.azScroll); put("hdrBtn", s.headerButtons); put("botBtn", s.bottomButtons); put("trackNoMode", s.trackNumberMode)
+        put("clickRestart", s.clickRestarts); put("itemAction", s.listItemAction); put("delAction", s.deleteAction); put("joinAlb", s.joinAlbums)
+        put("aaTracks", s.albumArtistTracks); put("aaAlbums", s.albumArtistAlbums); put("aaAATracks", s.albumArtistAATracks)
+        put("hideUnkAlb", s.hideUnknownAlbum); put("hideUnkArt", s.hideUnknownArtist); put("unsplit", s.showUnsplit); put("hierRoot", s.hierImmediateRoot)
+        put("keepArt", s.keepArticles); put("srchTracks", s.searchTracksOnly); put("srchTitles", s.searchTitlesOnly)
+        put("srchHidden", JSONArray().apply { s.searchHidden.forEach { put(it) } })
+        put("qShuf", s.queueInsertShuffled); put("pnShuf", s.playNextShuffled); put("plInsert", s.playlistInsert)
+        put("plRemove", s.playlistRemoveDeleted); put("plNoDup", s.playlistNoDuplicates); put("noReshuf", s.noReshuffle); put("noReshufL", s.noReshuffleLarge)
+        put("catShuf", s.categoryShuffle); put("shufHier", s.shuffleAllHier); put("autoScan", s.autoScan); put("rescanNow", s.rescanImmediately)
+        put("splitArt", s.splitArtists); put("splitComp", s.splitComposers); put("splitGen", s.splitGenres)
+        put("unsplitArt", JSONArray().apply { s.unsplitArtists.forEach { put(it) } }); put("tagEnc", s.tagEncoding); put("m3uUtf8", s.m3uUtf8)
+        put("fileTitle", s.filenameAsTitle)
         put("autoFade", s.autoFade); put("xfadeSec", s.crossfadeSec.toDouble()); put("manualFade", s.manualFade)
         put("fadeSeek", s.fadeOnSeek); put("silenceMs", s.silenceMs)
         put("resCall", s.resumeAfterCall); put("resStart", s.resumeOnStart); put("resReopen", s.resumeOnReopen)
@@ -391,7 +459,47 @@ object SettingsStore {
             keepNotification = o.optBoolean("keepNotif", d.keepNotification),
             removeNotifOnDisconnect = o.optBoolean("notifDisc", d.removeNotifOnDisconnect),
             filenameAsTitle = o.optBoolean("fileTitle", d.filenameAsTitle),
-            showTrackNumber = o.optBoolean("trackNo", d.showTrackNumber),
+            ignoreVideo = o.optBoolean("ignVideo", d.ignoreVideo),
+            countPlayedPct = o.optInt("countPct", d.countPlayedPct),
+            staticNavbar = o.optBoolean("staticNav", d.staticNavbar),
+            navbarSeekbar = o.optBoolean("navSeek", d.navbarSeekbar),
+            headersMeta = o.optBoolean("hdrMeta", d.headersMeta),
+            azScroll = o.optBoolean("az", d.azScroll),
+            headerButtons = o.optBoolean("hdrBtn", d.headerButtons),
+            bottomButtons = o.optInt("botBtn", d.bottomButtons),
+            trackNumberMode = if (o.has("trackNoMode")) o.optInt("trackNoMode", 0) else if (o.optBoolean("trackNo", false)) 3 else 0,
+            clickRestarts = o.optBoolean("clickRestart", d.clickRestarts),
+            listItemAction = o.optInt("itemAction", d.listItemAction),
+            deleteAction = o.optBoolean("delAction", d.deleteAction),
+            joinAlbums = o.optBoolean("joinAlb", d.joinAlbums),
+            albumArtistTracks = o.optBoolean("aaTracks", d.albumArtistTracks),
+            albumArtistAlbums = o.optBoolean("aaAlbums", d.albumArtistAlbums),
+            albumArtistAATracks = o.optBoolean("aaAATracks", d.albumArtistAATracks),
+            hideUnknownAlbum = o.optBoolean("hideUnkAlb", d.hideUnknownAlbum),
+            hideUnknownArtist = o.optBoolean("hideUnkArt", d.hideUnknownArtist),
+            showUnsplit = o.optBoolean("unsplit", d.showUnsplit),
+            hierImmediateRoot = o.optBoolean("hierRoot", d.hierImmediateRoot),
+            keepArticles = o.optBoolean("keepArt", d.keepArticles),
+            searchTracksOnly = o.optBoolean("srchTracks", d.searchTracksOnly),
+            searchTitlesOnly = o.optBoolean("srchTitles", d.searchTitlesOnly),
+            searchHidden = strings("srchHidden"),
+            queueInsertShuffled = o.optBoolean("qShuf", d.queueInsertShuffled),
+            playNextShuffled = o.optBoolean("pnShuf", d.playNextShuffled),
+            playlistInsert = o.optInt("plInsert", d.playlistInsert),
+            playlistRemoveDeleted = o.optBoolean("plRemove", d.playlistRemoveDeleted),
+            playlistNoDuplicates = o.optBoolean("plNoDup", d.playlistNoDuplicates),
+            noReshuffle = o.optBoolean("noReshuf", d.noReshuffle),
+            noReshuffleLarge = o.optBoolean("noReshufL", d.noReshuffleLarge),
+            categoryShuffle = o.optInt("catShuf", d.categoryShuffle),
+            shuffleAllHier = o.optBoolean("shufHier", d.shuffleAllHier),
+            autoScan = o.optBoolean("autoScan", d.autoScan),
+            rescanImmediately = o.optBoolean("rescanNow", d.rescanImmediately),
+            splitArtists = o.optString("splitArt", d.splitArtists),
+            splitComposers = o.optString("splitComp", d.splitComposers),
+            splitGenres = o.optString("splitGen", d.splitGenres),
+            unsplitArtists = if (o.has("unsplitArt")) strings("unsplitArt") else d.unsplitArtists,
+            tagEncoding = o.optInt("tagEnc", d.tagEncoding),
+            m3uUtf8 = o.optBoolean("m3uUtf8", d.m3uUtf8),
             autoFade = o.optInt("autoFade", d.autoFade),
             crossfadeSec = o.optDouble("xfadeSec", d.crossfadeSec.toDouble()).toFloat(),
             manualFade = o.optInt("manualFade", d.manualFade),

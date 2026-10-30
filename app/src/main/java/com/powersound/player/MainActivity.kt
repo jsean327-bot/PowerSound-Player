@@ -229,26 +229,29 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     val update by vm.update.collectAsStateWithLifecycle()
 
     // Settings → Look and Feel → Start at Library (off: the app opens on the Player Screen)
-    var showNowPlaying by rememberSaveable { mutableStateOf(!com.powersound.player.data.SettingsStore.value.startAtLibrary) }
-    var showMenu by remember { mutableStateOf(false) }
-    var showQueue by remember { mutableStateOf(false) }
-    var showSleep by remember { mutableStateOf(false) }
-    var songMenu by remember { mutableStateOf<Song?>(null) }
-    var songMenuInfo by remember { mutableStateOf<String?>(null) }
-    var lyricsFor by remember { mutableStateOf<Song?>(null) }
-    var tagsFor by remember { mutableStateOf<Song?>(null) }
-    var artFor by remember { mutableStateOf<Long?>(null) }
-    var showAudioInfo by remember { mutableStateOf(false) }
-    var showRepeatMenu by remember { mutableStateOf(false) }
-    var showShuffleMenu by remember { mutableStateOf(false) }
-    var playlistFor by remember { mutableStateOf<List<Long>?>(null) }
-    var confirmDelete by remember { mutableStateOf<Song?>(null) }
+    val ui = remember { AppUi() }
+    val showNowPlayingState = rememberSaveable { mutableStateOf(!com.powersound.player.data.SettingsStore.value.startAtLibrary) }
+    var showNowPlaying by showNowPlayingState
+    var showMenu by ui::showMenu
+    var showQueue by ui::showQueue
+    var showSleep by ui::showSleep
+    var songMenu by ui::songMenu
+    var songMenuInfo by ui::songMenuInfo
+    var lyricsFor by ui::lyricsFor
+    var tagsFor by ui::tagsFor
+    var artFor by ui::artFor
+    var showAudioInfo by ui::showAudioInfo
+    var showRepeatMenu by ui::showRepeatMenu
+    var showShuffleMenu by ui::showShuffleMenu
+    var playlistFor by ui::playlistFor
+    var confirmDelete by ui::confirmDelete
     var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
-    var settingsOpen by rememberSaveable { mutableStateOf(false) }
-    var settingsPage by remember { mutableStateOf<SettingsPage?>(null) }
-    var showChangelog by remember { mutableStateOf(false) }
-    var showHelp by remember { mutableStateOf(false) }
-    var backupMessage by remember { mutableStateOf<String?>(null) }
+    val settingsOpenState = rememberSaveable { mutableStateOf(false) }
+    var settingsOpen by settingsOpenState
+    var settingsPage by ui::settingsPage
+    var showChangelog by ui::showChangelog
+    var showHelp by ui::showHelp
+    var backupMessage by ui::backupMessage
     val appSettings by com.powersound.player.data.SettingsStore.settings.collectAsStateWithLifecycle()
 
     // Settings → Export / Import: save or restore all settings and data as a file the user picks
@@ -297,6 +300,39 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             backupMessage = if (text != null && com.powersound.player.data.DataBackup.import(context, text)) "RESTART" else "This file is not a PowerSound backup."
         }
     }
+
+    // Settings → Library → Playlists: import .m3u files, export all playlists to a folder
+    val appScope = rememberCoroutineScope()
+    val m3uLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        appScope.launch {
+            var lists = 0
+            var songs = 0
+            uris.forEach { u -> val n = vm.importM3u(u); if (n > 0) { lists++; songs += n } }
+            backupMessage = if (lists > 0) "Imported $lists playlist(s) with $songs song(s)."
+            else "No songs of these playlists were found in your library."
+        }
+    }
+    val exportPlLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree == null) return@rememberLauncherForActivityResult
+        appScope.launch {
+            val n = vm.exportPlaylists(tree)
+            backupMessage = if (n > 0) "Exported $n playlist(s) as .m3u8 files." else "Nothing was exported."
+        }
+    }
+    val libraryActions = com.powersound.player.ui.LibraryActions(
+        counts = "Folders: ${library.folders.size}, Playlists: ${com.powersound.player.data.LibraryStores.playlists.collectAsStateWithLifecycle().value.size}, Songs: ${library.songs.size}",
+        fullRescan = { vm.fullRescan { backupMessage = "Full rescan finished: ${vm.library.value.songs.size} songs." } },
+        resetStats = { com.powersound.player.data.StatsStore.resetPlays() },
+        importSystemPlaylists = {
+            appScope.launch {
+                val n = vm.importSystemPlaylists()
+                backupMessage = if (n > 0) "Imported $n playlist(s) from the phone's music library." else "No new playlists were found in the phone's music library."
+            }
+        },
+        exportPlaylists = { exportPlLauncher.launch(null) },
+        importM3u = { m3uLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "application/x-mpegurl", "*/*")) }
+    )
 
     // Settings → Look and Feel: always keep the screen on in the app
     val hostView = androidx.compose.ui.platform.LocalView.current
@@ -380,7 +416,23 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     val tabHolder = rememberSaveableStateHolder()
     val openSongMenu: (Song) -> Unit = { s -> songMenuInfo = null; songMenu = s }
 
-    Box(Modifier.fillMaxSize()) {
+    // Settings → Library → Lists → Static Navbar (off: the bar slides away while you scroll down a list)
+    var navHidden by remember { mutableStateOf(false) }
+    val staticNav = appSettings.staticNavbar
+    LaunchedEffect(staticNav, tab, showNowPlaying) { if (staticNav) navHidden = false }
+    val navHide by androidx.compose.animation.core.animateFloatAsState(
+        if (navHidden && !staticNav) 1f else 0f, tween(com.powersound.player.ui.animMs(220)), label = "navHide"
+    )
+    val navScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (consumed.y < -6f) navHidden = true else if (consumed.y > 6f || available.y > 0f) navHidden = false
+                return Offset.Zero
+            }
+        }
+    }
+
+    Box(Modifier.fillMaxSize().nestedScroll(navScroll)) {
         // Settings → Background → List Background
         AppBackground(if (appSettings.bgList) currentId else null, forList = true)
         // Settings → Visualization → Visualization in Library
@@ -406,14 +458,15 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 enabled = !showNowPlaying && !settingsOpen,
                 onSongMenu = openSongMenu,
                 onOpenQueue = { showQueue = true },
-                onOpenSettings = { settingsPage = SettingsPage.LIBRARY; settingsOpen = true }
+                onOpenSettings = { settingsPage = SettingsPage.LIBRARY; settingsOpen = true },
+                onOpenPlayer = { showNowPlaying = true }
             )
             Tab.EQ -> EqualizerScreen(bottomInset)
             Tab.SEARCH -> SearchScreen(
                 library = library,
                 currentId = currentId,
                 bottomInset = bottomInset,
-                onPlay = { list, i -> vm.play(list, i) },
+                onPlay = { list, i -> vm.tapSong(list, i, null) { showNowPlaying = true } },
                 onShuffle = vm::shuffleAll,
                 onOpenGroup = { g, back -> vm.openGroup(g, back) },
                 onSongMenu = openSongMenu
@@ -442,6 +495,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .onSizeChanged { barHeightPx = it.height }
+                .graphicsLayer { translationY = navHide * (barHeightPx + 60f) }
         )
 
         if (tab == Tab.LIBRARY && vm.stack.size > 1 && !showNowPlaying && HintStore.shouldShow("library")) {
@@ -550,9 +604,68 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             onCheckUpdate = { vm.checkForUpdate(manual = true) },
             onChangelog = { showChangelog = true },
             onExport = { exportLauncher.launch("PowerSound-backup.json") },
-            onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
+            onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+            lib = libraryActions
         )
     }
+    AppDialogs(ui, vm, player, stats, update, currentId, appSettings, showNowPlayingState, settingsOpenState) { deleteSong(it) }
+}
+
+/** Everything that shows UI state the dialogs/sheets need (kept here so PowerSoundApp stays small). */
+private class AppUi {
+    var showMenu: Boolean by mutableStateOf(false)
+    var showQueue: Boolean by mutableStateOf(false)
+    var showSleep: Boolean by mutableStateOf(false)
+    var songMenu: Song? by mutableStateOf(null)
+    var songMenuInfo: String? by mutableStateOf(null)
+    var lyricsFor: Song? by mutableStateOf(null)
+    var tagsFor: Song? by mutableStateOf(null)
+    var artFor: Long? by mutableStateOf(null)
+    var showAudioInfo: Boolean by mutableStateOf(false)
+    var showRepeatMenu: Boolean by mutableStateOf(false)
+    var showShuffleMenu: Boolean by mutableStateOf(false)
+    var playlistFor: List<Long>? by mutableStateOf(null)
+    var confirmDelete: Song? by mutableStateOf(null)
+    var settingsPage: SettingsPage? by mutableStateOf(null)
+    var showChangelog: Boolean by mutableStateOf(false)
+    var showHelp: Boolean by mutableStateOf(false)
+    var backupMessage: String? by mutableStateOf(null)
+}
+
+/** Sheets and dialogs of the main screen (split out of PowerSoundApp to keep its method small). */
+@Composable
+private fun AppDialogs(
+    ui: AppUi,
+    vm: PlayerViewModel,
+    player: PlayerUiState,
+    stats: Stats,
+    update: UpdateState,
+    currentId: Long?,
+    appSettings: com.powersound.player.data.AppSettings,
+    showNowPlayingState: androidx.compose.runtime.MutableState<Boolean>,
+    settingsOpenState: androidx.compose.runtime.MutableState<Boolean>,
+    deleteSong: (Song) -> Unit
+) {
+    val context = LocalContext.current
+    var showNowPlaying by showNowPlayingState
+    var settingsOpen by settingsOpenState
+    var showMenu by ui::showMenu
+    var showQueue by ui::showQueue
+    var showSleep by ui::showSleep
+    var songMenu by ui::songMenu
+    var songMenuInfo by ui::songMenuInfo
+    var lyricsFor by ui::lyricsFor
+    var tagsFor by ui::tagsFor
+    var artFor by ui::artFor
+    var showAudioInfo by ui::showAudioInfo
+    var showRepeatMenu by ui::showRepeatMenu
+    var showShuffleMenu by ui::showShuffleMenu
+    var playlistFor by ui::playlistFor
+    var confirmDelete by ui::confirmDelete
+    var settingsPage by ui::settingsPage
+    var showChangelog by ui::showChangelog
+    var showHelp by ui::showHelp
+    var backupMessage by ui::backupMessage
     if (showChangelog) ChangelogDialog { showChangelog = false }
     if (showHelp) HelpDialog { showHelp = false }
     backupMessage?.let { msg ->
@@ -714,7 +827,8 @@ private fun LibraryHost(
     enabled: Boolean,
     onSongMenu: (Song) -> Unit,
     onOpenQueue: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenPlayer: () -> Unit
 ) {
     val holder = rememberSaveableStateHolder()
     val scope = rememberCoroutineScope()
@@ -865,7 +979,7 @@ private fun LibraryHost(
                         )
                 ) {
                     holder.SaveableStateProvider(screen.id) {
-                        ScreenContent(screen, vm, library, player, stats, bottomInset, onSongMenu, onOpenQueue, onOpenSettings)
+                        ScreenContent(screen, vm, library, player, stats, bottomInset, onSongMenu, onOpenQueue, onOpenSettings, onOpenPlayer)
                     }
                 }
             }
@@ -883,9 +997,12 @@ private fun ScreenContent(
     bottomInset: Dp,
     onSongMenu: (Song) -> Unit,
     onOpenQueue: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenPlayer: () -> Unit
 ) {
     val currentId = player.nowPlaying?.songId
+    // Settings → Library → Lists → List Item Action
+    val tap: (List<Song>, Int, String?) -> Unit = { list, i, k -> vm.tapSong(list, i, k, onOpenPlayer) }
     val appSettings by com.powersound.player.data.SettingsStore.settings.collectAsStateWithLifecycle()
     val streams by com.powersound.player.data.LibraryStores.streams.collectAsStateWithLifecycle()
     val addQueue: (List<Song>) -> Unit = { vm.addToQueue(it) }
@@ -946,7 +1063,15 @@ private fun ScreenContent(
                     )
                 }
                 Kind.TREE -> {
-                    val (subs, direct) = remember(library.songs) { MusicRepository.treeChildren(library.songs, "") }
+                    // Settings → Library → Lists → Folders Hierarchy Immediate Root: skip folders that only hold one folder
+                    val (subs, direct) = remember(library.songs, appSettings.hierImmediateRoot) {
+                        var r = MusicRepository.treeChildren(library.songs, "")
+                        var guard = 0
+                        while (appSettings.hierImmediateRoot && r.first.size == 1 && r.second.isEmpty() && guard++ < 30) {
+                            r = MusicRepository.treeChildren(library.songs, r.first[0].key.removePrefix("tree:"))
+                        }
+                        r
+                    }
                     TreeScreen(
                         title = cat.label,
                         backLabel = "Library",
@@ -956,7 +1081,7 @@ private fun ScreenContent(
                         bottomInset = bottomInset,
                         onBack = { vm.pop() },
                         onOpenFolder = { g -> vm.push(Screen.Tree(g.key.removePrefix("tree:"), cat.label)) },
-                        onPlay = { list, i -> vm.play(list, i, sourceKey = key) },
+                        onPlay = { list, i -> tap(list, i, key) },
                         onShuffle = { vm.shuffleAll(it, key) },
                         onSongMenu = onSongMenu
                     )
@@ -985,7 +1110,7 @@ private fun ScreenContent(
                         bottomInset = bottomInset,
                         showIndex = cat == Category.ALL_SONGS,
                         emptyText = "Nothing here yet",
-                        onPlay = { list, i -> vm.play(list, i, sourceKey = key) },
+                        onPlay = { list, i -> tap(list, i, key) },
                         onShuffle = { vm.shuffleAll(it, key) },
                         onSongMenu = onSongMenu,
                         onAddToQueue = addQueue,
@@ -1008,7 +1133,7 @@ private fun ScreenContent(
                 bottomInset = bottomInset,
                 showIndex = false,
                 emptyText = if (isPlaylist) "This playlist is empty.\nAdd songs from the ⋮ menu of any song." else "No songs",
-                onPlay = { list, i -> vm.play(list, i, sourceKey = group.key) },
+                onPlay = { list, i -> tap(list, i, group.key) },
                 onShuffle = { vm.shuffleAll(it, group.key) },
                 onSongMenu = { s -> if (playlistId != null) playlistSongMenu = playlistId to s else onSongMenu(s) },
                 onAddToQueue = addQueue,
@@ -1021,7 +1146,10 @@ private fun ScreenContent(
                         vm.pop()
                         Unit
                     }
-                ) else listOf("Add all to a playlist" to { nameDialog = "New playlist" to { n: String -> com.powersound.player.data.LibraryStores.createPlaylist(n, group.songs.map { it.id }); Unit } })
+                ) else listOf("Add all to a playlist" to { nameDialog = "New playlist" to { n: String -> com.powersound.player.data.LibraryStores.createPlaylist(n, group.songs.map { it.id }); Unit } }),
+                listKind = when (group.key.substringBefore(':')) {
+                    "album" -> "album"; "folder" -> "folder"; "albumartist" -> "albumartist"; else -> ""
+                }
             ) { pills ->
                 ArtHeader(group, screen.backLabel, { vm.pop() }) { pills() }
             }
@@ -1042,7 +1170,7 @@ private fun ScreenContent(
                 onOpenFolder = { g ->
                     vm.push(Screen.Tree(g.key.removePrefix("tree:"), screen.path.substringAfterLast('/')))
                 },
-                onPlay = { list, i -> vm.play(list, i, sourceKey = "folder:${screen.path}") },
+                onPlay = { list, i -> tap(list, i, "folder:${screen.path}") },
                 onShuffle = { vm.shuffleAll(it, "folder:${screen.path}") },
                 onSongMenu = onSongMenu
             )

@@ -125,10 +125,10 @@ enum class SettingsPage(
     VISUALIZATION("Visualization", "Faded controls opacity, preset duration, spectrum", Icons.Rounded.GraphicEq, Color(0xFFB07CFF)),
     BACKGROUND("Background", "Blur, details, gradient, intensity, saturation", Icons.Rounded.Wallpaper, Color(0xFF4FB6A0)),
     ALBUM_ART("Album Art", "Download, quality, cache cleanup", Icons.Rounded.Album, Color(0xFF6FBF73)),
-    LIBRARY("Library", "Rescan, music folders, categories", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7)),
+    LIBRARY("Library", "Rescan, folders, lists, search, playlists, shuffle, scanner", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7)),
     HEADSET("Headset/Bluetooth", "Pause/resume on connection", Icons.Rounded.Headphones, Color(0xFFC9C9D6)),
     LOCK_SCREEN("Lock Screen", "Media controls on the lock screen", Icons.Rounded.Lock, Color(0xFFE59A4F)),
-    MISC("Misc", "Remember position, swipe away, error log", Icons.Rounded.MoreHoriz, Color(0xFF4FB6C9)),
+    MISC("Misc", "Swipe away, delete confirmation, error log", Icons.Rounded.MoreHoriz, Color(0xFF4FB6C9)),
     ABOUT("About", "Version, changelog, updates", Icons.Rounded.Info, Color(0xFF9A9AB0)),
 
     // ---- inside Look and Feel ----
@@ -138,7 +138,14 @@ enum class SettingsPage(
     NOTIFICATIONS("Notifications", "Buttons, keeping", Icons.Rounded.Palette, Color(0xFF8E8CF0), LOOK),
     NOTIF_BUTTONS("Buttons", "Media notification buttons", Icons.Rounded.Palette, Color(0xFF8E8CF0), NOTIFICATIONS),
     ICON("Icon", "Launcher icon", Icons.Rounded.Palette, Color(0xFF8E8CF0), LOOK),
-    LIST_UI("List UI", "Filename as title, track numbers", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7), LIBRARY),
+
+    // ---- inside Library ----
+    LIST_UI("Lists", "", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7), LIBRARY),
+    LIB_SEARCH("Search", "", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7), LIBRARY),
+    LIB_QUEUE("Queue", "", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7), LIBRARY),
+    LIB_PLAYLISTS("Playlists", "", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7), LIBRARY),
+    LIB_SHUFFLE("Shuffle", "", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7), LIBRARY),
+    LIB_SCANNER("Scanner", "", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7), LIBRARY),
 
     // ---- inside Audio ----
     CROSSFADE("Crossfade, Fade, and Gapless", "", Icons.Rounded.VolumeUp, Color(0xFFE0708A), AUDIO),
@@ -182,7 +189,7 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.PLAYER_SCREEN to "Restore Player Screen Buttons", SettingsPage.PLAYER_SCREEN to "Rating Type",
     SettingsPage.PLAYER_SCREEN to "Menu Button", SettingsPage.PLAYER_SCREEN to "Menu Button Long Press", SettingsPage.LYRICS to "Lyrics Button",
     SettingsPage.PLAYER_SCREEN to "Line2 Press", SettingsPage.PLAYER_SCREEN to "Line2 Long Press",
-    SettingsPage.PLAYER_SCREEN to "<< Button Resets Current Track", SettingsPage.PLAYER_SCREEN to "-10/+10s Rewind Pro Buttons",
+    SettingsPage.PLAYER_SCREEN to "<< Button Resets Current Track",
     SettingsPage.PLAYER_SCREEN to "Navigate to the Folders",
     SettingsPage.LYRICS to "Lyrics Swipe Up", SettingsPage.LYRICS to "Lyrics Item In The Track Menu", SettingsPage.LYRICS to "Keep Screen On (lyrics)",
     SettingsPage.LYRICS to "Lyrics Time Offset", SettingsPage.LYRICS to "Lyrics Size", SettingsPage.LYRICS to "Preferred Lyrics App",
@@ -190,7 +197,6 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.LYRICS to "Always Use UTF-8",
     SettingsPage.NOTIFICATIONS to "Navigate to the List", SettingsPage.NOTIFICATIONS to "Keep Notification",
     SettingsPage.NOTIFICATIONS to "Remove Notification on Disconnection", SettingsPage.NOTIF_BUTTONS to "Notification buttons",
-    SettingsPage.LIST_UI to "Filename As Title", SettingsPage.LIST_UI to "Show Track Number",
     SettingsPage.AUDIO to "Audio Info",
     SettingsPage.CROSSFADE to "Auto-advance Fading", SettingsPage.CROSSFADE to "Manual Track Change Fading", SettingsPage.CROSSFADE to "Crossfade Length",
     SettingsPage.CROSSFADE to "Fade Play/Pause/Stop", SettingsPage.CROSSFADE to "Fade Length", SettingsPage.CROSSFADE to "Fade on Seek",
@@ -227,12 +233,34 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.ALBUM_ART to "Prefer Downloaded Album Art", SettingsPage.ALBUM_ART to "Reset Negative Status", SettingsPage.ALBUM_ART to "Delete Cache",
     SettingsPage.ALBUM_ART to "Force Default Image", SettingsPage.ALBUM_ART to "Use 24-bit RGB", SettingsPage.ALBUM_ART to "Increase Resolution",
     SettingsPage.ALBUM_ART to "Aspect Ratio",
-    SettingsPage.LIBRARY to "Rescan library", SettingsPage.LIBRARY to "Music folders", SettingsPage.LIBRARY to "Skip short files",
-    SettingsPage.LIBRARY to "Long songs", SettingsPage.LIBRARY to "Library categories",
+    SettingsPage.LIBRARY to "Rescan", SettingsPage.LIBRARY to "Full Rescan", SettingsPage.LIBRARY to "Music Folders",
+    SettingsPage.LIBRARY to "All Files Access", SettingsPage.LIBRARY to "Ignore Short Tracks", SettingsPage.LIBRARY to "Ignore Video Tracks",
+    SettingsPage.LIBRARY to "Store/Restore Per Track Progress", SettingsPage.LIBRARY to "-10/+10s Rewind Pro Buttons",
+    SettingsPage.LIBRARY to "Track Duration For Per Track Progress and -10/+10s Buttons", SettingsPage.LIBRARY to "Count As Played",
+    SettingsPage.LIBRARY to "Reset Stats",
+    SettingsPage.LIST_UI to "Library List Options", SettingsPage.LIST_UI to "Static Navbar", SettingsPage.LIST_UI to "Seekbar in Navbar",
+    SettingsPage.LIST_UI to "Headers With Meta", SettingsPage.LIST_UI to "A-Z Scroll", SettingsPage.LIST_UI to "Header Buttons",
+    SettingsPage.LIST_UI to "Bottom Buttons", SettingsPage.LIST_UI to "Show Track Number", SettingsPage.LIST_UI to "Filename As Title",
+    SettingsPage.LIST_UI to "Click Restarts Track", SettingsPage.LIST_UI to "List Item Action", SettingsPage.LIST_UI to "Delete Action",
+    SettingsPage.LIST_UI to "Join Albums", SettingsPage.LIST_UI to "Album Artist Label for Tracks", SettingsPage.LIST_UI to "Album Artist Label for Albums",
+    SettingsPage.LIST_UI to "Album Artist Label for Album Artist Tracks", SettingsPage.LIST_UI to "Hide Unknown Album",
+    SettingsPage.LIST_UI to "Hide Unknown Artist", SettingsPage.LIST_UI to "Show Unsplit Combined Categories",
+    SettingsPage.LIST_UI to "Folders Hierarchy Immediate Root", SettingsPage.LIST_UI to "Don't Ignore Articles For Sort",
+    SettingsPage.LIB_SEARCH to "Play Tracks Only", SettingsPage.LIB_SEARCH to "Search Track Titles Only", SettingsPage.LIB_SEARCH to "Search Categories",
+    SettingsPage.LIB_QUEUE to "Queue Insert Position", SettingsPage.LIB_QUEUE to "Play Next Insert Position",
+    SettingsPage.LIB_PLAYLISTS to "Import System Library Playlists", SettingsPage.LIB_PLAYLISTS to "Import .m3u / .m3u8 Playlists",
+    SettingsPage.LIB_PLAYLISTS to "Export Playlists", SettingsPage.LIB_PLAYLISTS to "Playlist Insert Position",
+    SettingsPage.LIB_PLAYLISTS to "Remove Playlist Entries On Track Deletion", SettingsPage.LIB_PLAYLISTS to "Don't Add Duplicates",
+    SettingsPage.LIB_SHUFFLE to "No Reshuffle", SettingsPage.LIB_SHUFFLE to "No Reshuffle For Large Lists",
+    SettingsPage.LIB_SHUFFLE to "Category Items Shuffle", SettingsPage.LIB_SHUFFLE to "Shuffle All Songs In Folder Hierarchy",
+    SettingsPage.LIB_SCANNER to "Auto-scan", SettingsPage.LIB_SCANNER to "Rescan Immediately",
+    SettingsPage.LIB_SCANNER to "Symbols to Split Multiple Artists", SettingsPage.LIB_SCANNER to "Symbols to Split Multiple Composers",
+    SettingsPage.LIB_SCANNER to "Symbols to Split Multiple Genres", SettingsPage.LIB_SCANNER to "Unsplit Artists",
+    SettingsPage.LIB_SCANNER to "Tag Encoding", SettingsPage.LIB_SCANNER to "Always Use UTF-8 for .m3u",
     SettingsPage.HEADSET to "Pause when headphones disconnect", SettingsPage.HEADSET to "Resume on Bluetooth connection",
     SettingsPage.HEADSET to "Resume on wired headphones",
     SettingsPage.LOCK_SCREEN to "Lock screen controls",
-    SettingsPage.MISC to "Remember position in long songs", SettingsPage.MISC to "Stop music when the app is swiped away",
+    SettingsPage.MISC to "Stop music when the app is swiped away",
     SettingsPage.MISC to "Ask before deleting files", SettingsPage.MISC to "Keep an error log", SettingsPage.MISC to "View error log",
     SettingsPage.ABOUT to "Check for updates", SettingsPage.ABOUT to "Changelog", SettingsPage.ABOUT to "Version"
 )
@@ -285,7 +313,8 @@ fun SettingsScreen(
     onCheckUpdate: () -> Unit,
     onChangelog: () -> Unit,
     onExport: () -> Unit,
-    onImport: () -> Unit
+    onImport: () -> Unit,
+    lib: LibraryActions
 ) {
     val st by SettingsStore.settings.collectAsState()
     val sc = settingsColors(st)
@@ -303,7 +332,7 @@ fun SettingsScreen(
         }
     }
     CompositionLocalProvider(LocalSc provides sc) {
-        SettingsContent(st, page, allFolders, onPage, onClose, onRescan, onAudioInfo, onImportAutoEq, onCheckUpdate, onChangelog, onExport, onImport)
+        SettingsContent(st, page, allFolders, onPage, onClose, onRescan, onAudioInfo, onImportAutoEq, onCheckUpdate, onChangelog, onExport, onImport, lib)
     }
 }
 
@@ -320,7 +349,8 @@ private fun SettingsContent(
     onCheckUpdate: () -> Unit,
     onChangelog: () -> Unit,
     onExport: () -> Unit,
-    onImport: () -> Unit
+    onImport: () -> Unit,
+    lib: LibraryActions
 ) {
     val sc = LocalSc.current
     val context = LocalContext.current
@@ -328,7 +358,7 @@ private fun SettingsContent(
     var query by remember { mutableStateOf("") }
     fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
     val d = remember { AppSettings() }
-    val args = PageArgs(st, d, allFolders, onPage, onRescan, onAudioInfo, onImportAutoEq, onCheckUpdate, onChangelog, onExport, onImport)
+    val args = PageArgs(st, d, allFolders, onPage, onRescan, onAudioInfo, onImportAutoEq, onCheckUpdate, onChangelog, onExport, onImport, lib)
 
     Column(
         Modifier
@@ -446,6 +476,16 @@ private fun SettingsContent(
                 page == SettingsPage.MISC -> SettingsPage28(page, args)
 
                 page == SettingsPage.ABOUT -> SettingsPage29(page, args)
+
+                page == SettingsPage.LIB_SEARCH -> SettingsPage30(page, args)
+
+                page == SettingsPage.LIB_QUEUE -> SettingsPage31(page, args)
+
+                page == SettingsPage.LIB_PLAYLISTS -> SettingsPage32(page, args)
+
+                page == SettingsPage.LIB_SHUFFLE -> SettingsPage33(page, args)
+
+                page == SettingsPage.LIB_SCANNER -> SettingsPage34(page, args)
             }
         }
     }
@@ -1150,7 +1190,18 @@ private class PageArgs(
     val onCheckUpdate: () -> Unit,
     val onChangelog: () -> Unit,
     val onExport: () -> Unit,
-    val onImport: () -> Unit
+    val onImport: () -> Unit,
+    val lib: LibraryActions
+)
+
+/** What Settings → Library needs from the app (counts, rescans, playlist files). */
+class LibraryActions(
+    val counts: String,
+    val fullRescan: () -> Unit,
+    val resetStats: () -> Unit,
+    val importSystemPlaylists: () -> Unit,
+    val exportPlaylists: () -> Unit,
+    val importM3u: () -> Unit
 )
 
 /** page == SettingsPage.LOOK */
@@ -1183,7 +1234,7 @@ private fun SettingsPage1(page: SettingsPage?, args: PageArgs) {
     PlainRow("Player Screen") { onPage(SettingsPage.PLAYER_SCREEN) }
     PlainRow("Lyrics") { onPage(SettingsPage.LYRICS) }
     PlainRow("Notifications") { onPage(SettingsPage.NOTIFICATIONS) }
-    Hint("List options like Filename As Title and Show Track Number are in Library → List UI")
+    Hint("List options like Filename As Title and Show Track Number are in Library → Lists")
 
     SectionLabel("Misc")
     ChoiceRow("Language", listOf("Auto", "English"), st.language) { v -> set { it.copy(language = v) } }
@@ -1368,11 +1419,7 @@ private fun SettingsPage3(page: SettingsPage?, args: PageArgs) {
         st.prevResets
     ) { v -> set { it.copy(prevResets = v) } }
     Hint("To reset a track to 0:00 on the Player Screen, long press the elapsed time (left of the Play button)")
-    SwitchRow(
-        "-10/+10s Rewind Pro Buttons",
-        "Change the category Pro Buttons to -10/+10 s jump buttons for long tracks (${st.longTrackMin} min or more, see Library → Long songs)",
-        st.proRewindLong
-    ) { v -> set { it.copy(proRewindLong = v) } }
+    Hint("-10/+10s Rewind Pro Buttons for long tracks are in Library → Advanced")
     SwitchRow("Navigate to the Folders", "Track menu → Folder opens the Folders category instead of the Folders Hierarchy", st.navigateToFolders) { v ->
         set { it.copy(navigateToFolders = v) }
     }
@@ -1383,7 +1430,7 @@ private fun SettingsPage3(page: SettingsPage?, args: PageArgs) {
                 playerButtons = d.playerButtons, preferNoGap = d.preferNoGap, noEditLongPress = d.noEditLongPress,
                 ratingType = d.ratingType, menuButton = d.menuButton, menuLongPress = d.menuLongPress,
                 line2Press = d.line2Press, line2LongPress = d.line2LongPress,
-                prevResets = d.prevResets, proRewindLong = d.proRewindLong, navigateToFolders = d.navigateToFolders
+                prevResets = d.prevResets, navigateToFolders = d.navigateToFolders
             )
         }
     }
@@ -1455,21 +1502,13 @@ private fun SettingsPage4(page: SettingsPage?, args: PageArgs) {
     val allFiles = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
     SwitchRow(
         "Scan LRC Files",
-        "If enabled, PowerSound looks for .lrc files in the music folders with the same name as the track" +
-            if (!allFiles) "\nNeeds \"All files access\" — tap to allow" else "",
+        "If enabled, PowerSound looks for .lrc files in the music folders with the same name as the track",
         st.scanLrc
     ) { v ->
         set { it.copy(scanLrc = v) }
         LyricsReader.clearCache()
-        if (v && !allFiles && Build.VERSION.SDK_INT >= 30) {
-            runCatching {
-                context.startActivity(
-                    Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            }
-        }
     }
+    if (!allFiles) Hint("Reading .lrc files needs All Files Access — allow it in Library → All Files Access")
     SwitchRow("Always Use UTF-8", "If disabled, .lrc files that are not UTF-8 are read as Arabic (Windows-1256)", st.lyricsUtf8) { v ->
         set { it.copy(lyricsUtf8 = v) }; LyricsReader.clearCache()
     }
@@ -1631,32 +1670,6 @@ private fun SettingsPage7(page: SettingsPage?, args: PageArgs) {
             }
         }
     }
-    }
-}
-
-/** page == SettingsPage.LIST_UI */
-@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
-@Composable
-private fun SettingsPage8(page: SettingsPage?, args: PageArgs) {
-    val st = args.st
-    val d = args.d
-    val sc = LocalSc.current
-    val context = LocalContext.current
-    val allFolders = args.allFolders
-    val onPage = args.onPage
-    val onRescan = args.onRescan
-    val onAudioInfo = args.onAudioInfo
-    val onImportAutoEq = args.onImportAutoEq
-    val onCheckUpdate = args.onCheckUpdate
-    val onChangelog = args.onChangelog
-    val onExport = args.onExport
-    val onImport = args.onImport
-    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
-    Column(Modifier.fillMaxWidth()) {
-    SwitchRow("Filename As Title", "Show the file name instead of the title tag in the lists", st.filenameAsTitle) { v -> set { it.copy(filenameAsTitle = v) } }
-    SwitchRow("Show Track Number", "Show the track number before the title in the lists", st.showTrackNumber) { v -> set { it.copy(showTrackNumber = v) } }
-    Hint("More list options (sorting, zoom) are in the ⋮ menu of each list")
-    RestoreRow { set { it.copy(filenameAsTitle = d.filenameAsTitle, showTrackNumber = d.showTrackNumber) } }
     }
 }
 
@@ -2375,7 +2388,7 @@ private fun SettingsPage24(page: SettingsPage?, args: PageArgs) {
         "Aspect Ratio", "Keep album art aspect ratio as is. Tall images won't fill some places fully",
         listOf("Default", "Keep Aspect Ratio", "Square"), st.artAspect
     ) { v -> set { it.copy(artAspect = v) } }
-    NoteBlock("Cover.jpg / Folder.jpg next to the songs are read when \"All files access\" is allowed (Look and Feel → Lyrics → Scan LRC Files asks for it)")
+    NoteBlock("Cover.jpg / Folder.jpg next to the songs are read when All Files Access is allowed (Library → All Files Access)")
     RestoreRow {
         set {
             it.copy(
@@ -2394,69 +2407,6 @@ private fun SettingsPage24(page: SettingsPage?, args: PageArgs) {
         "Delete Cache", "Downloaded images and the image cache will be deleted.",
         onOk = { ArtworkLoader.deleteCache(context) }
     ) { confirm = 0 }
-    }
-}
-
-/** page == SettingsPage.LIBRARY */
-@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
-@Composable
-private fun SettingsPage25(page: SettingsPage?, args: PageArgs) {
-    val st = args.st
-    val d = args.d
-    val sc = LocalSc.current
-    val context = LocalContext.current
-    val allFolders = args.allFolders
-    val onPage = args.onPage
-    val onRescan = args.onRescan
-    val onAudioInfo = args.onAudioInfo
-    val onImportAutoEq = args.onImportAutoEq
-    val onCheckUpdate = args.onCheckUpdate
-    val onChangelog = args.onChangelog
-    val onExport = args.onExport
-    val onImport = args.onImport
-    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
-    Column(Modifier.fillMaxWidth()) {
-    var pickFolders by remember { mutableStateOf(false) }
-    var pickCategories by remember { mutableStateOf(false) }
-    ActionRow("Rescan library", "Look for new, changed and deleted songs", onClick = onRescan)
-    ActionRow(
-        "Music folders",
-        if (st.excludedFolders.isEmpty()) "All folders are included" else "${st.excludedFolders.size} folder(s) excluded"
-    ) { pickFolders = true }
-    ChoiceRow(
-        "Skip short files", listOf("Off", "Shorter than 10 s", "Shorter than 30 s", "Shorter than 1 min"),
-        listOf(0, 10, 30, 60).indexOf(st.minDurationSec).coerceAtLeast(0)
-    ) { i -> set { it.copy(minDurationSec = listOf(0, 10, 30, 60)[i]) } }
-    ChoiceRow(
-        "Long songs", listOf("5 min or more", "10 min or more", "15 min or more", "20 min or more", "30 min or more"),
-        listOf(5, 10, 15, 20, 30).indexOf(st.longTrackMin).coerceAtLeast(0)
-    ) { i -> set { it.copy(longTrackMin = listOf(5, 10, 15, 20, 30)[i]) } }
-    ActionRow(
-        "Library categories",
-        if (st.hiddenCategories.isEmpty()) "All categories are shown" else "${st.hiddenCategories.size} hidden"
-    ) { pickCategories = true }
-    PlainRow("List UI", "Filename as title, track numbers") { onPage(SettingsPage.LIST_UI) }
-
-    if (pickFolders) {
-        CheckListDialog(
-            title = "Music folders",
-            items = allFolders,
-            checked = allFolders.filter { it !in st.excludedFolders }.toSet(),
-            onDone = { kept -> set { it.copy(excludedFolders = allFolders.filter { f -> f !in kept }.toSet()) } },
-            onDismiss = { pickFolders = false }
-        )
-    }
-    if (pickCategories) {
-        val names = Category.values().map { it.name }
-        CheckListDialog(
-            title = "Show on the Library page",
-            items = names,
-            labels = Category.values().map { it.label },
-            checked = names.filter { it !in st.hiddenCategories }.toSet(),
-            onDone = { shown -> set { it.copy(hiddenCategories = names.filter { n -> n !in shown }.toSet()) } },
-            onDismiss = { pickCategories = false }
-        )
-    }
     }
 }
 
@@ -2533,7 +2483,6 @@ private fun SettingsPage28(page: SettingsPage?, args: PageArgs) {
     fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
     Column(Modifier.fillMaxWidth()) {
     var showLog by remember { mutableStateOf(false) }
-    SwitchRow("Remember position in long songs", "Songs of 10 minutes or more continue where you stopped", st.rememberPosition) { v -> set { it.copy(rememberPosition = v) } }
     SwitchRow("Stop music when the app is swiped away", "From the recent apps screen", st.stopOnSwipeAway) { v -> set { it.copy(stopOnSwipeAway = v) } }
     SwitchRow("Ask before deleting files", "Show a confirmation first", st.confirmDelete) { v -> set { it.copy(confirmDelete = v) } }
     SwitchRow("Keep an error log", "Saves crash details on the phone", st.keepCrashLog) { v -> set { it.copy(keepCrashLog = v) } }
@@ -2571,5 +2520,344 @@ private fun SettingsPage29(page: SettingsPage?, args: PageArgs) {
     Hint("PowerSound Player $version")
     ActionRow("Check for updates", "Look for a newer version on GitHub", onClick = onCheckUpdate)
     ActionRow("Changelog", "What changed in each version", onClick = onChangelog)
+    }
+}
+
+/** page == SettingsPage.LIBRARY */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage25(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val lib = args.lib
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var pickFolders by remember { mutableStateOf(false) }
+    var confirm by remember { mutableIntStateOf(0) }
+    ActionRow("Rescan", lib.counts, onClick = args.onRescan)
+    ActionRow("Full Rescan", "Read every file's tags again, clear the album art and lyrics caches and reload the library") { confirm = 1 }
+    ActionRow(
+        "Music Folders",
+        if (st.excludedFolders.isEmpty()) "Folders Selection — all ${allFolders.size} folders are included"
+        else "Folders Selection — ${st.excludedFolders.size} of ${allFolders.size} folders excluded"
+    ) { pickFolders = true }
+    val allFiles = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
+    ActionRow(
+        "All Files Access",
+        if (allFiles) "Allowed. PowerSound can read .lrc lyrics files and cover.jpg / folder.jpg next to your songs"
+        else "Not allowed — tap to allow. Needed for .lrc lyrics files, cover.jpg / folder.jpg and a deeper Full Rescan",
+        enabled = !allFiles
+    ) {
+        if (Build.VERSION.SDK_INT >= 30) runCatching {
+            context.startActivity(
+                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+    val shortSecs = listOf(0, 2, 6, 10, 15, 30, 45)
+    ChoiceRow(
+        "Ignore Short Tracks",
+        listOf("Don't ignore", "Shorter than 2 s", "Shorter than 6 s", "Shorter than 10 s", "Shorter than 15 s", "Shorter than 30 s", "Shorter than 45 s"),
+        shortSecs.indexOf(st.minDurationSec).coerceAtLeast(0)
+    ) { i -> set { it.copy(minDurationSec = shortSecs[i]) } }
+    SwitchRow("Ignore Video Tracks", "Don't add the sound of video files (mp4, 3gp …) to the library", st.ignoreVideo) { v -> set { it.copy(ignoreVideo = v) } }
+
+    SectionLabel("Categories")
+    PlainRow("Lists", "Library categories, navbar, headers, track labels, albums, sorting") { onPage(SettingsPage.LIST_UI) }
+    PlainRow("Search", "What search looks in and what Play plays") { onPage(SettingsPage.LIB_SEARCH) }
+    PlainRow("Queue", "Where added songs go") { onPage(SettingsPage.LIB_QUEUE) }
+    PlainRow("Playlists", "Import, export, insert position, duplicates") { onPage(SettingsPage.LIB_PLAYLISTS) }
+    PlainRow("Shuffle", "Reshuffle, category shuffle, folders hierarchy") { onPage(SettingsPage.LIB_SHUFFLE) }
+    PlainRow("Scanner", "Auto-scan, split symbols, tag encoding") { onPage(SettingsPage.LIB_SCANNER) }
+
+    SectionLabel("Advanced")
+    SwitchRow(
+        "Store/Restore Per Track Progress",
+        "Long tracks (${st.longTrackMin} min or more) continue where you stopped them",
+        st.rememberPosition
+    ) { v -> set { it.copy(rememberPosition = v) } }
+    SwitchRow(
+        "-10/+10s Rewind Pro Buttons",
+        "In long tracks (${st.longTrackMin} min or more) the category Pro Buttons become -10/+10 s jump buttons",
+        st.proRewindLong
+    ) { v -> set { it.copy(proRewindLong = v) } }
+    StepSliderRow(
+        "Track Duration For Per Track Progress and -10/+10s Buttons",
+        "${st.longTrackMin} min — also used by the Long Tracks category",
+        st.longTrackMin, 1, 60, "1 min", "60 min"
+    ) { v -> set { it.copy(longTrackMin = v) } }
+    SliderRow(
+        "Count As Played",
+        if (st.countPlayedPct == 0) "At start" else "${st.countPlayedPct}%",
+        st.countPlayedPct.toFloat(), 0f..100f,
+        subtitle = "How much of a track must be heard before it counts in Most Played / Recently Played"
+    ) { v -> set { it.copy(countPlayedPct = ((v / 5f).roundToInt() * 5).coerceIn(0, 100)) } }
+    PlainRow("Reset Stats", "Clear play counts and recently played. Ratings and likes stay") { confirm = 2 }
+    RestoreRow {
+        set {
+            it.copy(
+                excludedFolders = d.excludedFolders, minDurationSec = d.minDurationSec, ignoreVideo = d.ignoreVideo,
+                rememberPosition = d.rememberPosition, proRewindLong = d.proRewindLong, longTrackMin = d.longTrackMin,
+                countPlayedPct = d.countPlayedPct
+            )
+        }
+    }
+
+    if (pickFolders) {
+        CheckListDialog(
+            title = "Folders Selection",
+            items = allFolders,
+            checked = allFolders.filter { it !in st.excludedFolders }.toSet(),
+            onDone = { kept -> set { it.copy(excludedFolders = allFolders.filter { f -> f !in kept }.toSet()) } },
+            onDismiss = { pickFolders = false }
+        )
+    }
+    if (confirm == 1) ConfirmDialog(
+        "Full Rescan", "PowerSound will ask Android to read all your music files again, clear its caches and reload the library. It can take a while.",
+        onOk = lib.fullRescan
+    ) { confirm = 0 }
+    if (confirm == 2) ConfirmDialog(
+        "Reset Stats", "Play counts and recently played will be cleared. Ratings and likes are kept.",
+        onOk = lib.resetStats
+    ) { confirm = 0 }
+    }
+}
+
+/** page == SettingsPage.LIST_UI ("Lists") */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage8(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var pickCategories by remember { mutableStateOf(false) }
+    ActionRow(
+        "Library List Options",
+        if (st.hiddenCategories.isEmpty()) "All categories are shown on the Library page" else "${st.hiddenCategories.size} categories hidden"
+    ) { pickCategories = true }
+
+    SectionLabel("Layout")
+    SwitchRow("Static Navbar", "Keep the bottom bar in place. If disabled, it slides away while you scroll down a list", st.staticNavbar) { v -> set { it.copy(staticNavbar = v) } }
+    SwitchRow("Seekbar in Navbar", "Show the thin progress line under the playing track in the bottom bar", st.navbarSeekbar) { v -> set { it.copy(navbarSeekbar = v) } }
+    SwitchRow("Headers With Meta", "Show the songs count and total time in album / folder headers", st.headersMeta) { v -> set { it.copy(headersMeta = v) } }
+    SwitchRow("A-Z Scroll", "Letter bar on the right side of long lists", st.azScroll) { v -> set { it.copy(azScroll = v) } }
+    SwitchRow("Header Buttons", "Shuffle / Play / Search / ⋮ buttons in the list header", st.headerButtons) { v -> set { it.copy(headerButtons = v) } }
+    ChipRow(
+        "Bottom Buttons", "The same buttons floating at the bottom while you scroll (always shown when Header Buttons are off)",
+        listOf("Disabled", "Semi-transparent", "Enabled"), st.bottomButtons
+    ) { v -> set { it.copy(bottomButtons = v) } }
+
+    SectionLabel("Track Labels")
+    ChoiceRow(
+        "Show Track Number",
+        listOf("Disabled", "Separate number in album / folder lists", "In the meta line", "In the title, everywhere"),
+        st.trackNumberMode
+    ) { v -> set { it.copy(trackNumberMode = v) } }
+    SwitchRow("Filename As Title", "Show the file name instead of the title tag", st.filenameAsTitle) { v -> set { it.copy(filenameAsTitle = v) } }
+
+    SectionLabel("Behavior")
+    SwitchRow("Click Restarts Track", "Tapping the song that is playing starts it again. If disabled, it just keeps playing", st.clickRestarts) { v -> set { it.copy(clickRestarts = v) } }
+    ChoiceRow(
+        "List Item Action",
+        listOf("Play and go to the player", "Play and stay in the list", "Add to queue and stay in the list"),
+        st.listItemAction
+    ) { v -> set { it.copy(listItemAction = v) } }
+    SwitchRow("Delete Action", "Show Delete in the track menu", st.deleteAction) { v -> set { it.copy(deleteAction = v) } }
+
+    SectionLabel("Albums")
+    SwitchRow("Join Albums", "Tracks with the same album name and album artist are shown as one album, even from different folders", st.joinAlbums) { v -> set { it.copy(joinAlbums = v) } }
+    SwitchRow("Album Artist Label for Tracks", "Show the album artist instead of the track artist under track titles", st.albumArtistTracks) { v -> set { it.copy(albumArtistTracks = v) } }
+    SwitchRow("Album Artist Label for Albums", "Show (and sort by) the album artist under album names", st.albumArtistAlbums) { v -> set { it.copy(albumArtistAlbums = v) } }
+    SwitchRow("Album Artist Label for Album Artist Tracks", "Inside Album Artists, show the album artist under track titles", st.albumArtistAATracks) { v -> set { it.copy(albumArtistAATracks = v) } }
+    SwitchRow("Hide Unknown Album", "Don't show \"Unknown album\" in track labels", st.hideUnknownAlbum) { v -> set { it.copy(hideUnknownAlbum = v) } }
+    SwitchRow("Hide Unknown Artist", "Don't show \"Unknown artist\" in track labels", st.hideUnknownArtist) { v -> set { it.copy(hideUnknownArtist = v) } }
+
+    SectionLabel("Advanced")
+    SwitchRow("Show Unsplit Combined Categories", "Besides each split artist / composer / genre, also show the full combined name (see Scanner)", st.showUnsplit) { v -> set { it.copy(showUnsplit = v) } }
+    SwitchRow("Folders Hierarchy Immediate Root", "Skip the top folders that only contain one folder and open where the music starts", st.hierImmediateRoot) { v -> set { it.copy(hierImmediateRoot = v) } }
+    SwitchRow("Don't Ignore Articles For Sort", "If disabled, \"The\", \"A\" and \"An\" at the start are skipped when sorting (The Beatles → B)", st.keepArticles) { v -> set { it.copy(keepArticles = v) } }
+    Hint("Sorting and zoom of each list are in its ⋮ menu")
+    RestoreRow {
+        set {
+            it.copy(
+                hiddenCategories = d.hiddenCategories, staticNavbar = d.staticNavbar, navbarSeekbar = d.navbarSeekbar,
+                headersMeta = d.headersMeta, azScroll = d.azScroll, headerButtons = d.headerButtons, bottomButtons = d.bottomButtons,
+                trackNumberMode = d.trackNumberMode, filenameAsTitle = d.filenameAsTitle, clickRestarts = d.clickRestarts,
+                listItemAction = d.listItemAction, deleteAction = d.deleteAction, joinAlbums = d.joinAlbums,
+                albumArtistTracks = d.albumArtistTracks, albumArtistAlbums = d.albumArtistAlbums, albumArtistAATracks = d.albumArtistAATracks,
+                hideUnknownAlbum = d.hideUnknownAlbum, hideUnknownArtist = d.hideUnknownArtist, showUnsplit = d.showUnsplit,
+                hierImmediateRoot = d.hierImmediateRoot, keepArticles = d.keepArticles
+            )
+        }
+    }
+    if (pickCategories) {
+        val names = Category.values().map { it.name }
+        CheckListDialog(
+            title = "Show on the Library page",
+            items = names,
+            labels = Category.values().map { it.label },
+            checked = names.filter { it !in st.hiddenCategories }.toSet(),
+            onDone = { shown -> set { it.copy(hiddenCategories = names.filter { n -> n !in shown }.toSet()) } },
+            onDismiss = { pickCategories = false }
+        )
+    }
+    }
+}
+
+/** page == SettingsPage.LIB_SEARCH */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage30(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var pick by remember { mutableStateOf(false) }
+    SwitchRow(
+        "Play Tracks Only", "Play / Shuffle in Search play only the found tracks. If disabled, also the songs of the found albums, artists …",
+        st.searchTracksOnly
+    ) { v -> set { it.copy(searchTracksOnly = v) } }
+    SwitchRow("Search Track Titles Only", "Find tracks by their title only, not by artist or album", st.searchTitlesOnly) { v -> set { it.copy(searchTitlesOnly = v) } }
+    ActionRow(
+        "Search Categories",
+        if (st.searchHidden.isEmpty()) "Search looks in all categories" else "${SEARCH_CATEGORIES.size - st.searchHidden.size} of ${SEARCH_CATEGORIES.size} categories"
+    ) { pick = true }
+    RestoreRow { set { it.copy(searchTracksOnly = d.searchTracksOnly, searchTitlesOnly = d.searchTitlesOnly, searchHidden = d.searchHidden) } }
+    if (pick) CheckListDialog(
+        title = "Search Categories",
+        items = SEARCH_CATEGORIES,
+        checked = SEARCH_CATEGORIES.filter { it !in st.searchHidden }.toSet(),
+        onDone = { shown -> set { it.copy(searchHidden = SEARCH_CATEGORIES.filter { c -> c !in shown }.toSet()) } },
+        onDismiss = { pick = false }
+    )
+    }
+}
+
+/** page == SettingsPage.LIB_QUEUE */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage31(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    ChipRow("Queue Insert Position", "\"Add to queue\" puts the songs at the end in their order, or mixed", listOf("Normal", "Shuffled"), if (st.queueInsertShuffled) 1 else 0) { v ->
+        set { it.copy(queueInsertShuffled = v == 1) }
+    }
+    ChipRow("Play Next Insert Position", "\"Play next\" puts the songs after the current one in their order, or mixed", listOf("Normal", "Shuffled"), if (st.playNextShuffled) 1 else 0) { v ->
+        set { it.copy(playNextShuffled = v == 1) }
+    }
+    Hint("In PowerSound the queue is the list that is playing, so songs you add join it directly. Open it from Library → Queue or the ⋮ menu.")
+    RestoreRow { set { it.copy(queueInsertShuffled = d.queueInsertShuffled, playNextShuffled = d.playNextShuffled) } }
+    }
+}
+
+/** page == SettingsPage.LIB_PLAYLISTS */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage32(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val lib = args.lib
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    ActionRow("Import System Library Playlists", "Copy the playlists saved in the phone's music library (new ones only)", onClick = lib.importSystemPlaylists)
+    ActionRow("Import .m3u / .m3u8 Playlists", "Pick one or more playlist files; their songs are matched to your library", onClick = lib.importM3u)
+    ActionRow("Export Playlists", "Save every playlist as an .m3u8 file in a folder you choose", onClick = lib.exportPlaylists)
+    ChipRow("Playlist Insert Position", "Where songs added to a playlist go", listOf("Start", "End", "Shuffled"), st.playlistInsert) { v ->
+        set { it.copy(playlistInsert = v) }
+    }
+    SwitchRow("Remove Playlist Entries On Track Deletion", "A deleted file also leaves every playlist", st.playlistRemoveDeleted) { v -> set { it.copy(playlistRemoveDeleted = v) } }
+    SwitchRow("Don't Add Duplicates", "Songs already in a playlist are not added again", st.playlistNoDuplicates) { v -> set { it.copy(playlistNoDuplicates = v) } }
+    Hint("The text encoding of .m3u files is set in Library → Scanner")
+    RestoreRow {
+        set { it.copy(playlistInsert = d.playlistInsert, playlistRemoveDeleted = d.playlistRemoveDeleted, playlistNoDuplicates = d.playlistNoDuplicates) }
+    }
+    }
+}
+
+/** page == SettingsPage.LIB_SHUFFLE */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage33(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    SwitchRow("No Reshuffle", "Shuffle on the list that is already playing shuffled keeps its order instead of mixing again", st.noReshuffle) { v -> set { it.copy(noReshuffle = v) } }
+    SwitchRow("No Reshuffle For Large Lists", "The same, only for lists of 500 songs or more", st.noReshuffleLarge) { v -> set { it.copy(noReshuffleLarge = v) } }
+    ChoiceRow(
+        "Category Items Shuffle",
+        listOf("Shuffle songs (all mixed)", "Shuffle categories (songs keep their order)", "Shuffle songs inside each category"),
+        st.categoryShuffle,
+        subtitlePrefix = "Shuffle button on Albums, Artists, Folders …: "
+    ) { v -> set { it.copy(categoryShuffle = v) } }
+    SwitchRow("Shuffle All Songs In Folder Hierarchy", "Shuffle in Folders Hierarchy also takes the songs of the subfolders", st.shuffleAllHier) { v -> set { it.copy(shuffleAllHier = v) } }
+    Hint("The shuffle modes themselves (songs, categories …) are chosen with the shuffle button on the Player Screen")
+    RestoreRow {
+        set { it.copy(noReshuffle = d.noReshuffle, noReshuffleLarge = d.noReshuffleLarge, categoryShuffle = d.categoryShuffle, shuffleAllHier = d.shuffleAllHier) }
+    }
+    }
+}
+
+/** page == SettingsPage.LIB_SCANNER */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage34(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var edit by remember { mutableIntStateOf(0) }
+    var removeName by remember { mutableStateOf<String?>(null) }
+    SwitchRow("Auto-scan", "Pick up new, changed and deleted music files by themselves", st.autoScan) { v -> set { it.copy(autoScan = v) } }
+    SwitchRow("Rescan Immediately", "Rescan right after a change (otherwise PowerSound waits a little for copying to finish)", st.rescanImmediately) { v ->
+        set { it.copy(rescanImmediately = v) }
+    }
+
+    SectionLabel("Tags")
+    fun symbols(s: String) = if (s.isBlank()) "Disabled — tap to set, e.g.  ; / &" else "Split by:  $s"
+    ActionRow("Symbols to Split Multiple Artists", symbols(st.splitArtists)) { edit = 1 }
+    ActionRow("Symbols to Split Multiple Composers", symbols(st.splitComposers)) { edit = 2 }
+    ActionRow("Symbols to Split Multiple Genres", symbols(st.splitGenres)) { edit = 3 }
+    SectionLabel("Unsplit Artists")
+    Hint("These names are never split, even if they contain a split symbol. Tap a name to remove it")
+    st.unsplitArtists.sortedBy { it.lowercase() }.forEach { n -> PlainRow(n) { removeName = n } }
+    PlainRow("Add", "Add an artist name that must stay whole") { edit = 4 }
+
+    SectionLabel("Encoding")
+    ChoiceRow(
+        "Tag Encoding",
+        com.powersound.player.data.TAG_ENCODINGS.map { it.first },
+        st.tagEncoding.coerceIn(0, com.powersound.player.data.TAG_ENCODINGS.lastIndex),
+        subtitlePrefix = "For old tags that are not Unicode: "
+    ) { v -> set { it.copy(tagEncoding = v) } }
+    SwitchRow("Always Use UTF-8 for .m3u", "If disabled, .m3u files are read with the Tag Encoding above (.m3u8 is always UTF-8)", st.m3uUtf8) { v -> set { it.copy(m3uUtf8 = v) } }
+    RestoreRow {
+        set {
+            it.copy(
+                autoScan = d.autoScan, rescanImmediately = d.rescanImmediately, splitArtists = d.splitArtists,
+                splitComposers = d.splitComposers, splitGenres = d.splitGenres, unsplitArtists = d.unsplitArtists,
+                tagEncoding = d.tagEncoding, m3uUtf8 = d.m3uUtf8
+            )
+        }
+    }
+    val hint = "Symbols separated by spaces, for example:  ;  /  &  feat."
+    when (edit) {
+        1 -> TextInputDialog("Split Multiple Artists", st.splitArtists, hint, { v -> set { it.copy(splitArtists = v.trim()) } }) { edit = 0 }
+        2 -> TextInputDialog("Split Multiple Composers", st.splitComposers, hint, { v -> set { it.copy(splitComposers = v.trim()) } }) { edit = 0 }
+        3 -> TextInputDialog("Split Multiple Genres", st.splitGenres, hint, { v -> set { it.copy(splitGenres = v.trim()) } }) { edit = 0 }
+        4 -> TextInputDialog("Add Unsplit Artist", "", "Artist name, e.g. AC/DC", { v ->
+            if (v.isNotBlank()) set { it.copy(unsplitArtists = it.unsplitArtists + v.trim()) }
+        }) { edit = 0 }
+    }
+    removeName?.let { n ->
+        ConfirmDialog("Remove \"$n\"?", "This name can then be split like any other.", onOk = { set { it.copy(unsplitArtists = it.unsplitArtists - n) } }) { removeName = null }
+    }
     }
 }

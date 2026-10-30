@@ -149,7 +149,8 @@ fun FloatingBottomBar(
                     )
                 }
             }
-            ProgressLine(position)
+            // Settings → Library → Lists → Seekbar in Navbar
+            if (st.navbarSeekbar) ProgressLine(position)
         }
         NavRow(tab, menuOpen, onTab, onMenu)
     }

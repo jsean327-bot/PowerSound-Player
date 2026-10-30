@@ -186,6 +186,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val listener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            lastRecordedId = null // a new play of a song counts again (Count As Played)
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) return
             val c = controller ?: return
             // "current song and stop", or the sleep timer waiting for the song to finish
@@ -249,6 +250,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         )
         connect()
         checkForUpdate(manual = false)
+        registerAutoScan()
         // Tempo from the Effects page is applied to the player (pitch is kept).
         viewModelScope.launch {
             AudioEngine.fx.collect { applyTempo() }
@@ -260,7 +262,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 val prev = last
                 last = st
                 if (prev == null) return@collect
-                if (prev.minDurationSec != st.minDurationSec || prev.excludedFolders != st.excludedFolders) {
+                if (prev.minDurationSec != st.minDurationSec || prev.excludedFolders != st.excludedFolders ||
+                    prev.ignoreVideo != st.ignoreVideo || prev.joinAlbums != st.joinAlbums || prev.albumArtistAlbums != st.albumArtistAlbums ||
+                    prev.splitArtists != st.splitArtists || prev.splitComposers != st.splitComposers || prev.splitGenres != st.splitGenres ||
+                    prev.unsplitArtists != st.unsplitArtists || prev.showUnsplit != st.showUnsplit || prev.keepArticles != st.keepArticles
+                ) {
                     if (_library.value.loaded) loadLibrary(force = true)
                 }
                 if (prev.replayGain != st.replayGain || prev.rgSource != st.rgSource || prev.replayGainPreamp != st.replayGainPreamp ||
@@ -280,6 +286,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     _position.value = PlaybackPos(c.currentPosition, durationOf(c))
                     tick++
                     if (tick % 20 == 0) rememberPosition(c) // every ~5 s
+                    countPlay(c)
                 }
                 delay(250)
             }
@@ -318,6 +325,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             val st = com.powersound.player.data.SettingsStore.value
             val songs = raw.filter { s ->
                 s.durationMs >= st.minDurationSec * 1000L &&
+                    !(st.ignoreVideo && s.mimeType.startsWith("video/")) &&
                     st.excludedFolders.none { ex -> s.folder == ex || s.folder.startsWith("$ex/") }
             }
             songById = songs.associateBy { it.id }
@@ -429,11 +437,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun goToAlbum(song: Song) {
-        _library.value.albums.firstOrNull { it.key == "album:${song.albumId}" }?.let { openGroup(it, "Albums") }
+        _library.value.albums.firstOrNull { g -> g.songs.any { it.id == song.id } }?.let { openGroup(it, "Albums") }
     }
 
     fun goToArtist(song: Song) {
-        _library.value.artists.firstOrNull { it.key == "artist:${song.artist}" }?.let { openGroup(it, "Artists") }
+        val lib = _library.value
+        (lib.artists.firstOrNull { it.key == "artist:${song.artist}" } ?: lib.artists.firstOrNull { g -> g.songs.any { it.id == song.id } })
+            ?.let { openGroup(it, "Artists") }
     }
 
     fun goToFolder(song: Song) {
@@ -460,12 +470,33 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val c = controller ?: return
         if (songs.isEmpty()) return
         val index = startIndex.coerceIn(0, songs.lastIndex)
+        // Settings → Library → Lists → Click Restarts Track (off: tapping the playing song only keeps it playing)
+        val st = com.powersound.player.data.SettingsStore.value
+        if (!st.clickRestarts && !shuffle && startPositionMs == 0L && c.mediaItemCount > 0 &&
+            c.currentMediaItem?.mediaId == songs[index].id.toString() && sourceKey == _player.value.sourceKey
+        ) {
+            if (!c.isPlaying) c.play()
+            return
+        }
         if (shuffle && !_player.value.shuffleMode.songs) setShuffleMode(ShuffleMode.SONGS)
         c.shuffleModeEnabled = _player.value.shuffleMode.songs
         c.setMediaItems(songs.map { it.toMediaItem() }, index, startPositionMs)
         c.prepare()
         c.play()
         _player.value = _player.value.copy(sourceKey = sourceKey)
+    }
+
+    /** A song tapped in a list (Settings → Library → Lists → List Item Action). */
+    fun tapSong(songs: List<Song>, index: Int, sourceKey: String?, openPlayer: () -> Unit) {
+        val st = com.powersound.player.data.SettingsStore.value
+        val song = songs.getOrNull(index) ?: return
+        when (st.listItemAction) {
+            2 -> addToQueue(listOf(song))
+            else -> {
+                play(songs, index, sourceKey = sourceKey)
+                if (st.listItemAction == 0) openPlayer()
+            }
+        }
     }
 
     // ---- categories ("Play all categories", long-press prev/next) ----
@@ -542,7 +573,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             return Screen.Detail(list[i], label)
         }
         val song = song(_player.value.nowPlaying?.songId) ?: return null
-        val album = _library.value.albums.firstOrNull { it.key == "album:${song.albumId}" } ?: return null
+        val album = _library.value.albums.firstOrNull { g -> g.songs.any { it.id == song.id } } ?: return null
         return Screen.Detail(album, "Albums")
     }
 
@@ -570,7 +601,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun goToGenre(song: Song) {
-        _library.value.genres.firstOrNull { it.key == "genre:${song.genre.ifBlank { "Unknown genre" }}" }?.let { openGroup(it, "Genres") }
+        val lib = _library.value
+        (lib.genres.firstOrNull { it.key == "genre:${song.genre.ifBlank { "Unknown genre" }}" } ?: lib.genres.firstOrNull { g -> g.songs.any { it.id == song.id } })
+            ?.let { openGroup(it, "Genres") }
     }
 
     /** After a song file was deleted: drop it from the queue and rescan. */
@@ -581,11 +614,22 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 if (c.getMediaItemAt(i).mediaId == songId.toString()) c.removeMediaItem(i)
             }
         }
+        // Settings → Library → Playlists → Remove Playlist Entries On Track Deletion
+        if (com.powersound.player.data.SettingsStore.value.playlistRemoveDeleted) LibraryStores.removeSongEverywhere(songId)
         loadLibrary(force = true)
     }
 
     fun shuffleAll(songs: List<Song>, sourceKey: String? = null) {
         if (songs.isEmpty()) return
+        // Settings → Library → Shuffle → No Reshuffle (For Large Lists): the same list keeps its shuffle order
+        val st = com.powersound.player.data.SettingsStore.value
+        val c = controller
+        if (c != null && sourceKey != null && sourceKey == _player.value.sourceKey && c.shuffleModeEnabled &&
+            c.mediaItemCount == songs.size && (st.noReshuffle || (st.noReshuffleLarge && songs.size >= LARGE_LIST))
+        ) {
+            if (!c.isPlaying) c.play()
+            return
+        }
         play(songs, songs.indices.random(), shuffle = true, sourceKey = sourceKey)
     }
 
@@ -595,7 +639,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (c.mediaItemCount == 0) {
             play(songs, 0); return
         }
-        c.addMediaItems(c.currentMediaItemIndex + 1, songs.map { it.toMediaItem() })
+        // Settings → Library → Queue → Play Next Insert Position: Shuffled mixes the inserted songs
+        val list = if (com.powersound.player.data.SettingsStore.value.playNextShuffled) songs.shuffled() else songs
+        c.addMediaItems(c.currentMediaItemIndex + 1, list.map { it.toMediaItem() })
     }
 
     fun addToQueue(songs: List<Song>) {
@@ -604,7 +650,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (c.mediaItemCount == 0) {
             play(songs, 0); return
         }
-        c.addMediaItems(songs.map { it.toMediaItem() })
+        val list = if (com.powersound.player.data.SettingsStore.value.queueInsertShuffled) songs.shuffled() else songs
+        c.addMediaItems(list.map { it.toMediaItem() })
     }
 
     fun playQueueIndex(index: Int) {
@@ -686,7 +733,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         // Settings → Misc: long songs continue where you left them
         val c = controller ?: return
         val song = song(songId) ?: return
-        if (st.rememberPosition && song.durationMs >= REMEMBER_MIN_MS && c.currentPosition < 3000) {
+        if (st.rememberPosition && song.durationMs >= st.longTrackMin * 60_000L && c.currentPosition < 3000) {
             val saved = com.powersound.player.data.SettingsStore.savedPosition(song.id)
             if (saved in 5_000 until (song.durationMs - 15_000)) c.seekTo(saved)
         }
@@ -696,7 +743,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (!com.powersound.player.data.SettingsStore.value.rememberPosition) return
         val id = c.currentMediaItem?.mediaId?.toLongOrNull() ?: return
         val song = song(id) ?: return
-        if (song.durationMs < REMEMBER_MIN_MS) return
+        if (song.durationMs < com.powersound.player.data.SettingsStore.value.longTrackMin * 60_000L) return
         val pos = c.currentPosition
         com.powersound.player.data.SettingsStore.savePosition(id, if (pos > song.durationMs - 15_000) 0L else pos)
     }
@@ -895,6 +942,124 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (_update.value !is UpdateState.Downloading) _update.value = UpdateState.Idle
     }
 
+    // ---- Settings → Library: scanner, full rescan, stats, playlists ----
+
+    private var scanJob: Job? = null
+    private val mediaObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            val st = com.powersound.player.data.SettingsStore.value
+            if (!st.autoScan || !_library.value.loaded) return
+            // wait until the phone finished copying files (Rescan Immediately: a short wait)
+            scanJob?.cancel()
+            scanJob = viewModelScope.launch {
+                delay(if (st.rescanImmediately) 1_500L else 20_000L)
+                loadLibrary(force = true)
+            }
+        }
+    }
+
+    /** Settings → Library → Scanner → Auto-scan: new or removed music files are picked up by themselves. */
+    private fun registerAutoScan() {
+        runCatching {
+            getApplication<Application>().contentResolver.registerContentObserver(
+                android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, mediaObserver
+            )
+        }
+    }
+
+    /** Settings → Library → Full Rescan: the phone reads the files' tags again, every cache is cleared, the library reloads. */
+    fun fullRescan(onDone: () -> Unit = {}) {
+        val app = getApplication<Application>()
+        com.powersound.player.data.ArtworkLoader.clear()
+        com.powersound.player.data.LyricsReader.clearCache()
+        infoForId = null
+        gainForId = null
+        viewModelScope.launch {
+            val paths = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val known = _library.value.songs.map { it.path }.filter { it.isNotBlank() }
+                val inFolders = allFolders.flatMap { f ->
+                    runCatching { File(f).listFiles()?.filter { it.isFile }?.map { it.absolutePath } }.getOrNull() ?: emptyList()
+                }
+                (known + inFolders).distinct()
+            }
+            if (paths.isNotEmpty()) {
+                kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+                    var left = paths.size
+                    android.media.MediaScannerConnection.scanFile(app, paths.toTypedArray(), null) { _, _ ->
+                        synchronized(this@PlayerViewModel) {
+                            left--
+                            if (left == 0 && cont.isActive) cont.resumeWith(Result.success(Unit))
+                        }
+                    }
+                }
+            }
+            loadLibrary(force = true)
+            onDone()
+        }
+    }
+
+    /** Settings → Library → Playlists → Import System Library Playlists. Returns how many playlists were added. */
+    @Suppress("DEPRECATION")
+    suspend fun importSystemPlaylists(): Int = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val resolver = getApplication<Application>().contentResolver
+        val existing = LibraryStores.playlists.value.map { it.name.lowercase() }.toSet()
+        var added = 0
+        runCatching {
+            resolver.query(
+                android.provider.MediaStore.Audio.Playlists.EXTERNAL_CONTENT_URI,
+                arrayOf(android.provider.MediaStore.Audio.Playlists._ID, android.provider.MediaStore.Audio.Playlists.NAME),
+                null, null, null
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val plId = c.getLong(0)
+                    val name = c.getString(1) ?: continue
+                    if (name.lowercase() in existing) continue
+                    val ids = ArrayList<Long>()
+                    resolver.query(
+                        android.provider.MediaStore.Audio.Playlists.Members.getContentUri("external", plId),
+                        arrayOf(android.provider.MediaStore.Audio.Playlists.Members.AUDIO_ID),
+                        null, null, android.provider.MediaStore.Audio.Playlists.Members.PLAY_ORDER
+                    )?.use { m -> while (m.moveToNext()) m.getLong(0).takeIf { songById.containsKey(it) }?.let { ids.add(it) } }
+                    if (ids.isNotEmpty()) {
+                        val pl = LibraryStores.createPlaylist(name)
+                        LibraryStores.replacePlaylistSongs(pl.id, ids)
+                        added++
+                    }
+                }
+            }
+        }
+        added
+    }
+
+    /** Settings → Library → Playlists → Import .m3u / .m3u8. Returns the number of songs found. */
+    suspend fun importM3u(uri: android.net.Uri): Int = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val name = runCatching {
+            app.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { if (it.moveToFirst()) it.getString(0) else null }
+        }.getOrNull() ?: "Playlist"
+        val bytes = runCatching { app.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() ?: return@withContext 0
+        LibraryStores.importM3u(name.substringBeforeLast('.'), bytes, name.endsWith(".m3u8", ignoreCase = true), _library.value.songs)
+    }
+
+    /** Settings → Library → Playlists → Export Playlists: one .m3u8 file per playlist in the chosen folder. */
+    suspend fun exportPlaylists(tree: android.net.Uri): Int = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val resolver = getApplication<Application>().contentResolver
+        var n = 0
+        runCatching {
+            val parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                tree, android.provider.DocumentsContract.getTreeDocumentId(tree)
+            )
+            for (p in LibraryStores.playlists.value) {
+                val safe = p.name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val doc = android.provider.DocumentsContract.createDocument(resolver, parent, "audio/x-mpegurl", "$safe.m3u8") ?: continue
+                resolver.openOutputStream(doc)?.use { it.write(LibraryStores.toM3u8(p) { id -> songById[id] }.toByteArray(Charsets.UTF_8)) }
+                n++
+            }
+        }
+        n
+    }
+
     // ---- state ----
 
     private fun refresh(queueChanged: Boolean) {
@@ -935,12 +1100,20 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         _position.value = PlaybackPos(c.currentPosition, durationOf(c))
 
         val id = nowPlaying?.songId
-        if (id != null && c.isPlaying && id != lastRecordedId) {
-            lastRecordedId = id
-            StatsStore.recordPlay(id)
-        }
+        countPlay(c)
         updateAudioInfo(id)
         applySongSettings(id)
+    }
+
+    /** Settings → Library → Count As Played: the play counts once this part of the song has been heard. */
+    private fun countPlay(c: MediaController) {
+        val id = c.currentMediaItem?.mediaId?.toLongOrNull() ?: return
+        if (!c.isPlaying || id == lastRecordedId) return
+        val pct = com.powersound.player.data.SettingsStore.value.countPlayedPct
+        val dur = durationOf(c)
+        if (pct > 0 && (dur <= 0 || c.currentPosition < dur * pct / 100)) return
+        lastRecordedId = id
+        StatsStore.recordPlay(id)
     }
 
     private fun durationOf(c: MediaController): Long {
@@ -971,6 +1144,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        runCatching { getApplication<Application>().contentResolver.unregisterContentObserver(mediaObserver) }
         controller?.removeListener(listener)
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controller = null
@@ -978,8 +1152,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
-/** Songs at least this long get their position remembered (Settings → Misc). */
-private const val REMEMBER_MIN_MS = 10 * 60_000L
+/** Settings → Library → Shuffle → No Reshuffle For Large Lists. */
+private const val LARGE_LIST = 500
 
 private fun Song.toMediaItem(): MediaItem =
     MediaItem.Builder()

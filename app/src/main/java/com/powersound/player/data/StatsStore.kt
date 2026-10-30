@@ -55,6 +55,9 @@ object StatsStore {
         )
     }
 
+    /** Settings → Library → Reset Stats: play counts and last-played times go, ratings stay. */
+    fun resetPlays() = save(_stats.value.copy(plays = emptyMap(), lastPlayed = emptyMap()))
+
     /** 1 = liked, -1 = disliked, 11..15 = stars, 0 = none. */
     fun setRating(id: Long, rating: Int) {
         val s = _stats.value
