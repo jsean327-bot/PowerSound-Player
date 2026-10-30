@@ -326,6 +326,7 @@ private fun SettingsContent(
     var query by remember { mutableStateOf("") }
     fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
     val d = remember { AppSettings() }
+    val args = PageArgs(st, d, allFolders, onPage, onRescan, onAudioInfo, onImportAutoEq, onCheckUpdate, onChangelog, onExport, onImport)
 
     Column(
         Modifier
@@ -383,878 +384,66 @@ private fun SettingsContent(
                     if (q.isNotEmpty() && hits.isEmpty()) Hint("Nothing found")
                 }
 
-                page == null -> {
-                    SettingsPage.values().filter { it.parent == null }.forEach { p -> NavRow(p.icon, p.color, p.title, p.subtitle) { onPage(p) } }
-                    SectionLabel("Other")
-                    NavRow(Icons.Rounded.Upload, Color(0xFF9A9AB0), "Export Settings/Data", "Save EQ, presets, playlists, bookmarks and settings to a file", onExport)
-                    NavRow(Icons.Rounded.Download, Color(0xFF9A9AB0), "Import Settings/Data", "Restore from a file saved with Export", onImport)
-                }
+                page == null -> SettingsPage9(page, args)
 
                 // ============================================================ LOOK AND FEEL
-                page == SettingsPage.LOOK -> {
-                    PlainRow("Skin", "Change the PowerSound visual theme. Per-skin options like extra Pro Buttons, Static Seekbar") { onPage(SettingsPage.SKIN) }
-                    SwitchRow("Follow Day/Night Mode", "Follow the system Day/Night Mode: PowerSound Dark by day, PowerSound Black at night", st.followDayNight) { v ->
-                        set { it.copy(followDayNight = v) }
-                    }
-                    ChipRow("Settings Theme", null, listOf("Default", "Light", "Dark", "Follow Day/Night Mode"), st.settingsTheme) { v -> set { it.copy(settingsTheme = v) } }
-                    ChipRow("Settings Font", null, listOf("Default", "Alternative font", "Bold", "Bold+"), st.settingsFont) { v -> set { it.copy(settingsFont = v) } }
+                page == SettingsPage.LOOK -> SettingsPage1(page, args)
 
-                    SectionLabel("General")
-                    PlainRow("Player Screen") { onPage(SettingsPage.PLAYER_SCREEN) }
-                    PlainRow("Lyrics") { onPage(SettingsPage.LYRICS) }
-                    PlainRow("Notifications") { onPage(SettingsPage.NOTIFICATIONS) }
-                    Hint("List options like Filename As Title and Show Track Number are in Library → List UI")
+                page == SettingsPage.SKIN -> SettingsPage2(page, args)
 
-                    SectionLabel("Misc")
-                    ChoiceRow("Language", listOf("Auto", "English"), st.language) { v -> set { it.copy(language = v) } }
-                    PlainRow("Icon", "Set launcher icon") { onPage(SettingsPage.ICON) }
-                    ChipRow("Screen Orientation", null, listOf("Default", "Portrait (Vertical)", "Landscape (Horizontal)"), st.orientation) { v ->
-                        set { it.copy(orientation = v) }
-                    }
-                    ChipRow("Animations", "Disable/enable or change UI animation speed where possible", listOf("Disabled", "Fast", "Default"), st.animations) { v ->
-                        set { it.copy(animations = v) }
-                    }
-                    SwitchRow("Start at Library", "Changes the startup screen. Back action returns from the Player Screen to the current list", st.startAtLibrary) { v ->
-                        set { it.copy(startAtLibrary = v) }
-                    }
-                    SwitchRow("Hide Status Bar", null, st.hideStatusBar) { v -> set { it.copy(hideStatusBar = v) } }
-                    NoteBlock("Some phones can't change the status bar / navigation bar right away. You may need to leave and enter the app once for these options to apply")
-                    SwitchRow("Keep Screen On", "Always keep the screen on in the app", st.keepScreenOn) { v -> set { it.copy(keepScreenOn = v) } }
-                    StepSliderRow("Settings Shortcuts in Main Menu", if (st.menuShortcuts == 0) "Disabled" else "${st.menuShortcuts}", st.menuShortcuts, 0, MENU_SHORTCUT_MAX, "Disabled", "Max") { v ->
-                        set { it.copy(menuShortcuts = v) }
-                    }
-                    ActionRow("Show tips again", "The first-time tips appear again on each screen") { HintStore.resetAll() }
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                followDayNight = d.followDayNight, settingsTheme = d.settingsTheme, settingsFont = d.settingsFont,
-                                language = d.language, orientation = d.orientation, animations = d.animations, startAtLibrary = d.startAtLibrary,
-                                hideStatusBar = d.hideStatusBar, keepScreenOn = d.keepScreenOn, menuShortcuts = d.menuShortcuts
-                            )
-                        }
-                    }
-                }
+                page == SettingsPage.PLAYER_SCREEN -> SettingsPage3(page, args)
 
-                page == SettingsPage.SKIN -> {
-                    SectionLabel("Skins")
-                    SKINS.forEachIndexed { i, (name, desc) ->
-                        RadioCard(name, desc, st.skin == i && !st.followDayNight) { set { it.copy(skin = i, followDayNight = false) } }
-                    }
-                    if (st.followDayNight) NoteBlock("Follow Day/Night Mode is on (Look and Feel), so the skin changes with the system")
-                    SectionLabel("Accent colour")
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ACCENTS.forEachIndexed { i, (name, color) ->
-                            Box(
-                                Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(color)
-                                    .border(2.dp, if (st.accent == i) sc.text else Color.Transparent, CircleShape)
-                                    .clickable { set { it.copy(accent = i) } },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (st.accent == i) Icon(Icons.Rounded.Check, contentDescription = name, tint = Color.Black, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                    if (st.materialYou != 0) NoteBlock("Material You colors are on, so the accent colour comes from your wallpaper")
-                    Divider()
-                    Title("Layout")
-                    RadioCard("Default", "Track labels and buttons on the cover. Best for small or wide screens", st.layout == 0) { set { it.copy(layout = 0) } }
-                    RadioCard("Alternative layout", "Moves track labels below the cover, makes on-cover buttons smaller and faded", st.layout == 1) { set { it.copy(layout = 1) } }
-                    RadioCard("Full cover", "Moves all track labels and buttons below the cover. Works best on long screen phones", st.layout == 2) { set { it.copy(layout = 2) } }
-                    Hint("The menu button and the rating are set in Look and Feel → Player Screen, the lyrics button in Look and Feel → Lyrics")
-                    Divider()
-                    ChipRow("Track Labels", null, listOf("Default", "Centered"), if (st.labelsCentered) 1 else 0) { v -> set { it.copy(labelsCentered = v == 1) } }
-                    Hint("Centered: applied for Alternative layout / Full cover")
-                    ChipRow("Labels Background", null, listOf("Enabled", "Hidden"), if (st.labelsBg) 0 else 1) { v -> set { it.copy(labelsBg = v == 0) } }
-                    Hint("Hidden: applied on the Player Screen. You may want to adjust Background so labels are always visible")
-                    ChipRow("Player Buttons Background", null, listOf("Enabled", "Hidden"), if (st.buttonsBg) 0 else 1) { v -> set { it.copy(buttonsBg = v == 0) } }
-                    ChipRow("Material You colors", if (Build.VERSION.SDK_INT < 31) "Needs Android 12 or newer" else null, listOf("Disabled", "More pronounced", "Less pronounced"), st.materialYou) { v ->
-                        set { it.copy(materialYou = v) }
-                    }
-                    ChipRow("Font", null, listOf("Default", "Alternative font", "Bold", "Bold+"), st.appFont) { v -> set { it.copy(appFont = v) } }
-                    ChipRow("Rounded Corners", null, listOf("More rounded", "Less rounded"), if (st.moreRounded) 0 else 1) { v -> set { it.copy(moreRounded = v == 0) } }
-                    ChipRow("Seekbar Style", null, listOf("Default", "Static Seekbar", "Simple Seekbar (with Pro Buttons)"), st.seekbarStyle) { v ->
-                        set { it.copy(seekbarStyle = v) }
-                    }
-                    SwitchRow("Pro Buttons", "Category change (or -10/+10 s) buttons next to Play. Always enabled for Simple Seekbar", st.proButtons || st.seekbarStyle == 2) { v ->
-                        set { it.copy(proButtons = v) }
-                    }
-                    ChipRow("Knob Highlight", null, listOf("None", "Monochromatic", "Colorful"), st.knobHighlight) { v -> set { it.copy(knobHighlight = v) } }
-                    ChipRow("Eq. Graphic Mode Curve", null, listOf("Monochromatic", "Colorful"), if (st.eqCurveColorful) 1 else 0) { v -> set { it.copy(eqCurveColorful = v == 1) } }
-                    ChipRow("Transparent Status Bar", null, listOf("Default", "No Background"), if (st.statusBarNoBg) 1 else 0) { v -> set { it.copy(statusBarNoBg = v == 1) } }
-                    Hint("Some covers may make the status bar icons hard to read. In this case you can adjust the Background options")
-                    ChipRow("Transparent Navbar", "Applied to the floating bar at the bottom", listOf("Default", "Semi-transparent", "No Background"), st.navbarStyle) { v ->
-                        set { it.copy(navbarStyle = v) }
-                    }
-                    SwitchRow("Offset Navbar", "Move the bar slightly away from the corners (for screens with large corner radius)", st.offsetNavbar) { v ->
-                        set { it.copy(offsetNavbar = v) }
-                    }
-                    ChipRow("Android Navigation Bar", null, listOf("Default", "No Background"), if (st.androidNavNoBg) 1 else 0) { v -> set { it.copy(androidNavNoBg = v == 1) } }
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                skin = d.skin, accent = d.accent, layout = d.layout, labelsCentered = d.labelsCentered, labelsBg = d.labelsBg,
-                                buttonsBg = d.buttonsBg, materialYou = d.materialYou, appFont = d.appFont, moreRounded = d.moreRounded,
-                                seekbarStyle = d.seekbarStyle, proButtons = d.proButtons, knobHighlight = d.knobHighlight,
-                                eqCurveColorful = d.eqCurveColorful, statusBarNoBg = d.statusBarNoBg, navbarStyle = d.navbarStyle,
-                                offsetNavbar = d.offsetNavbar, androidNavNoBg = d.androidNavNoBg
-                            )
-                        }
-                    }
-                }
+                page == SettingsPage.LYRICS -> SettingsPage4(page, args)
 
-                page == SettingsPage.PLAYER_SCREEN -> {
-                    var editButtons by remember { mutableStateOf(false) }
-                    SwitchRow("Album Art Animation", "Animate on track advance. Also applies to the bottom bar", st.artAnimation) { v -> set { it.copy(artAnimation = v) } }
-                    SwitchRow("Animate Long Labels", "Scroll long track title and album/artist labels", st.marquee) { v -> set { it.copy(marquee = v) } }
-                    SwitchRow("Animate Long Labels Everywhere", "Scroll long track labels also in lists and the mini player", st.marqueeEverywhere) { v ->
-                        set { it.copy(marqueeEverywhere = v) }
-                    }
-                    SectionLabel("Player Screen Buttons")
-                    NoteBlock(
-                        "Player screen buttons appear as a row below the track cover",
-                        "To customize, long-press the empty space between the buttons or use the item below"
-                    )
-                    PlainRow("Edit Player Screen Buttons", st.playerButtons.mapNotNull { id -> PLAYER_BUTTONS.firstOrNull { it.id == id }?.label }.joinToString(", ").ifEmpty { "No buttons" }) {
-                        editButtons = true
-                    }
-                    SwitchRow("Prefer No Gap", "Minimize gaps between buttons for the centered layout", st.preferNoGap) { v -> set { it.copy(preferNoGap = v) } }
-                    SwitchRow("Do Not Edit On Long Press", "Prevents button editing started by an accidental long press", st.noEditLongPress) { v ->
-                        set { it.copy(noEditLongPress = v) }
-                    }
-                    PlainRow("Restore Player Screen Buttons") { set { it.copy(playerButtons = d.playerButtons) } }
+                page == SettingsPage.NOTIFICATIONS -> SettingsPage5(page, args)
 
-                    SectionLabel("Other Buttons")
-                    ChipRow("Rating Type", null, listOf("Disabled", "Like/unlike thumbs", "5 stars", "5 stars (menu/lists only)"), st.ratingType) { v ->
-                        set { it.copy(ratingType = v) }
-                    }
-                    Hint("Stars: tap a star to rate, tap the same star again to clear the rating")
-                    ChipRow("Menu Button", "The menu can also be opened by long pressing the cover", listOf("Disabled", "Enabled"), if (st.menuButton) 1 else 0) { v ->
-                        set { it.copy(menuButton = v == 1) }
-                    }
-                    ChipRow("Menu Button Long Press", "Long press action for the track menu button", MENU_LONG_PRESS, st.menuLongPress) { v ->
-                        set { it.copy(menuLongPress = v) }
-                    }
-                    ChipRow("Line2 Press", "Handle press on the 2nd track text line", listOf("Disabled", "Artist", "Album", "Folder", "Genre"), st.line2Press) { v ->
-                        set { it.copy(line2Press = v) }
-                    }
-                    ChipRow("Line2 Long Press", "Handle long press on the 2nd track text line", listOf("Disabled", "Artist", "Album", "Folder", "Genre"), st.line2LongPress) { v ->
-                        set { it.copy(line2LongPress = v) }
-                    }
-                    NoteBlock("A track counter (3/12) is available as a Player Screen button")
-                    SwitchRow(
-                        "<< Button Resets Current Track",
-                        "First press rewinds the track, second press changes the track. Includes headset/Bluetooth buttons and the notification",
-                        st.prevResets
-                    ) { v -> set { it.copy(prevResets = v) } }
-                    Hint("To reset a track to 0:00 on the Player Screen, long press the elapsed time (left of the Play button)")
-                    SwitchRow(
-                        "-10/+10s Rewind Pro Buttons",
-                        "Change the category Pro Buttons to -10/+10 s jump buttons for long tracks (${st.longTrackMin} min or more, see Library → Long songs)",
-                        st.proRewindLong
-                    ) { v -> set { it.copy(proRewindLong = v) } }
-                    SwitchRow("Navigate to the Folders", "Track menu → Folder opens the Folders category instead of the Folders Hierarchy", st.navigateToFolders) { v ->
-                        set { it.copy(navigateToFolders = v) }
-                    }
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                artAnimation = d.artAnimation, marquee = d.marquee, marqueeEverywhere = d.marqueeEverywhere,
-                                playerButtons = d.playerButtons, preferNoGap = d.preferNoGap, noEditLongPress = d.noEditLongPress,
-                                ratingType = d.ratingType, menuButton = d.menuButton, menuLongPress = d.menuLongPress,
-                                line2Press = d.line2Press, line2LongPress = d.line2LongPress,
-                                prevResets = d.prevResets, proRewindLong = d.proRewindLong, navigateToFolders = d.navigateToFolders
-                            )
-                        }
-                    }
-                    if (editButtons) EditPlayerButtonsDialog(st.playerButtons, onSave = { list -> set { it.copy(playerButtons = list) } }) { editButtons = false }
-                }
+                page == SettingsPage.NOTIF_BUTTONS -> SettingsPage6(page, args)
 
-                page == SettingsPage.LYRICS -> {
-                    var editUrl by remember { mutableStateOf(false) }
-                    var rescanned by remember { mutableStateOf(false) }
-                    NoteBlock(
-                        "When Lyrics Swipe is enabled, swipe the album art up to show lyrics",
-                        "Return from lyrics by swiping down or to the side",
-                        "Pinch to zoom the lyrics text"
-                    )
-                    ChipRow("Lyrics Swipe Up", "Swipe action on the Player Screen cover", listOf("Disabled", "When local lyrics available", "Always"), st.lyricsSwipeUp) { v ->
-                        set { it.copy(lyricsSwipeUp = v) }
-                    }
-                    NoteBlock("Local lyrics: the lyrics tag inside the file, or an .lrc file next to it")
-                    ChipRow("Lyrics Button", "Button on the Player Screen cover", listOf("Disabled", "When local lyrics available", "Always"), st.lyricsButton) { v ->
-                        set { it.copy(lyricsButton = v) }
-                    }
-                    Hint("Long press on the lyrics button always opens the preferred lyrics app")
-                    ChipRow("Lyrics Item In The Track Menu", null, listOf("Open lyrics UI", "Open 3rd party app"), st.lyricsMenuItem) { v ->
-                        set { it.copy(lyricsMenuItem = v) }
-                    }
-                    SwitchRow("Keep Screen On", "Keep the screen on while the lyrics are open", st.lyricsKeepScreenOn) { v -> set { it.copy(lyricsKeepScreenOn = v) } }
-                    SliderRow(
-                        "Lyrics Time Offset", "${st.lyricsOffsetMs} ms", st.lyricsOffsetMs.toFloat(), -5000f..5000f,
-                        subtitle = "Applied to synced lyrics in addition to the offset tag"
-                    ) { v -> set { it.copy(lyricsOffsetMs = ((v / 50).roundToInt() * 50)) } }
-                    Hint("A positive value makes the lyrics text appear earlier, a negative value delays it")
-                    ChipRow("Lyrics Size", "Pinch to zoom on the lyrics screen too", listOf("Small Font", "Default", "Large Font"), st.lyricsSize) { v ->
-                        set { it.copy(lyricsSize = v) }
-                    }
-                    NoteBlock(
-                        "PowerSound loads lyrics from the track tags or from the .lrc file",
-                        "If no lyrics are found, the lyrics can be searched in the preferred lyrics app or in the browser"
-                    )
-                    ChoiceRow("Preferred Lyrics App", LYRICS_APPS, st.lyricsApp, subtitlePrefix = "App or site to search lyrics when none are found: ") { v ->
-                        set { it.copy(lyricsApp = v) }
-                    }
-                    ActionRow(
-                        "Custom URL", "For the Browser via custom URL\n${st.lyricsCustomUrl}",
-                        enabled = st.lyricsApp == 1
-                    ) { editUrl = true }
-                    SectionLabel("Scanner")
-                    ActionRow("Rescan Lyrics Tags", if (rescanned) "Done — lyrics will be read again" else "Read the lyrics of every track again (tags and .lrc files)") {
-                        LyricsReader.clearCache(); rescanned = true
-                    }
-                    val allFiles = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
-                    SwitchRow(
-                        "Scan LRC Files",
-                        "If enabled, PowerSound looks for .lrc files in the music folders with the same name as the track" +
-                            if (!allFiles) "\nNeeds \"All files access\" — tap to allow" else "",
-                        st.scanLrc
-                    ) { v ->
-                        set { it.copy(scanLrc = v) }
-                        LyricsReader.clearCache()
-                        if (v && !allFiles && Build.VERSION.SDK_INT >= 30) {
-                            runCatching {
-                                context.startActivity(
-                                    Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                )
-                            }
-                        }
-                    }
-                    SwitchRow("Always Use UTF-8", "If disabled, .lrc files that are not UTF-8 are read as Arabic (Windows-1256)", st.lyricsUtf8) { v ->
-                        set { it.copy(lyricsUtf8 = v) }; LyricsReader.clearCache()
-                    }
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                lyricsSwipeUp = d.lyricsSwipeUp, lyricsButton = d.lyricsButton, lyricsMenuItem = d.lyricsMenuItem,
-                                lyricsKeepScreenOn = d.lyricsKeepScreenOn, lyricsOffsetMs = d.lyricsOffsetMs, lyricsSize = d.lyricsSize,
-                                lyricsApp = d.lyricsApp, lyricsCustomUrl = d.lyricsCustomUrl, scanLrc = d.scanLrc, lyricsUtf8 = d.lyricsUtf8
-                            )
-                        }
-                    }
-                    if (editUrl) TextInputDialog(
-                        "Custom URL", st.lyricsCustomUrl,
-                        "Use %ARTIST% and %TITLE% for the track's artist and title",
-                        onSave = { url -> set { it.copy(lyricsCustomUrl = url.ifBlank { d.lyricsCustomUrl }) } }
-                    ) { editUrl = false }
-                }
+                page == SettingsPage.ICON -> SettingsPage7(page, args)
 
-                page == SettingsPage.NOTIFICATIONS -> {
-                    NoteBlock(
-                        "Android 13 and newer draw the media notification themselves (colours from the album art, the seek bar and Play/Previous/Next)",
-                        "PowerSound adds your chosen extra buttons to it"
-                    )
-                    PlainRow("Buttons", "Media action buttons") { onPage(SettingsPage.NOTIF_BUTTONS) }
-                    SwitchRow("Navigate to the List", "Touching the notification opens the list the track is playing from", st.notifNavigateToList) { v ->
-                        set { it.copy(notifNavigateToList = v) }
-                    }
-                    SectionLabel("Notification Keeping")
-                    SwitchRow("Keep Notification", "The notification stays when playback ends by itself", st.keepNotification) { v ->
-                        set { it.copy(keepNotification = v) }
-                    }
-                    NoteBlock(
-                        "If disabled, the notification is removed when the list finishes playing",
-                        "The notification can always be removed with the Close button or by stopping playback"
-                    )
-                    SwitchRow(
-                        "Remove Notification on Disconnection",
-                        "The notification is removed when the headset/Bluetooth disconnects and the player is paused",
-                        st.removeNotifOnDisconnect
-                    ) { v -> set { it.copy(removeNotifOnDisconnect = v) } }
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                notifButtons = d.notifButtons, notifNavigateToList = d.notifNavigateToList,
-                                keepNotification = d.keepNotification, removeNotifOnDisconnect = d.removeNotifOnDisconnect
-                            )
-                        }
-                    }
-                }
-
-                page == SettingsPage.NOTIF_BUTTONS -> {
-                    NoteBlock(
-                        "The media buttons are shared by all media controllers: the Android media notification, the lock screen, Android Auto, watches, etc.",
-                        "The playback buttons (play/pause/previous/next) are fixed and can't be changed",
-                        "The first two buttons appear in the media notification; the others usually only in other controllers (Android Auto)"
-                    )
-                    SectionLabel("Notification/Android Auto")
-                    for (i in 0 until 6) {
-                        if (i == 2) SectionLabel("Android Auto/Other")
-                        ChipRow(
-                            "Button ${i + 1}", if (i == 1) "\"Close\" pauses the player and removes the notification" else null,
-                            NOTIF_ACTIONS, st.notifButtons.getOrElse(i) { 0 }
-                        ) { v -> set { s -> s.copy(notifButtons = s.notifButtons.toMutableList().also { it[i] = v }) } }
-                    }
-                    RestoreRow { set { it.copy(notifButtons = d.notifButtons) } }
-                }
-
-                page == SettingsPage.ICON -> {
-                    NoteBlock(
-                        "The icon may look different depending on your Android version, launcher and system settings",
-                        "It may take a few seconds for the launcher to update the icon"
-                    )
-                    SectionLabel("Icons")
-                    LauncherIcons.ALL.forEachIndexed { i, icon ->
-                        val bmp = remember(icon.res) {
-                            runCatching {
-                                androidx.core.content.res.ResourcesCompat.getDrawable(context.resources, icon.res, context.theme)
-                                    ?.toBitmap(144, 144)?.asImageBitmap()
-                            }.getOrNull()
-                        }
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    set { it.copy(launcherIcon = i) }
-                                    LauncherIcons.apply(context, i)
-                                }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = st.launcherIcon == i,
-                                onClick = { set { it.copy(launcherIcon = i) }; LauncherIcons.apply(context, i) },
-                                colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary, unselectedColor = sc.sub)
-                            )
-                            if (bmp != null) Image(bmp, contentDescription = null, modifier = Modifier.size(48.dp).clip(CircleShape))
-                            Spacer(Modifier.width(14.dp))
-                            Column {
-                                Text(icon.title, color = sc.text, fontSize = 16.sp, fontFamily = sc.family, fontWeight = sc.titleWeight)
-                                Text(icon.subtitle, color = sc.sub, fontSize = 12.sp, fontFamily = sc.family)
-                            }
-                        }
-                    }
-                }
-
-                page == SettingsPage.LIST_UI -> {
-                    SwitchRow("Filename As Title", "Show the file name instead of the title tag in the lists", st.filenameAsTitle) { v -> set { it.copy(filenameAsTitle = v) } }
-                    SwitchRow("Show Track Number", "Show the track number before the title in the lists", st.showTrackNumber) { v -> set { it.copy(showTrackNumber = v) } }
-                    Hint("More list options (sorting, zoom) are in the ⋮ menu of each list")
-                    RestoreRow { set { it.copy(filenameAsTitle = d.filenameAsTitle, showTrackNumber = d.showTrackNumber) } }
-                }
+                page == SettingsPage.LIST_UI -> SettingsPage8(page, args)
 
                 // ============================================================ OTHER SECTIONS
                 // ============================================================ AUDIO
-                page == SettingsPage.AUDIO -> {
-                    PlainRow("Audio Info", "Detailed info about the audio processing. Also available by long pressing the small info line on the Player Screen", onClick = onAudioInfo)
-                    PlainRow("Crossfade, Fade, and Gapless", "Crossfade options, fade type and length, gapless") { onPage(SettingsPage.CROSSFADE) }
-                    PlainRow("Replay Gain (RG)", "Enable RG, set source, preamp values") { onPage(SettingsPage.REPLAY_GAIN) }
-                    PlainRow("Audio Focus", "Pause/Resume/Duck volume on calls/notifications/start") { onPage(SettingsPage.AUDIO_FOCUS) }
-                    PlainRow("Equalizer", "Equalizer settings, number of bands, frequencies") { onPage(SettingsPage.EQ_SETTINGS) }
-                    PlainRow("Resampler", "Resampling/dither settings") { onPage(SettingsPage.RESAMPLER) }
-                    PlainRow("Audio Outputs", "Wired Headset, Speaker, Bluetooth, USB and other outputs") { onPage(SettingsPage.OUTPUTS) }
-                    PlainRow("Bit Perfect", "64-bit audio pipeline, Perfect Bit Perfect") { onPage(SettingsPage.BIT_PERFECT) }
-                    PlainRow("Advanced Tweaks", "Pause/resume on volume, MusicFX, presets reset") { onPage(SettingsPage.TWEAKS) }
-                }
+                page == SettingsPage.AUDIO -> SettingsPage10(page, args)
 
-                page == SettingsPage.CROSSFADE -> {
-                    ChipRow(
-                        "Auto-advance Fading", "Applied when the song changes automatically",
-                        listOf("No fading", "Non-gapless tracks", "All songs", "Shuffled songs"), st.autoFade
-                    ) { v -> set { it.copy(autoFade = v) } }
-                    ChipRow(
-                        "Manual Track Change Fading", "Applied when you change the song (next / previous)",
-                        listOf("No fading", "Short crossfade", "Crossfade"), st.manualFade
-                    ) { v -> set { it.copy(manualFade = v) } }
-                    SliderRow(
-                        "Crossfade Length", "%.1f s".format(st.crossfadeSec), st.crossfadeSec, 1f..12f,
-                        enabled = st.autoFade != 0 || st.manualFade == 2,
-                        subtitle = "How long the old and the new song overlap"
-                    ) { v -> set { it.copy(crossfadeSec = (v * 2).roundToInt() / 2f) } }
-                    NoteBlock(
-                        "\"Non-gapless tracks\" keeps albums that play in order gapless and crossfades everything else",
-                        "Perfect Bit Perfect disables all fading effects",
-                        "Crossfade is skipped when the song is the last one (repeat \"song and stop\", sleep timer)"
-                    )
-                    SwitchRow("Fade Play/Pause/Stop", "Smooth volume fade instead of a hard stop", st.fadeOnPause) { v -> set { it.copy(fadeOnPause = v) } }
-                    SliderRow("Fade Length", "${st.fadeMs} ms", st.fadeMs.toFloat(), 100f..1500f, enabled = st.fadeOnPause) { v ->
-                        set { it.copy(fadeMs = ((v / 50).roundToInt() * 50)) }
-                    }
-                    SwitchRow("Fade on Seek", "A very short fade when you jump in the song, so there is no click", st.fadeOnSeek) { v -> set { it.copy(fadeOnSeek = v) } }
-                    StepSliderRow(
-                        "Silence Between Tracks", if (st.silenceMs == 0) "0 ms (gapless)" else "${st.silenceMs} ms",
-                        st.silenceMs / 250, 0, 20, "None", "5 s"
-                    ) { v -> set { it.copy(silenceMs = v * 250) } }
-                    Hint("Gapless playback is always on when there is no silence and no crossfade. Silence turns crossfade off.")
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                autoFade = d.autoFade, manualFade = d.manualFade, crossfadeSec = d.crossfadeSec, fadeOnPause = d.fadeOnPause,
-                                fadeMs = d.fadeMs, fadeOnSeek = d.fadeOnSeek, silenceMs = d.silenceMs
-                            )
-                        }
-                    }
-                }
+                page == SettingsPage.CROSSFADE -> SettingsPage11(page, args)
 
-                page == SettingsPage.REPLAY_GAIN -> {
-                    ChipRow(
-                        "Replay Gain", null,
-                        listOf("Don't apply", "Apply gain", "Apply gain / prevent clipping according to the peak"), st.replayGain
-                    ) { v -> set { it.copy(replayGain = v) } }
-                    ChipRow("Source", null, listOf("Album", "Track"), st.rgSource) { v -> set { it.copy(rgSource = v) } }
-                    KnobRow(
-                        "RG preamp", null, "%+.1fdB".format(st.replayGainPreamp),
-                        ((st.replayGainPreamp + 15) / 30).toFloat(), enabled = st.replayGain != 0,
-                        onChange = { f -> set { it.copy(replayGainPreamp = ((f * 30 - 15) * 2).roundToInt() / 2.0) } },
-                        onReset = { set { it.copy(replayGainPreamp = 0.0) } }
-                    )
-                    KnobRow(
-                        "Preamp for songs without RG info", null, "%+.1fdB".format(st.replayGainNoTagDb),
-                        ((st.replayGainNoTagDb + 15) / 30).toFloat(), enabled = st.replayGain != 0,
-                        onChange = { f -> set { it.copy(replayGainNoTagDb = ((f * 30 - 15) * 2).roundToInt() / 2.0) } },
-                        onReset = { set { it.copy(replayGainNoTagDb = 0.0) } }
-                    )
-                    Hint("Reads REPLAYGAIN_ALBUM/TRACK_GAIN and _PEAK tags from FLAC and MP3 files. Drag a knob up/down, double-tap to reset.")
-                    RestoreRow {
-                        set { it.copy(replayGain = d.replayGain, rgSource = d.rgSource, replayGainPreamp = d.replayGainPreamp, replayGainNoTagDb = d.replayGainNoTagDb) }
-                    }
-                }
+                page == SettingsPage.REPLAY_GAIN -> SettingsPage12(page, args)
 
-                page == SettingsPage.AUDIO_FOCUS -> {
-                    SwitchRow("Resume After Call", "Resume playing on hang up (if paused by a call)", st.resumeAfterCall) { v -> set { it.copy(resumeAfterCall = v) } }
-                    SwitchRow("Resume On Start", "Resume playing when PowerSound is started", st.resumeOnStart) { v -> set { it.copy(resumeOnStart = v) } }
-                    SwitchRow(
-                        "Resume On Reopen", "Also resume when PowerSound is already running and reopened" +
-                            if (!st.resumeOnStart) " (needs Resume On Start)" else "",
-                        st.resumeOnReopen
-                    ) { v -> set { it.copy(resumeOnReopen = v) } }
-                    SectionLabel("Audio Focus")
-                    NoteBlock("Audio focus decides what happens when another app or a call needs the sound")
-                    SwitchRow(
-                        "Short Audio Focus Change / Calls",
-                        "Temporarily pause on short audio focus changes (notifications, navigation, voice messages…). Calls always pause",
-                        st.pauseOnShortFocus
-                    ) { v -> set { it.copy(pauseOnShortFocus = v) } }
-                    SwitchRow("Resume On Focus Gain", "Resume after getting the focus back. If disabled, the player stays paused", st.resumeOnFocusGain) { v ->
-                        set { it.copy(resumeOnFocusGain = v) }
-                    }
-                    SwitchRow(
-                        "Duck Volume", "When possible, lower the volume on short audio focus instead of pausing. Can be turned off per output (Audio Outputs → No Duck)",
-                        st.duckVolume
-                    ) { v -> set { it.copy(duckVolume = v) } }
-                    SwitchRow("Permanent Audio Focus Change", "Pause when another player, game, etc. takes over the sound", st.pauseOnPermanentFocus) { v ->
-                        set { it.copy(pauseOnPermanentFocus = v) }
-                    }
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                resumeAfterCall = d.resumeAfterCall, resumeOnStart = d.resumeOnStart, resumeOnReopen = d.resumeOnReopen,
-                                pauseOnShortFocus = d.pauseOnShortFocus, resumeOnFocusGain = d.resumeOnFocusGain,
-                                duckVolume = d.duckVolume, pauseOnPermanentFocus = d.pauseOnPermanentFocus
-                            )
-                        }
-                    }
-                }
+                page == SettingsPage.AUDIO_FOCUS -> SettingsPage13(page, args)
 
-                page == SettingsPage.EQ_SETTINGS -> {
-                    val eq by com.powersound.player.audio.AudioEngine.settings.collectAsState()
-                    var confirmRestore by remember { mutableStateOf(false) }
-                    NoteBlock(
-                        "Depending on the loaded preset, the equalizer is in Graphic or Parametric mode",
-                        "Graphic mode: 5 to 32 bands spread over the whole range",
-                        "Parametric mode (e.g. AutoEq presets): every band has its own frequency, gain, Q and type"
-                    )
-                    PlainRow("Graphic Equalizer Bands", "${eq.bands.size} bands • set number of bands, frequencies") { onPage(SettingsPage.EQ_BANDS) }
-                    PlainRow("Tone", "Set Bass/Treble frequencies and Q factors") { onPage(SettingsPage.TONE) }
-                    ChipRow("Equalizer Values", null, listOf("Hidden", "dB", "%"), st.eqValues) { v -> set { it.copy(eqValues = v) } }
-                    ChipRow("Tone Values", null, listOf("Hidden", "dB", "%"), st.toneValues) { v -> set { it.copy(toneValues = v) } }
-                    SwitchRow("Auto Save", "Changes are saved into the loaded user preset", st.eqAutoSave) { v -> set { it.copy(eqAutoSave = v) } }
-                    SwitchRow(
-                        "Smooth Equalizer/Tone Gains", "Automatically reduce the volume by the biggest boost so the equalizer/tone never overloads",
-                        eq.autoHeadroom
-                    ) { v -> com.powersound.player.audio.AudioEngine.update { it.copy(autoHeadroom = v) } }
-                    PlainRow("Import AutoEq Presets", "Import \"ParametricEQ.txt\" files from the AutoEq project (e.g. for your earbuds)", onClick = onImportAutoEq)
-                    PlainRow("Restore Equalizer Presets", "Imported AutoEq presets are removed, built-in presets stay") { confirmRestore = true }
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                eqValues = d.eqValues, toneValues = d.toneValues, eqAutoSave = d.eqAutoSave, eqBandCount = d.eqBandCount,
-                                eqCustomBands = d.eqCustomBands, eqCustomCount = d.eqCustomCount, eqFirstFreq = d.eqFirstFreq, eqLastFreq = d.eqLastFreq
-                            )
-                        }
-                        com.powersound.player.audio.AudioEngine.update { it.copy(autoHeadroom = true) }
-                    }
-                    if (confirmRestore) ConfirmDialog(
-                        "Restore Equalizer Presets", "Imported AutoEq presets will be removed.",
-                        onOk = { com.powersound.player.audio.AudioEngine.removeAutoEqPresets() }
-                    ) { confirmRestore = false }
-                }
+                page == SettingsPage.EQ_SETTINGS -> SettingsPage14(page, args)
 
-                page == SettingsPage.EQ_BANDS -> {
-                    val counts = listOf(5, 10, 12, 16, 24, 31)
-                    ChipRow(
-                        "Number of Bands", "Predefined number of bands, including the recommended band spread",
-                        listOf("5", "10 (ISO)", "12", "16", "24", "31 (ISO)"), if (st.eqCustomBands) -1 else counts.indexOf(st.eqBandCount)
-                    ) { i -> set { it.copy(eqBandCount = counts[i], eqCustomBands = false) } }
-                    SectionLabel("Advanced")
-                    SwitchRow("Enable Custom Bands", "Your own number of bands and frequency range", st.eqCustomBands) { v -> set { it.copy(eqCustomBands = v) } }
-                    StepSliderRow("Custom Number of Bands", "${st.eqCustomCount}", st.eqCustomCount, 5, 32, "5", "32", enabled = st.eqCustomBands) { v ->
-                        set { it.copy(eqCustomCount = v) }
-                    }
-                    val firsts = listOf(20, 25, 31, 40, 50, 63, 80, 100)
-                    StepSliderRow("First Frequency", "${st.eqFirstFreq} Hz", firsts.indexOf(st.eqFirstFreq).coerceAtLeast(0), 0, firsts.lastIndex, "20 Hz", "100 Hz", enabled = st.eqCustomBands) { i ->
-                        set { it.copy(eqFirstFreq = firsts[i]) }
-                    }
-                    val lasts = listOf(8000, 10000, 12000, 14000, 16000, 18000, 20000)
-                    StepSliderRow("Last Frequency", "%.1f kHz".format(st.eqLastFreq / 1000.0), lasts.indexOf(st.eqLastFreq).coerceAtLeast(0), 0, lasts.lastIndex, "8 kHz", "20 kHz", enabled = st.eqCustomBands) { i ->
-                        set { it.copy(eqLastFreq = lasts[i]) }
-                    }
-                    Hint("Changing the bands keeps your current curve as well as possible. Tap a frequency on the Equalizer to change one band.")
-                }
+                page == SettingsPage.EQ_BANDS -> SettingsPage15(page, args)
 
-                page == SettingsPage.TONE -> {
-                    val eq by com.powersound.player.audio.AudioEngine.settings.collectAsState()
-                    fun tone(change: (com.powersound.player.audio.EqSettings) -> com.powersound.player.audio.EqSettings) = com.powersound.player.audio.AudioEngine.update(change)
-                    val bassFreqs = listOf(40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0, 150.0, 200.0, 250.0, 300.0)
-                    StepSliderRow(
-                        "Bass Frequency", "${eq.bassFreq.roundToInt()} Hz", bassFreqs.indexOfFirst { it >= eq.bassFreq }.coerceAtLeast(0), 0, bassFreqs.lastIndex, "40 Hz", "300 Hz"
-                    ) { i -> tone { it.copy(bassFreq = bassFreqs[i]) } }
-                    SliderRow("Bass Q", "%.2f".format(eq.bassQ), eq.bassQ.toFloat(), 0.3f..2f) { v -> tone { it.copy(bassQ = (v * 20).roundToInt() / 20.0) } }
-                    val trebleFreqs = listOf(3000.0, 4000.0, 5000.0, 6000.0, 7000.0, 8000.0, 10000.0, 12000.0, 14000.0, 16000.0)
-                    StepSliderRow(
-                        "Treble Frequency", "%.1f kHz".format(eq.trebleFreq / 1000), trebleFreqs.indexOfFirst { it >= eq.trebleFreq }.coerceAtLeast(0), 0, trebleFreqs.lastIndex, "3 kHz", "16 kHz"
-                    ) { i -> tone { it.copy(trebleFreq = trebleFreqs[i]) } }
-                    SliderRow("Treble Q", "%.2f".format(eq.trebleQ), eq.trebleQ.toFloat(), 0.3f..2f) { v -> tone { it.copy(trebleQ = (v * 20).roundToInt() / 20.0) } }
-                    Hint("Bass and Treble are shelf filters controlled by the knobs on the Equalizer.")
-                    RestoreRow {
-                        tone {
-                            it.copy(
-                                bassFreq = com.powersound.player.audio.BASS_FREQ, bassQ = com.powersound.player.audio.SHELF_Q,
-                                trebleFreq = com.powersound.player.audio.TREBLE_FREQ, trebleQ = com.powersound.player.audio.SHELF_Q
-                            )
-                        }
-                    }
-                }
+                page == SettingsPage.TONE -> SettingsPage16(page, args)
 
-                page == SettingsPage.RESAMPLER -> {
-                    NoteBlock(
-                        "PowerSound resamples only when an output has a fixed Sample Rate (Audio Outputs → output → Sample Rate)",
-                        "Use \"Follow Track\" there to avoid resampling completely"
-                    )
-                    ChipRow("Resampler Type", null, listOf("High quality", "Very high quality"), st.resamplerType) { v -> set { it.copy(resamplerType = v) } }
-                    KnobRow(
-                        "Resampler Cutoff Frequency Ratio", "Higher keeps more treble, lower keeps the filter cleaner",
-                        "%.1f%%".format(st.resamplerCutoff * 100), (st.resamplerCutoff - 0.90f) / 0.09f, bipolar = false,
-                        onChange = { f -> set { it.copy(resamplerCutoff = (0.90f + f * 0.09f).let { v -> (v * 1000).roundToInt() / 1000f }) } },
-                        onReset = { set { it.copy(resamplerCutoff = d.resamplerCutoff) } }
-                    )
-                    ChoiceRow("Dither", com.powersound.player.audio.Ditherer.NAMES, st.dither) { v -> set { it.copy(dither = v) } }
-                    Hint("Dither is used whenever the 64-bit processing is reduced to the 16-bit output. Triangular is a safe choice; noise shaping moves the noise to frequencies the ear hears less.")
-                    RestoreRow { set { it.copy(resamplerType = d.resamplerType, resamplerCutoff = d.resamplerCutoff, dither = d.dither) } }
-                }
+                page == SettingsPage.RESAMPLER -> SettingsPage17(page, args)
 
-                page == SettingsPage.OUTPUTS -> {
-                    NoteBlock(
-                        "Every output has its own settings: equalizer preset, sample rate, no equalizer, no ducking and visualization/lyrics delay",
-                        "Now playing on: ${com.powersound.player.audio.AudioEngine.currentOutput}"
-                    )
-                    OUTPUT_PAGES.forEach { (key, p) ->
-                        val active = com.powersound.player.audio.AudioEngine.outputKey == key
-                        PlainRow(p.title, outputSummary(st, key) + if (active) "\nActive" else "") { onPage(p) }
-                    }
-                    RestoreRow {
-                        set { it.copy(outEqPreset = d.outEqPreset, outNoEq = d.outNoEq, outNoDuck = d.outNoDuck, outDelayMs = d.outDelayMs, outRate = d.outRate) }
-                    }
-                }
+                page == SettingsPage.OUTPUTS -> SettingsPage18(page, args)
 
-                page in OUTPUT_PAGES.map { it.second } -> {
-                    val key = OUTPUT_PAGES.first { it.second == page }.first
-                    OutputPage(st, key, ::set)
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                outEqPreset = it.outEqPreset - key, outNoEq = it.outNoEq - key, outNoDuck = it.outNoDuck - key,
-                                outDelayMs = (it.outDelayMs - key).let { m -> val dv = d.outDelayMs[key]; if (dv != null) m + (key to dv) else m },
-                                outRate = it.outRate - key
-                            )
-                        }
-                    }
-                }
+                page in OUTPUT_PAGES.map { it.second } -> SettingsPage19(page, args)
 
-                page == SettingsPage.BIT_PERFECT -> {
-                    NoteBlock(
-                        "PowerSound always processes in 64-bit floating point: equalizer, tone, effects, reverb and resampler",
-                        "When nothing is switched on, the decoded audio goes to the output untouched"
-                    )
-                    SwitchRow(
-                        "Perfect Bit Perfect",
-                        "Direct decoder-to-output path: no Equalizer, no Tone, no effects, no Replay Gain, no resampling, no fades",
-                        st.perfectBitPerfect
-                    ) { v -> set { it.copy(perfectBitPerfect = v) } }
-                    NoteBlock("Android still mixes the sound for the Bluetooth codec or the speaker; use a USB DAC for the cleanest path")
-                    RestoreRow { set { it.copy(perfectBitPerfect = d.perfectBitPerfect) } }
-                }
+                page == SettingsPage.BIT_PERFECT -> SettingsPage20(page, args)
 
-                page == SettingsPage.TWEAKS -> {
-                    var confirmReverb by remember { mutableStateOf(false) }
-                    SectionLabel("Volume")
-                    SwitchRow("Pause/Resume on Volume", "Pause when the volume is set to 0, resume when it is turned up again", st.pauseOnVolumeZero) { v ->
-                        set { it.copy(pauseOnVolumeZero = v) }
-                    }
-                    SectionLabel("Other")
-                    SwitchRow(
-                        "MusicFX", "Let Android's audio effects (and equalizer apps) work with PowerSound. Adds \"MusicFX\" to the ⋮ menu of the Equalizer",
-                        st.musicFx
-                    ) { v -> set { it.copy(musicFx = v) } }
-                    PlainRow("Restore Reverb Presets", "Your saved reverb presets are removed, built-in ones stay") { confirmReverb = true }
-                    RestoreRow { set { it.copy(pauseOnVolumeZero = d.pauseOnVolumeZero, musicFx = d.musicFx) } }
-                    if (confirmReverb) ConfirmDialog(
-                        "Restore Reverb Presets", "Your saved reverb presets will be removed.",
-                        onOk = { com.powersound.player.audio.AudioEngine.removeCustomReverbs() }
-                    ) { confirmReverb = false }
-                }
+                page == SettingsPage.TWEAKS -> SettingsPage21(page, args)
 
-                page == SettingsPage.VISUALIZATION -> {
-                    SwitchRow(
-                        "Visualization On Player Screen",
-                        "Visualization can be switched on with the Player Screen 🎵 button. It is shown when music is playing",
-                        st.vizOnPlayer
-                    ) { v -> set { it.copy(vizOnPlayer = v) } }
-                    ChipRow("Equalizer Screen Spectrum", null, listOf("Disabled", "Classic", "Rounded"), st.eqSpectrum) { v -> set { it.copy(eqSpectrum = v) } }
-                    SwitchRow(
-                        "Visualization in Library",
-                        "Visible behind the lists when visualization on the Player Screen is on. Some presets may make the lists harder to read",
-                        st.vizInLibrary
-                    ) { v -> set { it.copy(vizInLibrary = v) } }
-                    val secs = listOf(0, 5, 10, 15, 20, 30, 45, 60, 90, 120)
-                    StepSliderRow(
-                        "Preset Duration", if (st.vizPresetSeconds == 0) "Never change automatically" else "Change each: ${st.vizPresetSeconds} s",
-                        secs.indexOf(st.vizPresetSeconds).coerceAtLeast(0), 0, secs.lastIndex, "Never", "2 min"
-                    ) { i -> set { it.copy(vizPresetSeconds = secs[i]) } }
-                    SliderRow("Top Visualization Panel Opacity", "${(st.vizPanelOpacity * 100).roundToInt()}%", st.vizPanelOpacity, 0f..1f) { v ->
-                        set { it.copy(vizPanelOpacity = (v * 20).roundToInt() / 20f) }
-                    }
-                    SliderRow("Faded Controls Opacity", "${(st.vizFadedOpacity * 100).roundToInt()}%", st.vizFadedOpacity, 0f..1f) { v ->
-                        set { it.copy(vizFadedOpacity = (v * 20).roundToInt() / 20f) }
-                    }
-                    StepSliderRow("UI Timeout", "Time to show the controls during active visualization: ${st.vizUiTimeoutMs} ms", st.vizUiTimeoutMs / 500, 1, 10, "0.5 s", "5 s") { v ->
-                        set { it.copy(vizUiTimeoutMs = v * 500) }
-                    }
-                    SwitchRow("Visible Album Art", "Keep the album art visible during visualization", st.vizAlbumArt) { v -> set { it.copy(vizAlbumArt = v) } }
-                    SwitchRow("Ignore Touch", "In Fade Controls mode the first touch only shows the controls", st.vizIgnoreTouch) { v -> set { it.copy(vizIgnoreTouch = v) } }
-                    SliderRow(
-                        "Track Opacity", "${(st.vizTrackOpacity * 100).roundToInt()}%", st.vizTrackOpacity, 0f..1f,
-                        subtitle = "Track labels, rating, menu and album art (if visible) opacity"
-                    ) { v -> set { it.copy(vizTrackOpacity = (v * 20).roundToInt() / 20f) } }
-                    SwitchRow("Hide System Bars For Full Screen", "Hide the status bar and navigation completely in Full Screen mode", st.vizHideBars) { v -> set { it.copy(vizHideBars = v) } }
-                    SwitchRow(
-                        "Scaled Bars For Faded Controls",
-                        "Bars visualizations fit the album art area in Fade Controls mode. If disabled, bars are always full-screen",
-                        st.vizScaledBars
-                    ) { v -> set { it.copy(vizScaledBars = v) } }
-                    SwitchRow("HD", "Twice as many bars, uses a bit more battery", st.vizHd) { v -> set { it.copy(vizHd = v) } }
-                    SwitchRow("Crop Aspect", "Keep round / wave visualizations square instead of stretching them", st.vizCrop) { v -> set { it.copy(vizCrop = v) } }
-                    SwitchRow("Force 30 FPS", "Reduce the frame rate to 30 frames per second (saves battery)", st.viz30fps) { v -> set { it.copy(viz30fps = v) } }
-                    NoteBlock("Visualization Delay: the extra delay that keeps the visualization and lyrics in time with the sound is set for each output (Audio → Audio Outputs)")
-                    SectionLabel("Presets")
-                    Hint("Built-in: ${VizPreset.values().size}. Switched-off presets are skipped by the ◀ ▶ buttons and Preset Duration.")
-                    VizPreset.values().forEach { p ->
-                        SwitchRow(p.label, null, p.name !in st.vizDisabledPresets) { on ->
-                            set {
-                                val off = if (on) it.vizDisabledPresets - p.name else it.vizDisabledPresets + p.name
-                                // keep at least one preset on
-                                it.copy(vizDisabledPresets = if (off.size >= VizPreset.values().size) it.vizDisabledPresets else off)
-                            }
-                        }
-                    }
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                vizOnPlayer = d.vizOnPlayer, eqSpectrum = d.eqSpectrum, vizInLibrary = d.vizInLibrary, vizPresetSeconds = d.vizPresetSeconds,
-                                vizPanelOpacity = d.vizPanelOpacity, vizFadedOpacity = d.vizFadedOpacity, vizUiTimeoutMs = d.vizUiTimeoutMs,
-                                vizAlbumArt = d.vizAlbumArt, vizIgnoreTouch = d.vizIgnoreTouch, vizTrackOpacity = d.vizTrackOpacity,
-                                vizHideBars = d.vizHideBars, vizScaledBars = d.vizScaledBars, vizHd = d.vizHd, vizCrop = d.vizCrop,
-                                viz30fps = d.viz30fps, vizDisabledPresets = d.vizDisabledPresets
-                            )
-                        }
-                    }
-                }
+                page == SettingsPage.VISUALIZATION -> SettingsPage22(page, args)
 
-                page == SettingsPage.BACKGROUND -> {
-                    var pickColor by remember { mutableStateOf(false) }
-                    SwitchRow("Enable Blurred Backgrounds", "The current album art, blurred, behind the screens", st.bgEnabled) { v -> set { it.copy(bgEnabled = v) } }
-                    SwitchRow("List Background", "Also behind the library lists", st.bgList) { v -> set { it.copy(bgList = v) } }
-                    SwitchRow("Lyrics Background", "Also behind the lyrics", st.bgLyrics) { v -> set { it.copy(bgLyrics = v) } }
-                    NoteBlock("Lyrics and list backgrounds are dimmed a bit more to keep the text readable")
-                    StepSliderRow("Background Gradient", "${st.bgGradient}", st.bgGradient, 0, 8, "None", "Max") { v -> set { it.copy(bgGradient = v) } }
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { pickColor = true }
-                            .padding(horizontal = 18.dp, vertical = 10.dp)
-                    ) {
-                        Text("Background Gradient Color", color = sc.text, fontSize = 18.sp, fontFamily = sc.family, fontWeight = sc.titleWeight)
-                        Text("#%06X".format(st.bgGradientColor and 0xFFFFFF), color = sc.sub, fontSize = 13.sp, fontFamily = sc.family)
-                        Spacer(Modifier.height(6.dp))
-                        Box(
-                            Modifier
-                                .size(width = 46.dp, height = 24.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(Color(st.bgGradientColor))
-                                .border(1.dp, sc.chipBorder, RoundedCornerShape(50))
-                        )
-                    }
-                    SwitchRow("Background Gradient For Lists", "Also apply the gradient to the list background", st.bgGradientLists) { v -> set { it.copy(bgGradientLists = v) } }
-                    StepSliderRow("Background Blur", "${st.bgBlurStep}", st.bgBlurStep, 0, 10, "Less", "More", enabled = st.bgEnabled) { v -> set { it.copy(bgBlurStep = v) } }
-                    StepSliderRow("Background Details", "${st.bgDetails}", st.bgDetails, 0, 10, "Solid Color", "Detailed", enabled = st.bgEnabled) { v -> set { it.copy(bgDetails = v) } }
-                    SliderRow("Background Intensity", "${(st.bgIntensity * 100).roundToInt()}%", st.bgIntensity, 0f..2f, enabled = st.bgEnabled) { v ->
-                        set { it.copy(bgIntensity = (v * 20).roundToInt() / 20f) }
-                    }
-                    SliderRow("Background Saturation", "${(st.bgSaturation * 100).roundToInt()}%", st.bgSaturation, 0f..3f, enabled = st.bgEnabled) { v ->
-                        set { it.copy(bgSaturation = (v * 20).roundToInt() / 20f) }
-                    }
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                bgEnabled = d.bgEnabled, bgList = d.bgList, bgLyrics = d.bgLyrics, bgGradient = d.bgGradient,
-                                bgGradientColor = d.bgGradientColor, bgGradientLists = d.bgGradientLists, bgBlurStep = d.bgBlurStep,
-                                bgDetails = d.bgDetails, bgIntensity = d.bgIntensity, bgSaturation = d.bgSaturation
-                            )
-                        }
-                    }
-                    if (pickColor) ColorPickerDialog(Color(st.bgGradientColor), onPick = { c -> set { it.copy(bgGradientColor = c.toArgb()) } }) { pickColor = false }
-                }
+                page == SettingsPage.BACKGROUND -> SettingsPage23(page, args)
 
-                page == SettingsPage.ALBUM_ART -> {
-                    var confirm by remember { mutableStateOf(0) } // 1 reset negative, 2 delete cache
-                    SectionLabel("Download")
-                    SwitchRow("Download Album Art", "Automatically search and download missing album art (iTunes)", st.artDownload) { v -> set { it.copy(artDownload = v) } }
-                    SwitchRow(
-                        "Download Artist Images", "For Artists, Album Artists and Composers (Deezer). If disabled, the album art is used",
-                        st.artDownloadArtist
-                    ) { v -> set { it.copy(artDownloadArtist = v) } }
-                    SwitchRow("High Resolution", "Higher downloaded image resolution, uses more storage and data", st.artHighRes) { v -> set { it.copy(artHighRes = v) } }
-                    SwitchRow("Download Only On Wi-Fi", "Images are downloaded only when Wi-Fi is connected", st.artWifiOnly) { v -> set { it.copy(artWifiOnly = v) } }
-                    SwitchRow("Also Search By Title/Filename", "Search for album art even if the album tag is missing", st.artSearchTitle) { v -> set { it.copy(artSearchTitle = v) } }
-                    SwitchRow(
-                        "Prefer Downloaded Album Art", "Prefer downloaded album art over the embedded picture and Cover.jpg/Folder.jpg",
-                        st.artPreferDownloaded
-                    ) { v -> set { it.copy(artPreferDownloaded = v) }; ArtworkLoader.clear() }
-                    PlainRow("Reset Negative Status", "Clear the stored \"not found\" status of album/artist images") { confirm = 1 }
-                    PlainRow("Delete Cache", "Downloaded images and the image cache will be deleted") { confirm = 2 }
-                    SectionLabel("Advanced Tweaks")
-                    SwitchRow("Force Default Image", "Always show the default image instead of any album art", st.artForceDefault) { v -> set { it.copy(artForceDefault = v) }; ArtworkLoader.clear() }
-                    SwitchRow("Use 24-bit RGB", "Higher colour quality for album art. Needs 2x more memory per image", st.art24bit) { v -> set { it.copy(art24bit = v) }; ArtworkLoader.clear() }
-                    SwitchRow("Increase Resolution", "Sharper album art on the Player Screen. Uses more memory", st.artHighQuality) { v -> set { it.copy(artHighQuality = v) } }
-                    ChipRow(
-                        "Aspect Ratio", "Keep album art aspect ratio as is. Tall images won't fill some places fully",
-                        listOf("Default", "Keep Aspect Ratio", "Square"), st.artAspect
-                    ) { v -> set { it.copy(artAspect = v) } }
-                    NoteBlock("Cover.jpg / Folder.jpg next to the songs are read when \"All files access\" is allowed (Look and Feel → Lyrics → Scan LRC Files asks for it)")
-                    RestoreRow {
-                        set {
-                            it.copy(
-                                artDownload = d.artDownload, artDownloadArtist = d.artDownloadArtist, artHighRes = d.artHighRes,
-                                artWifiOnly = d.artWifiOnly, artSearchTitle = d.artSearchTitle, artPreferDownloaded = d.artPreferDownloaded,
-                                artForceDefault = d.artForceDefault, art24bit = d.art24bit, artHighQuality = d.artHighQuality, artAspect = d.artAspect
-                            )
-                        }
-                        ArtworkLoader.clear()
-                    }
-                    if (confirm == 1) ConfirmDialog(
-                        "Reset Negative Status", "PowerSound will search again for album/artist images that were not found before.",
-                        onOk = { ArtworkLoader.resetNegative(context) }
-                    ) { confirm = 0 }
-                    if (confirm == 2) ConfirmDialog(
-                        "Delete Cache", "Downloaded images and the image cache will be deleted.",
-                        onOk = { ArtworkLoader.deleteCache(context) }
-                    ) { confirm = 0 }
-                }
+                page == SettingsPage.ALBUM_ART -> SettingsPage24(page, args)
 
-                page == SettingsPage.LIBRARY -> {
-                    var pickFolders by remember { mutableStateOf(false) }
-                    var pickCategories by remember { mutableStateOf(false) }
-                    ActionRow("Rescan library", "Look for new, changed and deleted songs", onClick = onRescan)
-                    ActionRow(
-                        "Music folders",
-                        if (st.excludedFolders.isEmpty()) "All folders are included" else "${st.excludedFolders.size} folder(s) excluded"
-                    ) { pickFolders = true }
-                    ChoiceRow(
-                        "Skip short files", listOf("Off", "Shorter than 10 s", "Shorter than 30 s", "Shorter than 1 min"),
-                        listOf(0, 10, 30, 60).indexOf(st.minDurationSec).coerceAtLeast(0)
-                    ) { i -> set { it.copy(minDurationSec = listOf(0, 10, 30, 60)[i]) } }
-                    ChoiceRow(
-                        "Long songs", listOf("5 min or more", "10 min or more", "15 min or more", "20 min or more", "30 min or more"),
-                        listOf(5, 10, 15, 20, 30).indexOf(st.longTrackMin).coerceAtLeast(0)
-                    ) { i -> set { it.copy(longTrackMin = listOf(5, 10, 15, 20, 30)[i]) } }
-                    ActionRow(
-                        "Library categories",
-                        if (st.hiddenCategories.isEmpty()) "All categories are shown" else "${st.hiddenCategories.size} hidden"
-                    ) { pickCategories = true }
-                    PlainRow("List UI", "Filename as title, track numbers") { onPage(SettingsPage.LIST_UI) }
+                page == SettingsPage.LIBRARY -> SettingsPage25(page, args)
 
-                    if (pickFolders) {
-                        CheckListDialog(
-                            title = "Music folders",
-                            items = allFolders,
-                            checked = allFolders.filter { it !in st.excludedFolders }.toSet(),
-                            onDone = { kept -> set { it.copy(excludedFolders = allFolders.filter { f -> f !in kept }.toSet()) } },
-                            onDismiss = { pickFolders = false }
-                        )
-                    }
-                    if (pickCategories) {
-                        val names = Category.values().map { it.name }
-                        CheckListDialog(
-                            title = "Show on the Library page",
-                            items = names,
-                            labels = Category.values().map { it.label },
-                            checked = names.filter { it !in st.hiddenCategories }.toSet(),
-                            onDone = { shown -> set { it.copy(hiddenCategories = names.filter { n -> n !in shown }.toSet()) } },
-                            onDismiss = { pickCategories = false }
-                        )
-                    }
-                }
+                page == SettingsPage.HEADSET -> SettingsPage26(page, args)
 
-                page == SettingsPage.HEADSET -> {
-                    SwitchRow("Pause when headphones disconnect", "Bluetooth or wired", st.pauseOnDisconnect) { v -> set { it.copy(pauseOnDisconnect = v) } }
-                    SwitchRow("Resume on Bluetooth connection", "Continue playing when Bluetooth earbuds connect", st.resumeOnBluetooth) { v -> set { it.copy(resumeOnBluetooth = v) } }
-                    SwitchRow("Resume on wired headphones", "Continue playing when headphones are plugged in", st.resumeOnWired) { v -> set { it.copy(resumeOnWired = v) } }
-                    Hint("Earbud buttons work through Android's media controls: tap = play/pause, and next/previous where your earbuds support it.")
-                }
+                page == SettingsPage.LOCK_SCREEN -> SettingsPage27(page, args)
 
-                page == SettingsPage.LOCK_SCREEN -> {
-                    Hint(
-                        "The lock screen and the notification show Android's media controls for PowerSound: " +
-                            "cover, title, artist, a seek bar and play / pause / previous / next. They always follow the song that is playing."
-                    )
-                    Hint("The extra buttons of these controls are set in Look and Feel → Notifications → Buttons.")
-                }
+                page == SettingsPage.MISC -> SettingsPage28(page, args)
 
-                page == SettingsPage.MISC -> {
-                    var showLog by remember { mutableStateOf(false) }
-                    SwitchRow("Remember position in long songs", "Songs of 10 minutes or more continue where you stopped", st.rememberPosition) { v -> set { it.copy(rememberPosition = v) } }
-                    SwitchRow("Stop music when the app is swiped away", "From the recent apps screen", st.stopOnSwipeAway) { v -> set { it.copy(stopOnSwipeAway = v) } }
-                    SwitchRow("Ask before deleting files", "Show a confirmation first", st.confirmDelete) { v -> set { it.copy(confirmDelete = v) } }
-                    SwitchRow("Keep an error log", "Saves crash details on the phone", st.keepCrashLog) { v -> set { it.copy(keepCrashLog = v) } }
-                    ActionRow("View error log", "See, share or clear the last crash") { showLog = true }
-                    if (showLog) ErrorLogDialog { showLog = false }
-                }
-
-                page == SettingsPage.ABOUT -> {
-                    val version = remember {
-                        runCatching {
-                            @Suppress("DEPRECATION")
-                            context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                        }.getOrNull() ?: ""
-                    }
-                    Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { PowerSoundLogo() }
-                    Hint("PowerSound Player $version")
-                    ActionRow("Check for updates", "Look for a newer version on GitHub", onClick = onCheckUpdate)
-                    ActionRow("Changelog", "What changed in each version", onClick = onChangelog)
-                }
+                page == SettingsPage.ABOUT -> SettingsPage29(page, args)
             }
         }
     }
@@ -1943,5 +1132,1442 @@ private fun FlowRowPalette(colors: List<Color>, onPick: (Color) -> Unit) {
                     .clickable { onPick(c) }
             )
         }
+    }
+}
+
+// ---------------------------------------------------------------- pages (one function each, keeps the methods small)
+
+private class PageArgs(
+    val st: AppSettings,
+    val d: AppSettings,
+    val allFolders: List<String>,
+    val onPage: (SettingsPage?) -> Unit,
+    val onRescan: () -> Unit,
+    val onAudioInfo: () -> Unit,
+    val onImportAutoEq: () -> Unit,
+    val onCheckUpdate: () -> Unit,
+    val onChangelog: () -> Unit,
+    val onExport: () -> Unit,
+    val onImport: () -> Unit
+)
+
+/** page == SettingsPage.LOOK */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage1(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    PlainRow("Skin", "Change the PowerSound visual theme. Per-skin options like extra Pro Buttons, Static Seekbar") { onPage(SettingsPage.SKIN) }
+    SwitchRow("Follow Day/Night Mode", "Follow the system Day/Night Mode: PowerSound Dark by day, PowerSound Black at night", st.followDayNight) { v ->
+        set { it.copy(followDayNight = v) }
+    }
+    ChipRow("Settings Theme", null, listOf("Default", "Light", "Dark", "Follow Day/Night Mode"), st.settingsTheme) { v -> set { it.copy(settingsTheme = v) } }
+    ChipRow("Settings Font", null, listOf("Default", "Alternative font", "Bold", "Bold+"), st.settingsFont) { v -> set { it.copy(settingsFont = v) } }
+
+    SectionLabel("General")
+    PlainRow("Player Screen") { onPage(SettingsPage.PLAYER_SCREEN) }
+    PlainRow("Lyrics") { onPage(SettingsPage.LYRICS) }
+    PlainRow("Notifications") { onPage(SettingsPage.NOTIFICATIONS) }
+    Hint("List options like Filename As Title and Show Track Number are in Library → List UI")
+
+    SectionLabel("Misc")
+    ChoiceRow("Language", listOf("Auto", "English"), st.language) { v -> set { it.copy(language = v) } }
+    PlainRow("Icon", "Set launcher icon") { onPage(SettingsPage.ICON) }
+    ChipRow("Screen Orientation", null, listOf("Default", "Portrait (Vertical)", "Landscape (Horizontal)"), st.orientation) { v ->
+        set { it.copy(orientation = v) }
+    }
+    ChipRow("Animations", "Disable/enable or change UI animation speed where possible", listOf("Disabled", "Fast", "Default"), st.animations) { v ->
+        set { it.copy(animations = v) }
+    }
+    SwitchRow("Start at Library", "Changes the startup screen. Back action returns from the Player Screen to the current list", st.startAtLibrary) { v ->
+        set { it.copy(startAtLibrary = v) }
+    }
+    SwitchRow("Hide Status Bar", null, st.hideStatusBar) { v -> set { it.copy(hideStatusBar = v) } }
+    NoteBlock("Some phones can't change the status bar / navigation bar right away. You may need to leave and enter the app once for these options to apply")
+    SwitchRow("Keep Screen On", "Always keep the screen on in the app", st.keepScreenOn) { v -> set { it.copy(keepScreenOn = v) } }
+    StepSliderRow("Settings Shortcuts in Main Menu", if (st.menuShortcuts == 0) "Disabled" else "${st.menuShortcuts}", st.menuShortcuts, 0, MENU_SHORTCUT_MAX, "Disabled", "Max") { v ->
+        set { it.copy(menuShortcuts = v) }
+    }
+    ActionRow("Show tips again", "The first-time tips appear again on each screen") { HintStore.resetAll() }
+    RestoreRow {
+        set {
+            it.copy(
+                followDayNight = d.followDayNight, settingsTheme = d.settingsTheme, settingsFont = d.settingsFont,
+                language = d.language, orientation = d.orientation, animations = d.animations, startAtLibrary = d.startAtLibrary,
+                hideStatusBar = d.hideStatusBar, keepScreenOn = d.keepScreenOn, menuShortcuts = d.menuShortcuts
+            )
+        }
+    }
+    }
+}
+
+/** page == SettingsPage.SKIN */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage2(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    SectionLabel("Skins")
+    SKINS.forEachIndexed { i, (name, desc) ->
+        RadioCard(name, desc, st.skin == i && !st.followDayNight) { set { it.copy(skin = i, followDayNight = false) } }
+    }
+    if (st.followDayNight) NoteBlock("Follow Day/Night Mode is on (Look and Feel), so the skin changes with the system")
+    SectionLabel("Accent colour")
+    Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ACCENTS.forEachIndexed { i, (name, color) ->
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(color)
+                    .border(2.dp, if (st.accent == i) sc.text else Color.Transparent, CircleShape)
+                    .clickable { set { it.copy(accent = i) } },
+                contentAlignment = Alignment.Center
+            ) {
+                if (st.accent == i) Icon(Icons.Rounded.Check, contentDescription = name, tint = Color.Black, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+    if (st.materialYou != 0) NoteBlock("Material You colors are on, so the accent colour comes from your wallpaper")
+    Divider()
+    Title("Layout")
+    RadioCard("Default", "Track labels and buttons on the cover. Best for small or wide screens", st.layout == 0) { set { it.copy(layout = 0) } }
+    RadioCard("Alternative layout", "Moves track labels below the cover, makes on-cover buttons smaller and faded", st.layout == 1) { set { it.copy(layout = 1) } }
+    RadioCard("Full cover", "Moves all track labels and buttons below the cover. Works best on long screen phones", st.layout == 2) { set { it.copy(layout = 2) } }
+    Hint("The menu button and the rating are set in Look and Feel → Player Screen, the lyrics button in Look and Feel → Lyrics")
+    Divider()
+    ChipRow("Track Labels", null, listOf("Default", "Centered"), if (st.labelsCentered) 1 else 0) { v -> set { it.copy(labelsCentered = v == 1) } }
+    Hint("Centered: applied for Alternative layout / Full cover")
+    ChipRow("Labels Background", null, listOf("Enabled", "Hidden"), if (st.labelsBg) 0 else 1) { v -> set { it.copy(labelsBg = v == 0) } }
+    Hint("Hidden: applied on the Player Screen. You may want to adjust Background so labels are always visible")
+    ChipRow("Player Buttons Background", null, listOf("Enabled", "Hidden"), if (st.buttonsBg) 0 else 1) { v -> set { it.copy(buttonsBg = v == 0) } }
+    ChipRow("Material You colors", if (Build.VERSION.SDK_INT < 31) "Needs Android 12 or newer" else null, listOf("Disabled", "More pronounced", "Less pronounced"), st.materialYou) { v ->
+        set { it.copy(materialYou = v) }
+    }
+    ChipRow("Font", null, listOf("Default", "Alternative font", "Bold", "Bold+"), st.appFont) { v -> set { it.copy(appFont = v) } }
+    ChipRow("Rounded Corners", null, listOf("More rounded", "Less rounded"), if (st.moreRounded) 0 else 1) { v -> set { it.copy(moreRounded = v == 0) } }
+    ChipRow("Seekbar Style", null, listOf("Default", "Static Seekbar", "Simple Seekbar (with Pro Buttons)"), st.seekbarStyle) { v ->
+        set { it.copy(seekbarStyle = v) }
+    }
+    SwitchRow("Pro Buttons", "Category change (or -10/+10 s) buttons next to Play. Always enabled for Simple Seekbar", st.proButtons || st.seekbarStyle == 2) { v ->
+        set { it.copy(proButtons = v) }
+    }
+    ChipRow("Knob Highlight", null, listOf("None", "Monochromatic", "Colorful"), st.knobHighlight) { v -> set { it.copy(knobHighlight = v) } }
+    ChipRow("Eq. Graphic Mode Curve", null, listOf("Monochromatic", "Colorful"), if (st.eqCurveColorful) 1 else 0) { v -> set { it.copy(eqCurveColorful = v == 1) } }
+    ChipRow("Transparent Status Bar", null, listOf("Default", "No Background"), if (st.statusBarNoBg) 1 else 0) { v -> set { it.copy(statusBarNoBg = v == 1) } }
+    Hint("Some covers may make the status bar icons hard to read. In this case you can adjust the Background options")
+    ChipRow("Transparent Navbar", "Applied to the floating bar at the bottom", listOf("Default", "Semi-transparent", "No Background"), st.navbarStyle) { v ->
+        set { it.copy(navbarStyle = v) }
+    }
+    SwitchRow("Offset Navbar", "Move the bar slightly away from the corners (for screens with large corner radius)", st.offsetNavbar) { v ->
+        set { it.copy(offsetNavbar = v) }
+    }
+    ChipRow("Android Navigation Bar", null, listOf("Default", "No Background"), if (st.androidNavNoBg) 1 else 0) { v -> set { it.copy(androidNavNoBg = v == 1) } }
+    RestoreRow {
+        set {
+            it.copy(
+                skin = d.skin, accent = d.accent, layout = d.layout, labelsCentered = d.labelsCentered, labelsBg = d.labelsBg,
+                buttonsBg = d.buttonsBg, materialYou = d.materialYou, appFont = d.appFont, moreRounded = d.moreRounded,
+                seekbarStyle = d.seekbarStyle, proButtons = d.proButtons, knobHighlight = d.knobHighlight,
+                eqCurveColorful = d.eqCurveColorful, statusBarNoBg = d.statusBarNoBg, navbarStyle = d.navbarStyle,
+                offsetNavbar = d.offsetNavbar, androidNavNoBg = d.androidNavNoBg
+            )
+        }
+    }
+    }
+}
+
+/** page == SettingsPage.PLAYER_SCREEN */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage3(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var editButtons by remember { mutableStateOf(false) }
+    SwitchRow("Album Art Animation", "Animate on track advance. Also applies to the bottom bar", st.artAnimation) { v -> set { it.copy(artAnimation = v) } }
+    SwitchRow("Animate Long Labels", "Scroll long track title and album/artist labels", st.marquee) { v -> set { it.copy(marquee = v) } }
+    SwitchRow("Animate Long Labels Everywhere", "Scroll long track labels also in lists and the mini player", st.marqueeEverywhere) { v ->
+        set { it.copy(marqueeEverywhere = v) }
+    }
+    SectionLabel("Player Screen Buttons")
+    NoteBlock(
+        "Player screen buttons appear as a row below the track cover",
+        "To customize, long-press the empty space between the buttons or use the item below"
+    )
+    PlainRow("Edit Player Screen Buttons", st.playerButtons.mapNotNull { id -> PLAYER_BUTTONS.firstOrNull { it.id == id }?.label }.joinToString(", ").ifEmpty { "No buttons" }) {
+        editButtons = true
+    }
+    SwitchRow("Prefer No Gap", "Minimize gaps between buttons for the centered layout", st.preferNoGap) { v -> set { it.copy(preferNoGap = v) } }
+    SwitchRow("Do Not Edit On Long Press", "Prevents button editing started by an accidental long press", st.noEditLongPress) { v ->
+        set { it.copy(noEditLongPress = v) }
+    }
+    PlainRow("Restore Player Screen Buttons") { set { it.copy(playerButtons = d.playerButtons) } }
+
+    SectionLabel("Other Buttons")
+    ChipRow("Rating Type", null, listOf("Disabled", "Like/unlike thumbs", "5 stars", "5 stars (menu/lists only)"), st.ratingType) { v ->
+        set { it.copy(ratingType = v) }
+    }
+    Hint("Stars: tap a star to rate, tap the same star again to clear the rating")
+    ChipRow("Menu Button", "The menu can also be opened by long pressing the cover", listOf("Disabled", "Enabled"), if (st.menuButton) 1 else 0) { v ->
+        set { it.copy(menuButton = v == 1) }
+    }
+    ChipRow("Menu Button Long Press", "Long press action for the track menu button", MENU_LONG_PRESS, st.menuLongPress) { v ->
+        set { it.copy(menuLongPress = v) }
+    }
+    ChipRow("Line2 Press", "Handle press on the 2nd track text line", listOf("Disabled", "Artist", "Album", "Folder", "Genre"), st.line2Press) { v ->
+        set { it.copy(line2Press = v) }
+    }
+    ChipRow("Line2 Long Press", "Handle long press on the 2nd track text line", listOf("Disabled", "Artist", "Album", "Folder", "Genre"), st.line2LongPress) { v ->
+        set { it.copy(line2LongPress = v) }
+    }
+    NoteBlock("A track counter (3/12) is available as a Player Screen button")
+    SwitchRow(
+        "<< Button Resets Current Track",
+        "First press rewinds the track, second press changes the track. Includes headset/Bluetooth buttons and the notification",
+        st.prevResets
+    ) { v -> set { it.copy(prevResets = v) } }
+    Hint("To reset a track to 0:00 on the Player Screen, long press the elapsed time (left of the Play button)")
+    SwitchRow(
+        "-10/+10s Rewind Pro Buttons",
+        "Change the category Pro Buttons to -10/+10 s jump buttons for long tracks (${st.longTrackMin} min or more, see Library → Long songs)",
+        st.proRewindLong
+    ) { v -> set { it.copy(proRewindLong = v) } }
+    SwitchRow("Navigate to the Folders", "Track menu → Folder opens the Folders category instead of the Folders Hierarchy", st.navigateToFolders) { v ->
+        set { it.copy(navigateToFolders = v) }
+    }
+    RestoreRow {
+        set {
+            it.copy(
+                artAnimation = d.artAnimation, marquee = d.marquee, marqueeEverywhere = d.marqueeEverywhere,
+                playerButtons = d.playerButtons, preferNoGap = d.preferNoGap, noEditLongPress = d.noEditLongPress,
+                ratingType = d.ratingType, menuButton = d.menuButton, menuLongPress = d.menuLongPress,
+                line2Press = d.line2Press, line2LongPress = d.line2LongPress,
+                prevResets = d.prevResets, proRewindLong = d.proRewindLong, navigateToFolders = d.navigateToFolders
+            )
+        }
+    }
+    if (editButtons) EditPlayerButtonsDialog(st.playerButtons, onSave = { list -> set { it.copy(playerButtons = list) } }) { editButtons = false }
+    }
+}
+
+/** page == SettingsPage.LYRICS */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage4(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var editUrl by remember { mutableStateOf(false) }
+    var rescanned by remember { mutableStateOf(false) }
+    NoteBlock(
+        "When Lyrics Swipe is enabled, swipe the album art up to show lyrics",
+        "Return from lyrics by swiping down or to the side",
+        "Pinch to zoom the lyrics text"
+    )
+    ChipRow("Lyrics Swipe Up", "Swipe action on the Player Screen cover", listOf("Disabled", "When local lyrics available", "Always"), st.lyricsSwipeUp) { v ->
+        set { it.copy(lyricsSwipeUp = v) }
+    }
+    NoteBlock("Local lyrics: the lyrics tag inside the file, or an .lrc file next to it")
+    ChipRow("Lyrics Button", "Button on the Player Screen cover", listOf("Disabled", "When local lyrics available", "Always"), st.lyricsButton) { v ->
+        set { it.copy(lyricsButton = v) }
+    }
+    Hint("Long press on the lyrics button always opens the preferred lyrics app")
+    ChipRow("Lyrics Item In The Track Menu", null, listOf("Open lyrics UI", "Open 3rd party app"), st.lyricsMenuItem) { v ->
+        set { it.copy(lyricsMenuItem = v) }
+    }
+    SwitchRow("Keep Screen On", "Keep the screen on while the lyrics are open", st.lyricsKeepScreenOn) { v -> set { it.copy(lyricsKeepScreenOn = v) } }
+    SliderRow(
+        "Lyrics Time Offset", "${st.lyricsOffsetMs} ms", st.lyricsOffsetMs.toFloat(), -5000f..5000f,
+        subtitle = "Applied to synced lyrics in addition to the offset tag"
+    ) { v -> set { it.copy(lyricsOffsetMs = ((v / 50).roundToInt() * 50)) } }
+    Hint("A positive value makes the lyrics text appear earlier, a negative value delays it")
+    ChipRow("Lyrics Size", "Pinch to zoom on the lyrics screen too", listOf("Small Font", "Default", "Large Font"), st.lyricsSize) { v ->
+        set { it.copy(lyricsSize = v) }
+    }
+    NoteBlock(
+        "PowerSound loads lyrics from the track tags or from the .lrc file",
+        "If no lyrics are found, the lyrics can be searched in the preferred lyrics app or in the browser"
+    )
+    ChoiceRow("Preferred Lyrics App", LYRICS_APPS, st.lyricsApp, subtitlePrefix = "App or site to search lyrics when none are found: ") { v ->
+        set { it.copy(lyricsApp = v) }
+    }
+    ActionRow(
+        "Custom URL", "For the Browser via custom URL\n${st.lyricsCustomUrl}",
+        enabled = st.lyricsApp == 1
+    ) { editUrl = true }
+    SectionLabel("Scanner")
+    ActionRow("Rescan Lyrics Tags", if (rescanned) "Done — lyrics will be read again" else "Read the lyrics of every track again (tags and .lrc files)") {
+        LyricsReader.clearCache(); rescanned = true
+    }
+    val allFiles = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
+    SwitchRow(
+        "Scan LRC Files",
+        "If enabled, PowerSound looks for .lrc files in the music folders with the same name as the track" +
+            if (!allFiles) "\nNeeds \"All files access\" — tap to allow" else "",
+        st.scanLrc
+    ) { v ->
+        set { it.copy(scanLrc = v) }
+        LyricsReader.clearCache()
+        if (v && !allFiles && Build.VERSION.SDK_INT >= 30) {
+            runCatching {
+                context.startActivity(
+                    Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+        }
+    }
+    SwitchRow("Always Use UTF-8", "If disabled, .lrc files that are not UTF-8 are read as Arabic (Windows-1256)", st.lyricsUtf8) { v ->
+        set { it.copy(lyricsUtf8 = v) }; LyricsReader.clearCache()
+    }
+    RestoreRow {
+        set {
+            it.copy(
+                lyricsSwipeUp = d.lyricsSwipeUp, lyricsButton = d.lyricsButton, lyricsMenuItem = d.lyricsMenuItem,
+                lyricsKeepScreenOn = d.lyricsKeepScreenOn, lyricsOffsetMs = d.lyricsOffsetMs, lyricsSize = d.lyricsSize,
+                lyricsApp = d.lyricsApp, lyricsCustomUrl = d.lyricsCustomUrl, scanLrc = d.scanLrc, lyricsUtf8 = d.lyricsUtf8
+            )
+        }
+    }
+    if (editUrl) TextInputDialog(
+        "Custom URL", st.lyricsCustomUrl,
+        "Use %ARTIST% and %TITLE% for the track's artist and title",
+        onSave = { url -> set { it.copy(lyricsCustomUrl = url.ifBlank { d.lyricsCustomUrl }) } }
+    ) { editUrl = false }
+    }
+}
+
+/** page == SettingsPage.NOTIFICATIONS */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage5(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    NoteBlock(
+        "Android 13 and newer draw the media notification themselves (colours from the album art, the seek bar and Play/Previous/Next)",
+        "PowerSound adds your chosen extra buttons to it"
+    )
+    PlainRow("Buttons", "Media action buttons") { onPage(SettingsPage.NOTIF_BUTTONS) }
+    SwitchRow("Navigate to the List", "Touching the notification opens the list the track is playing from", st.notifNavigateToList) { v ->
+        set { it.copy(notifNavigateToList = v) }
+    }
+    SectionLabel("Notification Keeping")
+    SwitchRow("Keep Notification", "The notification stays when playback ends by itself", st.keepNotification) { v ->
+        set { it.copy(keepNotification = v) }
+    }
+    NoteBlock(
+        "If disabled, the notification is removed when the list finishes playing",
+        "The notification can always be removed with the Close button or by stopping playback"
+    )
+    SwitchRow(
+        "Remove Notification on Disconnection",
+        "The notification is removed when the headset/Bluetooth disconnects and the player is paused",
+        st.removeNotifOnDisconnect
+    ) { v -> set { it.copy(removeNotifOnDisconnect = v) } }
+    RestoreRow {
+        set {
+            it.copy(
+                notifButtons = d.notifButtons, notifNavigateToList = d.notifNavigateToList,
+                keepNotification = d.keepNotification, removeNotifOnDisconnect = d.removeNotifOnDisconnect
+            )
+        }
+    }
+    }
+}
+
+/** page == SettingsPage.NOTIF_BUTTONS */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage6(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    NoteBlock(
+        "The media buttons are shared by all media controllers: the Android media notification, the lock screen, Android Auto, watches, etc.",
+        "The playback buttons (play/pause/previous/next) are fixed and can't be changed",
+        "The first two buttons appear in the media notification; the others usually only in other controllers (Android Auto)"
+    )
+    SectionLabel("Notification/Android Auto")
+    for (i in 0 until 6) {
+        if (i == 2) SectionLabel("Android Auto/Other")
+        ChipRow(
+            "Button ${i + 1}", if (i == 1) "\"Close\" pauses the player and removes the notification" else null,
+            NOTIF_ACTIONS, st.notifButtons.getOrElse(i) { 0 }
+        ) { v -> set { s -> s.copy(notifButtons = s.notifButtons.toMutableList().also { it[i] = v }) } }
+    }
+    RestoreRow { set { it.copy(notifButtons = d.notifButtons) } }
+    }
+}
+
+/** page == SettingsPage.ICON */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage7(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    NoteBlock(
+        "The icon may look different depending on your Android version, launcher and system settings",
+        "It may take a few seconds for the launcher to update the icon"
+    )
+    SectionLabel("Icons")
+    LauncherIcons.ALL.forEachIndexed { i, icon ->
+        val bmp = remember(icon.res) {
+            runCatching {
+                androidx.core.content.res.ResourcesCompat.getDrawable(context.resources, icon.res, context.theme)
+                    ?.toBitmap(144, 144)?.asImageBitmap()
+            }.getOrNull()
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable {
+                    set { it.copy(launcherIcon = i) }
+                    LauncherIcons.apply(context, i)
+                }
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = st.launcherIcon == i,
+                onClick = { set { it.copy(launcherIcon = i) }; LauncherIcons.apply(context, i) },
+                colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary, unselectedColor = sc.sub)
+            )
+            if (bmp != null) Image(bmp, contentDescription = null, modifier = Modifier.size(48.dp).clip(CircleShape))
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text(icon.title, color = sc.text, fontSize = 16.sp, fontFamily = sc.family, fontWeight = sc.titleWeight)
+                Text(icon.subtitle, color = sc.sub, fontSize = 12.sp, fontFamily = sc.family)
+            }
+        }
+    }
+    }
+}
+
+/** page == SettingsPage.LIST_UI */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage8(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    SwitchRow("Filename As Title", "Show the file name instead of the title tag in the lists", st.filenameAsTitle) { v -> set { it.copy(filenameAsTitle = v) } }
+    SwitchRow("Show Track Number", "Show the track number before the title in the lists", st.showTrackNumber) { v -> set { it.copy(showTrackNumber = v) } }
+    Hint("More list options (sorting, zoom) are in the ⋮ menu of each list")
+    RestoreRow { set { it.copy(filenameAsTitle = d.filenameAsTitle, showTrackNumber = d.showTrackNumber) } }
+    }
+}
+
+/** page == null */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage9(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    SettingsPage.values().filter { it.parent == null }.forEach { p -> NavRow(p.icon, p.color, p.title, p.subtitle) { onPage(p) } }
+    SectionLabel("Other")
+    NavRow(Icons.Rounded.Upload, Color(0xFF9A9AB0), "Export Settings/Data", "Save EQ, presets, playlists, bookmarks and settings to a file", onExport)
+    NavRow(Icons.Rounded.Download, Color(0xFF9A9AB0), "Import Settings/Data", "Restore from a file saved with Export", onImport)
+    }
+}
+
+/** page == SettingsPage.AUDIO */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage10(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    PlainRow("Audio Info", "Detailed info about the audio processing. Also available by long pressing the small info line on the Player Screen", onClick = onAudioInfo)
+    PlainRow("Crossfade, Fade, and Gapless", "Crossfade options, fade type and length, gapless") { onPage(SettingsPage.CROSSFADE) }
+    PlainRow("Replay Gain (RG)", "Enable RG, set source, preamp values") { onPage(SettingsPage.REPLAY_GAIN) }
+    PlainRow("Audio Focus", "Pause/Resume/Duck volume on calls/notifications/start") { onPage(SettingsPage.AUDIO_FOCUS) }
+    PlainRow("Equalizer", "Equalizer settings, number of bands, frequencies") { onPage(SettingsPage.EQ_SETTINGS) }
+    PlainRow("Resampler", "Resampling/dither settings") { onPage(SettingsPage.RESAMPLER) }
+    PlainRow("Audio Outputs", "Wired Headset, Speaker, Bluetooth, USB and other outputs") { onPage(SettingsPage.OUTPUTS) }
+    PlainRow("Bit Perfect", "64-bit audio pipeline, Perfect Bit Perfect") { onPage(SettingsPage.BIT_PERFECT) }
+    PlainRow("Advanced Tweaks", "Pause/resume on volume, MusicFX, presets reset") { onPage(SettingsPage.TWEAKS) }
+    }
+}
+
+/** page == SettingsPage.CROSSFADE */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage11(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    ChipRow(
+        "Auto-advance Fading", "Applied when the song changes automatically",
+        listOf("No fading", "Non-gapless tracks", "All songs", "Shuffled songs"), st.autoFade
+    ) { v -> set { it.copy(autoFade = v) } }
+    ChipRow(
+        "Manual Track Change Fading", "Applied when you change the song (next / previous)",
+        listOf("No fading", "Short crossfade", "Crossfade"), st.manualFade
+    ) { v -> set { it.copy(manualFade = v) } }
+    SliderRow(
+        "Crossfade Length", "%.1f s".format(st.crossfadeSec), st.crossfadeSec, 1f..12f,
+        enabled = st.autoFade != 0 || st.manualFade == 2,
+        subtitle = "How long the old and the new song overlap"
+    ) { v -> set { it.copy(crossfadeSec = (v * 2).roundToInt() / 2f) } }
+    NoteBlock(
+        "\"Non-gapless tracks\" keeps albums that play in order gapless and crossfades everything else",
+        "Perfect Bit Perfect disables all fading effects",
+        "Crossfade is skipped when the song is the last one (repeat \"song and stop\", sleep timer)"
+    )
+    SwitchRow("Fade Play/Pause/Stop", "Smooth volume fade instead of a hard stop", st.fadeOnPause) { v -> set { it.copy(fadeOnPause = v) } }
+    SliderRow("Fade Length", "${st.fadeMs} ms", st.fadeMs.toFloat(), 100f..1500f, enabled = st.fadeOnPause) { v ->
+        set { it.copy(fadeMs = ((v / 50).roundToInt() * 50)) }
+    }
+    SwitchRow("Fade on Seek", "A very short fade when you jump in the song, so there is no click", st.fadeOnSeek) { v -> set { it.copy(fadeOnSeek = v) } }
+    StepSliderRow(
+        "Silence Between Tracks", if (st.silenceMs == 0) "0 ms (gapless)" else "${st.silenceMs} ms",
+        st.silenceMs / 250, 0, 20, "None", "5 s"
+    ) { v -> set { it.copy(silenceMs = v * 250) } }
+    Hint("Gapless playback is always on when there is no silence and no crossfade. Silence turns crossfade off.")
+    RestoreRow {
+        set {
+            it.copy(
+                autoFade = d.autoFade, manualFade = d.manualFade, crossfadeSec = d.crossfadeSec, fadeOnPause = d.fadeOnPause,
+                fadeMs = d.fadeMs, fadeOnSeek = d.fadeOnSeek, silenceMs = d.silenceMs
+            )
+        }
+    }
+    }
+}
+
+/** page == SettingsPage.REPLAY_GAIN */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage12(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    ChipRow(
+        "Replay Gain", null,
+        listOf("Don't apply", "Apply gain", "Apply gain / prevent clipping according to the peak"), st.replayGain
+    ) { v -> set { it.copy(replayGain = v) } }
+    ChipRow("Source", null, listOf("Album", "Track"), st.rgSource) { v -> set { it.copy(rgSource = v) } }
+    KnobRow(
+        "RG preamp", null, "%+.1fdB".format(st.replayGainPreamp),
+        ((st.replayGainPreamp + 15) / 30).toFloat(), enabled = st.replayGain != 0,
+        onChange = { f -> set { it.copy(replayGainPreamp = ((f * 30 - 15) * 2).roundToInt() / 2.0) } },
+        onReset = { set { it.copy(replayGainPreamp = 0.0) } }
+    )
+    KnobRow(
+        "Preamp for songs without RG info", null, "%+.1fdB".format(st.replayGainNoTagDb),
+        ((st.replayGainNoTagDb + 15) / 30).toFloat(), enabled = st.replayGain != 0,
+        onChange = { f -> set { it.copy(replayGainNoTagDb = ((f * 30 - 15) * 2).roundToInt() / 2.0) } },
+        onReset = { set { it.copy(replayGainNoTagDb = 0.0) } }
+    )
+    Hint("Reads REPLAYGAIN_ALBUM/TRACK_GAIN and _PEAK tags from FLAC and MP3 files. Drag a knob up/down, double-tap to reset.")
+    RestoreRow {
+        set { it.copy(replayGain = d.replayGain, rgSource = d.rgSource, replayGainPreamp = d.replayGainPreamp, replayGainNoTagDb = d.replayGainNoTagDb) }
+    }
+    }
+}
+
+/** page == SettingsPage.AUDIO_FOCUS */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage13(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    SwitchRow("Resume After Call", "Resume playing on hang up (if paused by a call)", st.resumeAfterCall) { v -> set { it.copy(resumeAfterCall = v) } }
+    SwitchRow("Resume On Start", "Resume playing when PowerSound is started", st.resumeOnStart) { v -> set { it.copy(resumeOnStart = v) } }
+    SwitchRow(
+        "Resume On Reopen", "Also resume when PowerSound is already running and reopened" +
+            if (!st.resumeOnStart) " (needs Resume On Start)" else "",
+        st.resumeOnReopen
+    ) { v -> set { it.copy(resumeOnReopen = v) } }
+    SectionLabel("Audio Focus")
+    NoteBlock("Audio focus decides what happens when another app or a call needs the sound")
+    SwitchRow(
+        "Short Audio Focus Change / Calls",
+        "Temporarily pause on short audio focus changes (notifications, navigation, voice messages…). Calls always pause",
+        st.pauseOnShortFocus
+    ) { v -> set { it.copy(pauseOnShortFocus = v) } }
+    SwitchRow("Resume On Focus Gain", "Resume after getting the focus back. If disabled, the player stays paused", st.resumeOnFocusGain) { v ->
+        set { it.copy(resumeOnFocusGain = v) }
+    }
+    SwitchRow(
+        "Duck Volume", "When possible, lower the volume on short audio focus instead of pausing. Can be turned off per output (Audio Outputs → No Duck)",
+        st.duckVolume
+    ) { v -> set { it.copy(duckVolume = v) } }
+    SwitchRow("Permanent Audio Focus Change", "Pause when another player, game, etc. takes over the sound", st.pauseOnPermanentFocus) { v ->
+        set { it.copy(pauseOnPermanentFocus = v) }
+    }
+    RestoreRow {
+        set {
+            it.copy(
+                resumeAfterCall = d.resumeAfterCall, resumeOnStart = d.resumeOnStart, resumeOnReopen = d.resumeOnReopen,
+                pauseOnShortFocus = d.pauseOnShortFocus, resumeOnFocusGain = d.resumeOnFocusGain,
+                duckVolume = d.duckVolume, pauseOnPermanentFocus = d.pauseOnPermanentFocus
+            )
+        }
+    }
+    }
+}
+
+/** page == SettingsPage.EQ_SETTINGS */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage14(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    val eq by com.powersound.player.audio.AudioEngine.settings.collectAsState()
+    var confirmRestore by remember { mutableStateOf(false) }
+    NoteBlock(
+        "Depending on the loaded preset, the equalizer is in Graphic or Parametric mode",
+        "Graphic mode: 5 to 32 bands spread over the whole range",
+        "Parametric mode (e.g. AutoEq presets): every band has its own frequency, gain, Q and type"
+    )
+    PlainRow("Graphic Equalizer Bands", "${eq.bands.size} bands • set number of bands, frequencies") { onPage(SettingsPage.EQ_BANDS) }
+    PlainRow("Tone", "Set Bass/Treble frequencies and Q factors") { onPage(SettingsPage.TONE) }
+    ChipRow("Equalizer Values", null, listOf("Hidden", "dB", "%"), st.eqValues) { v -> set { it.copy(eqValues = v) } }
+    ChipRow("Tone Values", null, listOf("Hidden", "dB", "%"), st.toneValues) { v -> set { it.copy(toneValues = v) } }
+    SwitchRow("Auto Save", "Changes are saved into the loaded user preset", st.eqAutoSave) { v -> set { it.copy(eqAutoSave = v) } }
+    SwitchRow(
+        "Smooth Equalizer/Tone Gains", "Automatically reduce the volume by the biggest boost so the equalizer/tone never overloads",
+        eq.autoHeadroom
+    ) { v -> com.powersound.player.audio.AudioEngine.update { it.copy(autoHeadroom = v) } }
+    PlainRow("Import AutoEq Presets", "Import \"ParametricEQ.txt\" files from the AutoEq project (e.g. for your earbuds)", onClick = onImportAutoEq)
+    PlainRow("Restore Equalizer Presets", "Imported AutoEq presets are removed, built-in presets stay") { confirmRestore = true }
+    RestoreRow {
+        set {
+            it.copy(
+                eqValues = d.eqValues, toneValues = d.toneValues, eqAutoSave = d.eqAutoSave, eqBandCount = d.eqBandCount,
+                eqCustomBands = d.eqCustomBands, eqCustomCount = d.eqCustomCount, eqFirstFreq = d.eqFirstFreq, eqLastFreq = d.eqLastFreq
+            )
+        }
+        com.powersound.player.audio.AudioEngine.update { it.copy(autoHeadroom = true) }
+    }
+    if (confirmRestore) ConfirmDialog(
+        "Restore Equalizer Presets", "Imported AutoEq presets will be removed.",
+        onOk = { com.powersound.player.audio.AudioEngine.removeAutoEqPresets() }
+    ) { confirmRestore = false }
+    }
+}
+
+/** page == SettingsPage.EQ_BANDS */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage15(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    val counts = listOf(5, 10, 12, 16, 24, 31)
+    ChipRow(
+        "Number of Bands", "Predefined number of bands, including the recommended band spread",
+        listOf("5", "10 (ISO)", "12", "16", "24", "31 (ISO)"), if (st.eqCustomBands) -1 else counts.indexOf(st.eqBandCount)
+    ) { i -> set { it.copy(eqBandCount = counts[i], eqCustomBands = false) } }
+    SectionLabel("Advanced")
+    SwitchRow("Enable Custom Bands", "Your own number of bands and frequency range", st.eqCustomBands) { v -> set { it.copy(eqCustomBands = v) } }
+    StepSliderRow("Custom Number of Bands", "${st.eqCustomCount}", st.eqCustomCount, 5, 32, "5", "32", enabled = st.eqCustomBands) { v ->
+        set { it.copy(eqCustomCount = v) }
+    }
+    val firsts = listOf(20, 25, 31, 40, 50, 63, 80, 100)
+    StepSliderRow("First Frequency", "${st.eqFirstFreq} Hz", firsts.indexOf(st.eqFirstFreq).coerceAtLeast(0), 0, firsts.lastIndex, "20 Hz", "100 Hz", enabled = st.eqCustomBands) { i ->
+        set { it.copy(eqFirstFreq = firsts[i]) }
+    }
+    val lasts = listOf(8000, 10000, 12000, 14000, 16000, 18000, 20000)
+    StepSliderRow("Last Frequency", "%.1f kHz".format(st.eqLastFreq / 1000.0), lasts.indexOf(st.eqLastFreq).coerceAtLeast(0), 0, lasts.lastIndex, "8 kHz", "20 kHz", enabled = st.eqCustomBands) { i ->
+        set { it.copy(eqLastFreq = lasts[i]) }
+    }
+    Hint("Changing the bands keeps your current curve as well as possible. Tap a frequency on the Equalizer to change one band.")
+    }
+}
+
+/** page == SettingsPage.TONE */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage16(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    val eq by com.powersound.player.audio.AudioEngine.settings.collectAsState()
+    fun tone(change: (com.powersound.player.audio.EqSettings) -> com.powersound.player.audio.EqSettings) = com.powersound.player.audio.AudioEngine.update(change)
+    val bassFreqs = listOf(40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0, 150.0, 200.0, 250.0, 300.0)
+    StepSliderRow(
+        "Bass Frequency", "${eq.bassFreq.roundToInt()} Hz", bassFreqs.indexOfFirst { it >= eq.bassFreq }.coerceAtLeast(0), 0, bassFreqs.lastIndex, "40 Hz", "300 Hz"
+    ) { i -> tone { it.copy(bassFreq = bassFreqs[i]) } }
+    SliderRow("Bass Q", "%.2f".format(eq.bassQ), eq.bassQ.toFloat(), 0.3f..2f) { v -> tone { it.copy(bassQ = (v * 20).roundToInt() / 20.0) } }
+    val trebleFreqs = listOf(3000.0, 4000.0, 5000.0, 6000.0, 7000.0, 8000.0, 10000.0, 12000.0, 14000.0, 16000.0)
+    StepSliderRow(
+        "Treble Frequency", "%.1f kHz".format(eq.trebleFreq / 1000), trebleFreqs.indexOfFirst { it >= eq.trebleFreq }.coerceAtLeast(0), 0, trebleFreqs.lastIndex, "3 kHz", "16 kHz"
+    ) { i -> tone { it.copy(trebleFreq = trebleFreqs[i]) } }
+    SliderRow("Treble Q", "%.2f".format(eq.trebleQ), eq.trebleQ.toFloat(), 0.3f..2f) { v -> tone { it.copy(trebleQ = (v * 20).roundToInt() / 20.0) } }
+    Hint("Bass and Treble are shelf filters controlled by the knobs on the Equalizer.")
+    RestoreRow {
+        tone {
+            it.copy(
+                bassFreq = com.powersound.player.audio.BASS_FREQ, bassQ = com.powersound.player.audio.SHELF_Q,
+                trebleFreq = com.powersound.player.audio.TREBLE_FREQ, trebleQ = com.powersound.player.audio.SHELF_Q
+            )
+        }
+    }
+    }
+}
+
+/** page == SettingsPage.RESAMPLER */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage17(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    NoteBlock(
+        "PowerSound resamples only when an output has a fixed Sample Rate (Audio Outputs → output → Sample Rate)",
+        "Use \"Follow Track\" there to avoid resampling completely"
+    )
+    ChipRow("Resampler Type", null, listOf("High quality", "Very high quality"), st.resamplerType) { v -> set { it.copy(resamplerType = v) } }
+    KnobRow(
+        "Resampler Cutoff Frequency Ratio", "Higher keeps more treble, lower keeps the filter cleaner",
+        "%.1f%%".format(st.resamplerCutoff * 100), (st.resamplerCutoff - 0.90f) / 0.09f, bipolar = false,
+        onChange = { f -> set { it.copy(resamplerCutoff = (0.90f + f * 0.09f).let { v -> (v * 1000).roundToInt() / 1000f }) } },
+        onReset = { set { it.copy(resamplerCutoff = d.resamplerCutoff) } }
+    )
+    ChoiceRow("Dither", com.powersound.player.audio.Ditherer.NAMES, st.dither) { v -> set { it.copy(dither = v) } }
+    Hint("Dither is used whenever the 64-bit processing is reduced to the 16-bit output. Triangular is a safe choice; noise shaping moves the noise to frequencies the ear hears less.")
+    RestoreRow { set { it.copy(resamplerType = d.resamplerType, resamplerCutoff = d.resamplerCutoff, dither = d.dither) } }
+    }
+}
+
+/** page == SettingsPage.OUTPUTS */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage18(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    NoteBlock(
+        "Every output has its own settings: equalizer preset, sample rate, no equalizer, no ducking and visualization/lyrics delay",
+        "Now playing on: ${com.powersound.player.audio.AudioEngine.currentOutput}"
+    )
+    OUTPUT_PAGES.forEach { (key, p) ->
+        val active = com.powersound.player.audio.AudioEngine.outputKey == key
+        PlainRow(p.title, outputSummary(st, key) + if (active) "\nActive" else "") { onPage(p) }
+    }
+    RestoreRow {
+        set { it.copy(outEqPreset = d.outEqPreset, outNoEq = d.outNoEq, outNoDuck = d.outNoDuck, outDelayMs = d.outDelayMs, outRate = d.outRate) }
+    }
+    }
+}
+
+/** page in OUTPUT_PAGES.map { it.second } */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage19(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    val key = OUTPUT_PAGES.first { it.second == page }.first
+    OutputPage(st, key, ::set)
+    RestoreRow {
+        set {
+            it.copy(
+                outEqPreset = it.outEqPreset - key, outNoEq = it.outNoEq - key, outNoDuck = it.outNoDuck - key,
+                outDelayMs = (it.outDelayMs - key).let { m -> val dv = d.outDelayMs[key]; if (dv != null) m + (key to dv) else m },
+                outRate = it.outRate - key
+            )
+        }
+    }
+    }
+}
+
+/** page == SettingsPage.BIT_PERFECT */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage20(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    NoteBlock(
+        "PowerSound always processes in 64-bit floating point: equalizer, tone, effects, reverb and resampler",
+        "When nothing is switched on, the decoded audio goes to the output untouched"
+    )
+    SwitchRow(
+        "Perfect Bit Perfect",
+        "Direct decoder-to-output path: no Equalizer, no Tone, no effects, no Replay Gain, no resampling, no fades",
+        st.perfectBitPerfect
+    ) { v -> set { it.copy(perfectBitPerfect = v) } }
+    NoteBlock("Android still mixes the sound for the Bluetooth codec or the speaker; use a USB DAC for the cleanest path")
+    RestoreRow { set { it.copy(perfectBitPerfect = d.perfectBitPerfect) } }
+    }
+}
+
+/** page == SettingsPage.TWEAKS */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage21(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var confirmReverb by remember { mutableStateOf(false) }
+    SectionLabel("Volume")
+    SwitchRow("Pause/Resume on Volume", "Pause when the volume is set to 0, resume when it is turned up again", st.pauseOnVolumeZero) { v ->
+        set { it.copy(pauseOnVolumeZero = v) }
+    }
+    SectionLabel("Other")
+    SwitchRow(
+        "MusicFX", "Let Android's audio effects (and equalizer apps) work with PowerSound. Adds \"MusicFX\" to the ⋮ menu of the Equalizer",
+        st.musicFx
+    ) { v -> set { it.copy(musicFx = v) } }
+    PlainRow("Restore Reverb Presets", "Your saved reverb presets are removed, built-in ones stay") { confirmReverb = true }
+    RestoreRow { set { it.copy(pauseOnVolumeZero = d.pauseOnVolumeZero, musicFx = d.musicFx) } }
+    if (confirmReverb) ConfirmDialog(
+        "Restore Reverb Presets", "Your saved reverb presets will be removed.",
+        onOk = { com.powersound.player.audio.AudioEngine.removeCustomReverbs() }
+    ) { confirmReverb = false }
+    }
+}
+
+/** page == SettingsPage.VISUALIZATION */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage22(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    SwitchRow(
+        "Visualization On Player Screen",
+        "Visualization can be switched on with the Player Screen 🎵 button. It is shown when music is playing",
+        st.vizOnPlayer
+    ) { v -> set { it.copy(vizOnPlayer = v) } }
+    ChipRow("Equalizer Screen Spectrum", null, listOf("Disabled", "Classic", "Rounded"), st.eqSpectrum) { v -> set { it.copy(eqSpectrum = v) } }
+    SwitchRow(
+        "Visualization in Library",
+        "Visible behind the lists when visualization on the Player Screen is on. Some presets may make the lists harder to read",
+        st.vizInLibrary
+    ) { v -> set { it.copy(vizInLibrary = v) } }
+    val secs = listOf(0, 5, 10, 15, 20, 30, 45, 60, 90, 120)
+    StepSliderRow(
+        "Preset Duration", if (st.vizPresetSeconds == 0) "Never change automatically" else "Change each: ${st.vizPresetSeconds} s",
+        secs.indexOf(st.vizPresetSeconds).coerceAtLeast(0), 0, secs.lastIndex, "Never", "2 min"
+    ) { i -> set { it.copy(vizPresetSeconds = secs[i]) } }
+    SliderRow("Top Visualization Panel Opacity", "${(st.vizPanelOpacity * 100).roundToInt()}%", st.vizPanelOpacity, 0f..1f) { v ->
+        set { it.copy(vizPanelOpacity = (v * 20).roundToInt() / 20f) }
+    }
+    SliderRow("Faded Controls Opacity", "${(st.vizFadedOpacity * 100).roundToInt()}%", st.vizFadedOpacity, 0f..1f) { v ->
+        set { it.copy(vizFadedOpacity = (v * 20).roundToInt() / 20f) }
+    }
+    StepSliderRow("UI Timeout", "Time to show the controls during active visualization: ${st.vizUiTimeoutMs} ms", st.vizUiTimeoutMs / 500, 1, 10, "0.5 s", "5 s") { v ->
+        set { it.copy(vizUiTimeoutMs = v * 500) }
+    }
+    SwitchRow("Visible Album Art", "Keep the album art visible during visualization", st.vizAlbumArt) { v -> set { it.copy(vizAlbumArt = v) } }
+    SwitchRow("Ignore Touch", "In Fade Controls mode the first touch only shows the controls", st.vizIgnoreTouch) { v -> set { it.copy(vizIgnoreTouch = v) } }
+    SliderRow(
+        "Track Opacity", "${(st.vizTrackOpacity * 100).roundToInt()}%", st.vizTrackOpacity, 0f..1f,
+        subtitle = "Track labels, rating, menu and album art (if visible) opacity"
+    ) { v -> set { it.copy(vizTrackOpacity = (v * 20).roundToInt() / 20f) } }
+    SwitchRow("Hide System Bars For Full Screen", "Hide the status bar and navigation completely in Full Screen mode", st.vizHideBars) { v -> set { it.copy(vizHideBars = v) } }
+    SwitchRow(
+        "Scaled Bars For Faded Controls",
+        "Bars visualizations fit the album art area in Fade Controls mode. If disabled, bars are always full-screen",
+        st.vizScaledBars
+    ) { v -> set { it.copy(vizScaledBars = v) } }
+    SwitchRow("HD", "Twice as many bars, uses a bit more battery", st.vizHd) { v -> set { it.copy(vizHd = v) } }
+    SwitchRow("Crop Aspect", "Keep round / wave visualizations square instead of stretching them", st.vizCrop) { v -> set { it.copy(vizCrop = v) } }
+    SwitchRow("Force 30 FPS", "Reduce the frame rate to 30 frames per second (saves battery)", st.viz30fps) { v -> set { it.copy(viz30fps = v) } }
+    NoteBlock("Visualization Delay: the extra delay that keeps the visualization and lyrics in time with the sound is set for each output (Audio → Audio Outputs)")
+    SectionLabel("Presets")
+    Hint("Built-in: ${VizPreset.values().size}. Switched-off presets are skipped by the ◀ ▶ buttons and Preset Duration.")
+    VizPreset.values().forEach { p ->
+        SwitchRow(p.label, null, p.name !in st.vizDisabledPresets) { on ->
+            set {
+                val off = if (on) it.vizDisabledPresets - p.name else it.vizDisabledPresets + p.name
+                // keep at least one preset on
+                it.copy(vizDisabledPresets = if (off.size >= VizPreset.values().size) it.vizDisabledPresets else off)
+            }
+        }
+    }
+    RestoreRow {
+        set {
+            it.copy(
+                vizOnPlayer = d.vizOnPlayer, eqSpectrum = d.eqSpectrum, vizInLibrary = d.vizInLibrary, vizPresetSeconds = d.vizPresetSeconds,
+                vizPanelOpacity = d.vizPanelOpacity, vizFadedOpacity = d.vizFadedOpacity, vizUiTimeoutMs = d.vizUiTimeoutMs,
+                vizAlbumArt = d.vizAlbumArt, vizIgnoreTouch = d.vizIgnoreTouch, vizTrackOpacity = d.vizTrackOpacity,
+                vizHideBars = d.vizHideBars, vizScaledBars = d.vizScaledBars, vizHd = d.vizHd, vizCrop = d.vizCrop,
+                viz30fps = d.viz30fps, vizDisabledPresets = d.vizDisabledPresets
+            )
+        }
+    }
+    }
+}
+
+/** page == SettingsPage.BACKGROUND */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage23(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var pickColor by remember { mutableStateOf(false) }
+    SwitchRow("Enable Blurred Backgrounds", "The current album art, blurred, behind the screens", st.bgEnabled) { v -> set { it.copy(bgEnabled = v) } }
+    SwitchRow("List Background", "Also behind the library lists", st.bgList) { v -> set { it.copy(bgList = v) } }
+    SwitchRow("Lyrics Background", "Also behind the lyrics", st.bgLyrics) { v -> set { it.copy(bgLyrics = v) } }
+    NoteBlock("Lyrics and list backgrounds are dimmed a bit more to keep the text readable")
+    StepSliderRow("Background Gradient", "${st.bgGradient}", st.bgGradient, 0, 8, "None", "Max") { v -> set { it.copy(bgGradient = v) } }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable { pickColor = true }
+            .padding(horizontal = 18.dp, vertical = 10.dp)
+    ) {
+        Text("Background Gradient Color", color = sc.text, fontSize = 18.sp, fontFamily = sc.family, fontWeight = sc.titleWeight)
+        Text("#%06X".format(st.bgGradientColor and 0xFFFFFF), color = sc.sub, fontSize = 13.sp, fontFamily = sc.family)
+        Spacer(Modifier.height(6.dp))
+        Box(
+            Modifier
+                .size(width = 46.dp, height = 24.dp)
+                .clip(RoundedCornerShape(50))
+                .background(Color(st.bgGradientColor))
+                .border(1.dp, sc.chipBorder, RoundedCornerShape(50))
+        )
+    }
+    SwitchRow("Background Gradient For Lists", "Also apply the gradient to the list background", st.bgGradientLists) { v -> set { it.copy(bgGradientLists = v) } }
+    StepSliderRow("Background Blur", "${st.bgBlurStep}", st.bgBlurStep, 0, 10, "Less", "More", enabled = st.bgEnabled) { v -> set { it.copy(bgBlurStep = v) } }
+    StepSliderRow("Background Details", "${st.bgDetails}", st.bgDetails, 0, 10, "Solid Color", "Detailed", enabled = st.bgEnabled) { v -> set { it.copy(bgDetails = v) } }
+    SliderRow("Background Intensity", "${(st.bgIntensity * 100).roundToInt()}%", st.bgIntensity, 0f..2f, enabled = st.bgEnabled) { v ->
+        set { it.copy(bgIntensity = (v * 20).roundToInt() / 20f) }
+    }
+    SliderRow("Background Saturation", "${(st.bgSaturation * 100).roundToInt()}%", st.bgSaturation, 0f..3f, enabled = st.bgEnabled) { v ->
+        set { it.copy(bgSaturation = (v * 20).roundToInt() / 20f) }
+    }
+    RestoreRow {
+        set {
+            it.copy(
+                bgEnabled = d.bgEnabled, bgList = d.bgList, bgLyrics = d.bgLyrics, bgGradient = d.bgGradient,
+                bgGradientColor = d.bgGradientColor, bgGradientLists = d.bgGradientLists, bgBlurStep = d.bgBlurStep,
+                bgDetails = d.bgDetails, bgIntensity = d.bgIntensity, bgSaturation = d.bgSaturation
+            )
+        }
+    }
+    if (pickColor) ColorPickerDialog(Color(st.bgGradientColor), onPick = { c -> set { it.copy(bgGradientColor = c.toArgb()) } }) { pickColor = false }
+    }
+}
+
+/** page == SettingsPage.ALBUM_ART */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage24(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var confirm by remember { mutableStateOf(0) } // 1 reset negative, 2 delete cache
+    SectionLabel("Download")
+    SwitchRow("Download Album Art", "Automatically search and download missing album art (iTunes)", st.artDownload) { v -> set { it.copy(artDownload = v) } }
+    SwitchRow(
+        "Download Artist Images", "For Artists, Album Artists and Composers (Deezer). If disabled, the album art is used",
+        st.artDownloadArtist
+    ) { v -> set { it.copy(artDownloadArtist = v) } }
+    SwitchRow("High Resolution", "Higher downloaded image resolution, uses more storage and data", st.artHighRes) { v -> set { it.copy(artHighRes = v) } }
+    SwitchRow("Download Only On Wi-Fi", "Images are downloaded only when Wi-Fi is connected", st.artWifiOnly) { v -> set { it.copy(artWifiOnly = v) } }
+    SwitchRow("Also Search By Title/Filename", "Search for album art even if the album tag is missing", st.artSearchTitle) { v -> set { it.copy(artSearchTitle = v) } }
+    SwitchRow(
+        "Prefer Downloaded Album Art", "Prefer downloaded album art over the embedded picture and Cover.jpg/Folder.jpg",
+        st.artPreferDownloaded
+    ) { v -> set { it.copy(artPreferDownloaded = v) }; ArtworkLoader.clear() }
+    PlainRow("Reset Negative Status", "Clear the stored \"not found\" status of album/artist images") { confirm = 1 }
+    PlainRow("Delete Cache", "Downloaded images and the image cache will be deleted") { confirm = 2 }
+    SectionLabel("Advanced Tweaks")
+    SwitchRow("Force Default Image", "Always show the default image instead of any album art", st.artForceDefault) { v -> set { it.copy(artForceDefault = v) }; ArtworkLoader.clear() }
+    SwitchRow("Use 24-bit RGB", "Higher colour quality for album art. Needs 2x more memory per image", st.art24bit) { v -> set { it.copy(art24bit = v) }; ArtworkLoader.clear() }
+    SwitchRow("Increase Resolution", "Sharper album art on the Player Screen. Uses more memory", st.artHighQuality) { v -> set { it.copy(artHighQuality = v) } }
+    ChipRow(
+        "Aspect Ratio", "Keep album art aspect ratio as is. Tall images won't fill some places fully",
+        listOf("Default", "Keep Aspect Ratio", "Square"), st.artAspect
+    ) { v -> set { it.copy(artAspect = v) } }
+    NoteBlock("Cover.jpg / Folder.jpg next to the songs are read when \"All files access\" is allowed (Look and Feel → Lyrics → Scan LRC Files asks for it)")
+    RestoreRow {
+        set {
+            it.copy(
+                artDownload = d.artDownload, artDownloadArtist = d.artDownloadArtist, artHighRes = d.artHighRes,
+                artWifiOnly = d.artWifiOnly, artSearchTitle = d.artSearchTitle, artPreferDownloaded = d.artPreferDownloaded,
+                artForceDefault = d.artForceDefault, art24bit = d.art24bit, artHighQuality = d.artHighQuality, artAspect = d.artAspect
+            )
+        }
+        ArtworkLoader.clear()
+    }
+    if (confirm == 1) ConfirmDialog(
+        "Reset Negative Status", "PowerSound will search again for album/artist images that were not found before.",
+        onOk = { ArtworkLoader.resetNegative(context) }
+    ) { confirm = 0 }
+    if (confirm == 2) ConfirmDialog(
+        "Delete Cache", "Downloaded images and the image cache will be deleted.",
+        onOk = { ArtworkLoader.deleteCache(context) }
+    ) { confirm = 0 }
+    }
+}
+
+/** page == SettingsPage.LIBRARY */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage25(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var pickFolders by remember { mutableStateOf(false) }
+    var pickCategories by remember { mutableStateOf(false) }
+    ActionRow("Rescan library", "Look for new, changed and deleted songs", onClick = onRescan)
+    ActionRow(
+        "Music folders",
+        if (st.excludedFolders.isEmpty()) "All folders are included" else "${st.excludedFolders.size} folder(s) excluded"
+    ) { pickFolders = true }
+    ChoiceRow(
+        "Skip short files", listOf("Off", "Shorter than 10 s", "Shorter than 30 s", "Shorter than 1 min"),
+        listOf(0, 10, 30, 60).indexOf(st.minDurationSec).coerceAtLeast(0)
+    ) { i -> set { it.copy(minDurationSec = listOf(0, 10, 30, 60)[i]) } }
+    ChoiceRow(
+        "Long songs", listOf("5 min or more", "10 min or more", "15 min or more", "20 min or more", "30 min or more"),
+        listOf(5, 10, 15, 20, 30).indexOf(st.longTrackMin).coerceAtLeast(0)
+    ) { i -> set { it.copy(longTrackMin = listOf(5, 10, 15, 20, 30)[i]) } }
+    ActionRow(
+        "Library categories",
+        if (st.hiddenCategories.isEmpty()) "All categories are shown" else "${st.hiddenCategories.size} hidden"
+    ) { pickCategories = true }
+    PlainRow("List UI", "Filename as title, track numbers") { onPage(SettingsPage.LIST_UI) }
+
+    if (pickFolders) {
+        CheckListDialog(
+            title = "Music folders",
+            items = allFolders,
+            checked = allFolders.filter { it !in st.excludedFolders }.toSet(),
+            onDone = { kept -> set { it.copy(excludedFolders = allFolders.filter { f -> f !in kept }.toSet()) } },
+            onDismiss = { pickFolders = false }
+        )
+    }
+    if (pickCategories) {
+        val names = Category.values().map { it.name }
+        CheckListDialog(
+            title = "Show on the Library page",
+            items = names,
+            labels = Category.values().map { it.label },
+            checked = names.filter { it !in st.hiddenCategories }.toSet(),
+            onDone = { shown -> set { it.copy(hiddenCategories = names.filter { n -> n !in shown }.toSet()) } },
+            onDismiss = { pickCategories = false }
+        )
+    }
+    }
+}
+
+/** page == SettingsPage.HEADSET */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage26(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    SwitchRow("Pause when headphones disconnect", "Bluetooth or wired", st.pauseOnDisconnect) { v -> set { it.copy(pauseOnDisconnect = v) } }
+    SwitchRow("Resume on Bluetooth connection", "Continue playing when Bluetooth earbuds connect", st.resumeOnBluetooth) { v -> set { it.copy(resumeOnBluetooth = v) } }
+    SwitchRow("Resume on wired headphones", "Continue playing when headphones are plugged in", st.resumeOnWired) { v -> set { it.copy(resumeOnWired = v) } }
+    Hint("Earbud buttons work through Android's media controls: tap = play/pause, and next/previous where your earbuds support it.")
+    }
+}
+
+/** page == SettingsPage.LOCK_SCREEN */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage27(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    Hint(
+        "The lock screen and the notification show Android's media controls for PowerSound: " +
+            "cover, title, artist, a seek bar and play / pause / previous / next. They always follow the song that is playing."
+    )
+    Hint("The extra buttons of these controls are set in Look and Feel → Notifications → Buttons.")
+    }
+}
+
+/** page == SettingsPage.MISC */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage28(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var showLog by remember { mutableStateOf(false) }
+    SwitchRow("Remember position in long songs", "Songs of 10 minutes or more continue where you stopped", st.rememberPosition) { v -> set { it.copy(rememberPosition = v) } }
+    SwitchRow("Stop music when the app is swiped away", "From the recent apps screen", st.stopOnSwipeAway) { v -> set { it.copy(stopOnSwipeAway = v) } }
+    SwitchRow("Ask before deleting files", "Show a confirmation first", st.confirmDelete) { v -> set { it.copy(confirmDelete = v) } }
+    SwitchRow("Keep an error log", "Saves crash details on the phone", st.keepCrashLog) { v -> set { it.copy(keepCrashLog = v) } }
+    ActionRow("View error log", "See, share or clear the last crash") { showLog = true }
+    if (showLog) ErrorLogDialog { showLog = false }
+    }
+}
+
+/** page == SettingsPage.ABOUT */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage29(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val sc = LocalSc.current
+    val context = LocalContext.current
+    val allFolders = args.allFolders
+    val onPage = args.onPage
+    val onRescan = args.onRescan
+    val onAudioInfo = args.onAudioInfo
+    val onImportAutoEq = args.onImportAutoEq
+    val onCheckUpdate = args.onCheckUpdate
+    val onChangelog = args.onChangelog
+    val onExport = args.onExport
+    val onImport = args.onImport
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    val version = remember {
+        runCatching {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: ""
+    }
+    Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { PowerSoundLogo() }
+    Hint("PowerSound Player $version")
+    ActionRow("Check for updates", "Look for a newer version on GitHub", onClick = onCheckUpdate)
+    ActionRow("Changelog", "What changed in each version", onClick = onChangelog)
     }
 }
