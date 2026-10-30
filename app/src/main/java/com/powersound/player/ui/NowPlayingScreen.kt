@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -712,23 +713,79 @@ fun NowPlayingScreen(
                 }
             }
 
-            Spacer(Modifier.weight(1f))
-
-            // ---- transport over the waveform; long press anywhere here to scrub ----
+            // ---- seek bar: in the free space above the buttons, so it can be tapped and dragged directly ----
             val pos by position.collectAsState()
             val duration = pos.durationMs.coerceAtLeast(1L)
             val fraction = (pos.positionMs.toFloat() / duration).coerceIn(0f, 1f)
             val durationNow by rememberUpdatedState(duration)
+            var dragFrac by remember { mutableStateOf<Float?>(null) }
+            val dragging = dragFrac
+            val shownFrac = if (scrubbing) scrubFrac else dragging ?: fraction
+            val simple = st.seekbarStyle == 2
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                if (simple) {
+                    // Simple Seekbar: a thin line
+                    SimpleSeekBar(
+                        fraction = shownFrac,
+                        onSeek = { f -> onSeek((f * duration).toLong()) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(28.dp)
+                    )
+                } else {
+                    WaveSeekBar(
+                        peaks = peaks,
+                        fraction = shownFrac,
+                        cursor = if (scrubbing) scrubFrac else null,
+                        onDrag = { f -> dragFrac = f },
+                        onSeek = { f ->
+                            dragFrac = null
+                            onSeek((f * duration).toLong())
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                            .heightIn(max = 104.dp)
+                    )
+                }
+            }
+
+            // elapsed / total time right under the seek bar
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                val shownMs = when {
+                    scrubbing -> (scrubFrac * duration).toLong()
+                    dragging != null -> (dragging * duration).toLong()
+                    else -> pos.positionMs
+                }
+                // long press the elapsed time → back to 0:00
+                TimeChip(
+                    formatTime(shownMs), big = scrubbing || dragging != null,
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onSeek(0L)
+                        showToast("Back to 0:00", "Long press the elapsed time")
+                    }
+                )
+                Spacer(Modifier.weight(1f))
+                TimeChip(formatTime(pos.durationMs))
+            }
+
+            // ---- transport buttons; long press the space between them to scrub ----
             var rowBounds by remember { mutableStateOf(Rect.Zero) }
             val edgeButton = with(androidx.compose.ui.platform.LocalDensity.current) { 54.dp.toPx() }
-            val simple = st.seekbarStyle == 2
             val showPro = st.proButtons || simple
             val longTrack = pos.durationMs >= st.longTrackMin * 60_000L
             val proSeeks = st.proRewindLong && longTrack
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
+                    .padding(top = 6.dp)
+                    .height(92.dp)
                     .pointerInput(Unit) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -768,29 +825,8 @@ fun NowPlayingScreen(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                if (simple) {
-                    // Simple Seekbar: a thin line above the buttons
-                    SimpleSeekBar(
-                        fraction = if (scrubbing) scrubFrac else fraction,
-                        onSeek = { f -> onSeek((f * duration).toLong()) },
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .height(28.dp)
-                    )
-                } else {
-                    WaveSeekBar(
-                        peaks = peaks,
-                        fraction = if (scrubbing) scrubFrac else fraction,
-                        cursor = if (scrubbing) scrubFrac else null,
-                        onDrag = {},
-                        onSeek = { f -> onSeek((f * duration).toLong()) },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
                 Row(
                     Modifier
-                        .then(if (simple) Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp) else Modifier)
                         .alpha(buttonsAlpha)
                         .onGloballyPositioned { rowBounds = it.boundsInParent() },
                     verticalAlignment = Alignment.CenterVertically,
@@ -832,20 +868,6 @@ fun NowPlayingScreen(
                         showToast(if (nextCat()) "Next category" else "No other category", "Long press ⏮ / ⏭ to change category")
                     })
                 }
-            }
-
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                // long press the elapsed time → back to 0:00
-                TimeChip(
-                    formatTime(if (scrubbing) (scrubFrac * duration).toLong() else pos.positionMs), big = scrubbing,
-                    onLongClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onSeek(0L)
-                        showToast("Back to 0:00", "Long press the elapsed time")
-                    }
-                )
-                Spacer(Modifier.weight(1f))
-                TimeChip(formatTime(pos.durationMs))
             }
 
             // tap = cycle what this line shows, long press = Audio Info
@@ -946,7 +968,7 @@ fun NowPlayingScreen(
                 title = "Player Screen",
                 text = "Swipe the cover ◀ ▶ to change tracks, swipe further to change category. " +
                     "Swipe down or tap the cover for the track's list. Swipe up for lyrics. Long press the cover for the track menu. " +
-                    "Long press the progress area to seek. Long press ⏮ ⏭ for previous / next category. " +
+                    "Tap or drag the seek bar above the buttons to seek (or long press between the buttons). Long press ⏮ ⏭ for previous / next category. " +
                     "Long press the empty space between the small buttons to edit them.",
                 onClose = { HintStore.dismiss("player") },
                 modifier = Modifier
