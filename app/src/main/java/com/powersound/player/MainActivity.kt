@@ -229,29 +229,26 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     val update by vm.update.collectAsStateWithLifecycle()
 
     // Settings → Look and Feel → Start at Library (off: the app opens on the Player Screen)
-    val ui = remember { AppUi() }
-    val showNowPlayingState = rememberSaveable { mutableStateOf(!com.powersound.player.data.SettingsStore.value.startAtLibrary) }
-    var showNowPlaying by showNowPlayingState
-    var showMenu by ui::showMenu
-    var showQueue by ui::showQueue
-    var showSleep by ui::showSleep
-    var songMenu by ui::songMenu
-    var songMenuInfo by ui::songMenuInfo
-    var lyricsFor by ui::lyricsFor
-    var tagsFor by ui::tagsFor
-    var artFor by ui::artFor
-    var showAudioInfo by ui::showAudioInfo
-    var showRepeatMenu by ui::showRepeatMenu
-    var showShuffleMenu by ui::showShuffleMenu
-    var playlistFor by ui::playlistFor
-    var confirmDelete by ui::confirmDelete
+    var showNowPlaying by rememberSaveable { mutableStateOf(!com.powersound.player.data.SettingsStore.value.startAtLibrary) }
+    var showMenu by remember { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
+    var showSleep by remember { mutableStateOf(false) }
+    var songMenu by remember { mutableStateOf<Song?>(null) }
+    var songMenuInfo by remember { mutableStateOf<String?>(null) }
+    var lyricsFor by remember { mutableStateOf<Song?>(null) }
+    var tagsFor by remember { mutableStateOf<Song?>(null) }
+    var artFor by remember { mutableStateOf<Long?>(null) }
+    var showAudioInfo by remember { mutableStateOf(false) }
+    var showRepeatMenu by remember { mutableStateOf(false) }
+    var showShuffleMenu by remember { mutableStateOf(false) }
+    var playlistFor by remember { mutableStateOf<List<Long>?>(null) }
+    var confirmDelete by remember { mutableStateOf<Song?>(null) }
     var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
-    val settingsOpenState = rememberSaveable { mutableStateOf(false) }
-    var settingsOpen by settingsOpenState
-    var settingsPage by ui::settingsPage
-    var showChangelog by ui::showChangelog
-    var showHelp by ui::showHelp
-    var backupMessage by ui::backupMessage
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsPage by remember { mutableStateOf<SettingsPage?>(null) }
+    var showChangelog by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
     val appSettings by com.powersound.player.data.SettingsStore.settings.collectAsStateWithLifecycle()
 
     // Settings → Export / Import: save or restore all settings and data as a file the user picks
@@ -556,64 +553,6 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
         )
     }
-    AppDialogs(ui, vm, player, stats, update, currentId, appSettings, showNowPlayingState, settingsOpenState) { deleteSong(it) }
-}
-
-/** Everything that shows UI state the dialogs/sheets need (kept here so PowerSoundApp stays small). */
-private class AppUi {
-    var showMenu: Boolean by mutableStateOf(false)
-    var showQueue: Boolean by mutableStateOf(false)
-    var showSleep: Boolean by mutableStateOf(false)
-    var songMenu: Song? by mutableStateOf(null)
-    var songMenuInfo: String? by mutableStateOf(null)
-    var lyricsFor: Song? by mutableStateOf(null)
-    var tagsFor: Song? by mutableStateOf(null)
-    var artFor: Long? by mutableStateOf(null)
-    var showAudioInfo: Boolean by mutableStateOf(false)
-    var showRepeatMenu: Boolean by mutableStateOf(false)
-    var showShuffleMenu: Boolean by mutableStateOf(false)
-    var playlistFor: List<Long>? by mutableStateOf(null)
-    var confirmDelete: Song? by mutableStateOf(null)
-    var settingsPage: SettingsPage? by mutableStateOf(null)
-    var showChangelog: Boolean by mutableStateOf(false)
-    var showHelp: Boolean by mutableStateOf(false)
-    var backupMessage: String? by mutableStateOf(null)
-}
-
-/** Sheets and dialogs of the main screen (split out of PowerSoundApp to keep its method small). */
-@Composable
-private fun AppDialogs(
-    ui: AppUi,
-    vm: PlayerViewModel,
-    player: PlayerUiState,
-    stats: Stats,
-    update: UpdateState,
-    currentId: Long?,
-    appSettings: com.powersound.player.data.AppSettings,
-    showNowPlayingState: androidx.compose.runtime.MutableState<Boolean>,
-    settingsOpenState: androidx.compose.runtime.MutableState<Boolean>,
-    deleteSong: (Song) -> Unit
-) {
-    val context = LocalContext.current
-    var showNowPlaying by showNowPlayingState
-    var settingsOpen by settingsOpenState
-    var showMenu by ui::showMenu
-    var showQueue by ui::showQueue
-    var showSleep by ui::showSleep
-    var songMenu by ui::songMenu
-    var songMenuInfo by ui::songMenuInfo
-    var lyricsFor by ui::lyricsFor
-    var tagsFor by ui::tagsFor
-    var artFor by ui::artFor
-    var showAudioInfo by ui::showAudioInfo
-    var showRepeatMenu by ui::showRepeatMenu
-    var showShuffleMenu by ui::showShuffleMenu
-    var playlistFor by ui::playlistFor
-    var confirmDelete by ui::confirmDelete
-    var settingsPage by ui::settingsPage
-    var showChangelog by ui::showChangelog
-    var showHelp by ui::showHelp
-    var backupMessage by ui::backupMessage
     if (showChangelog) ChangelogDialog { showChangelog = false }
     if (showHelp) HelpDialog { showHelp = false }
     backupMessage?.let { msg ->
