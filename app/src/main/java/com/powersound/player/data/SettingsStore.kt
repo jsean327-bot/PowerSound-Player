@@ -215,6 +215,31 @@ data class AppSettings(
     val pauseOnDisconnect: Boolean = true,
     val resumeOnBluetooth: Boolean = false,
     val resumeOnWired: Boolean = false,
+    val pauseOnUsbDac: Boolean = true,
+    val respondButtons: Boolean = true,
+    val wiredPressMode: Int = 1,             // 0 single press, 1 double/triple press for next/prev, 2 long press for next
+    val btPressMode: Int = 1,
+    val strictPlayPause: Boolean = true,
+    val ignoreBtSec: Int = 1,                // ignore Bluetooth commands this long after a connection (0..20 s)
+    val ignoreRepeatShuffle: Boolean = false,
+    val buttonBeep: Boolean = true,
+    val buttonBeepMore: Boolean = false,
+    val buttonVibrate: Boolean = false,
+    // ---- Lock Screen ----
+    val lockBlur: Boolean = false,
+    val lockDefaultImage: Boolean = false,
+    val showOnLockScreen: Boolean = false,
+    // ---- Misc: scrobbling and tweaks ----
+    val scrobbleLastfm: Boolean = false,
+    val scrobbleSimple: Boolean = false,
+    val metachangedIntent: Boolean = true,
+    val useWakelock: Boolean = true,
+    val shutdownIntent: String = "",
+    val pauseOnScreenOff: Boolean = false,
+    val highFramerate: Boolean = false,
+    val streamTimeoutSec: Int = 30,          // 61 = never
+    val streamBufferKb: Int = 1024,
+    val userAgent: String = "",
     // ---- Misc ----
     val rememberPosition: Boolean = true,
     val stopOnSwipeAway: Boolean = false,
@@ -315,6 +340,13 @@ object SettingsStore {
         put("pauseDisc", s.pauseOnDisconnect); put("resumeBt", s.resumeOnBluetooth); put("resumeWired", s.resumeOnWired)
         put("rememberPos", s.rememberPosition); put("stopSwipe", s.stopOnSwipeAway); put("confirmDel", s.confirmDelete)
         put("crashLog", s.keepCrashLog)
+        put("pauseUsb", s.pauseOnUsbDac); put("respondBtn", s.respondButtons); put("wiredPress", s.wiredPressMode); put("btPress", s.btPressMode)
+        put("strictPP", s.strictPlayPause); put("ignoreBt", s.ignoreBtSec); put("ignoreRS", s.ignoreRepeatShuffle); put("beep", s.buttonBeep)
+        put("beepMore", s.buttonBeepMore); put("vibrate", s.buttonVibrate); put("lockBlur", s.lockBlur); put("lockDefImg", s.lockDefaultImage)
+        put("showOnLock", s.showOnLockScreen); put("scrLastfm", s.scrobbleLastfm); put("scrSimple", s.scrobbleSimple)
+        put("metaIntent", s.metachangedIntent); put("wakelock", s.useWakelock); put("shutdownIntent", s.shutdownIntent)
+        put("pauseScreenOff", s.pauseOnScreenOff); put("highFps", s.highFramerate); put("streamTimeout", s.streamTimeoutSec)
+        put("streamBuf", s.streamBufferKb); put("userAgent", s.userAgent)
         put("setTheme", s.settingsTheme); put("setFont", s.settingsFont); put("lang", s.language); put("icon", s.launcherIcon)
         put("orient", s.orientation); put("anim", s.animations); put("startLib", s.startAtLibrary); put("dayNight", s.followDayNight); put("hideStatus", s.hideStatusBar)
         put("shortcuts", s.menuShortcuts)
@@ -404,6 +436,29 @@ object SettingsStore {
             stopOnSwipeAway = o.optBoolean("stopSwipe", d.stopOnSwipeAway),
             confirmDelete = o.optBoolean("confirmDel", d.confirmDelete),
             keepCrashLog = o.optBoolean("crashLog", d.keepCrashLog),
+            pauseOnUsbDac = o.optBoolean("pauseUsb", d.pauseOnUsbDac),
+            respondButtons = o.optBoolean("respondBtn", d.respondButtons),
+            wiredPressMode = o.optInt("wiredPress", d.wiredPressMode),
+            btPressMode = o.optInt("btPress", d.btPressMode),
+            strictPlayPause = o.optBoolean("strictPP", d.strictPlayPause),
+            ignoreBtSec = o.optInt("ignoreBt", d.ignoreBtSec),
+            ignoreRepeatShuffle = o.optBoolean("ignoreRS", d.ignoreRepeatShuffle),
+            buttonBeep = o.optBoolean("beep", d.buttonBeep),
+            buttonBeepMore = o.optBoolean("beepMore", d.buttonBeepMore),
+            buttonVibrate = o.optBoolean("vibrate", d.buttonVibrate),
+            lockBlur = o.optBoolean("lockBlur", d.lockBlur),
+            lockDefaultImage = o.optBoolean("lockDefImg", d.lockDefaultImage),
+            showOnLockScreen = o.optBoolean("showOnLock", d.showOnLockScreen),
+            scrobbleLastfm = o.optBoolean("scrLastfm", d.scrobbleLastfm),
+            scrobbleSimple = o.optBoolean("scrSimple", d.scrobbleSimple),
+            metachangedIntent = o.optBoolean("metaIntent", d.metachangedIntent),
+            useWakelock = o.optBoolean("wakelock", d.useWakelock),
+            shutdownIntent = o.optString("shutdownIntent", d.shutdownIntent),
+            pauseOnScreenOff = o.optBoolean("pauseScreenOff", d.pauseOnScreenOff),
+            highFramerate = o.optBoolean("highFps", d.highFramerate),
+            streamTimeoutSec = o.optInt("streamTimeout", d.streamTimeoutSec),
+            streamBufferKb = o.optInt("streamBuf", d.streamBufferKb),
+            userAgent = o.optString("userAgent", d.userAgent),
             settingsTheme = o.optInt("setTheme", d.settingsTheme),
             settingsFont = o.optInt("setFont", d.settingsFont),
             language = o.optInt("lang", d.language),

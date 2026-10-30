@@ -150,6 +150,26 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(appSettings.hideStatusBar, appSettings.androidNavNoBg) {
                 applySystemBars(appSettings)
             }
+            // Settings → Lock Screen → Show On Lock Screen
+            LaunchedEffect(appSettings.showOnLockScreen) {
+                if (android.os.Build.VERSION.SDK_INT >= 27) setShowWhenLocked(appSettings.showOnLockScreen)
+            }
+            // Settings → Misc → Apply High Framerate: ask for the fastest refresh rate of the screen
+            LaunchedEffect(appSettings.highFramerate) {
+                runCatching {
+                    val attrs = window.attributes
+                    if (appSettings.highFramerate) {
+                        @Suppress("DEPRECATION")
+                        val disp = windowManager.defaultDisplay
+                        val cur = disp.mode
+                        val best = disp.supportedModes
+                            .filter { it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight }
+                            .maxByOrNull { it.refreshRate }
+                        if (best != null) attrs.preferredDisplayModeId = best.modeId
+                    } else attrs.preferredDisplayModeId = 0
+                    window.attributes = attrs
+                }
+            }
             PowerSoundTheme(settings = appSettings) {
                 PowerSoundApp()
             }

@@ -11,7 +11,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- Optional (asked only from Settings → Lyrics → Scan LRC Files): read .lrc files next to the songs -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Optional (Settings → Lock Screen → Open App Settings): lets PowerSound show itself when the screen turns off -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Optional (asked only from Settings → Library → All Files Access): read .lrc files next to the songs -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
     <application

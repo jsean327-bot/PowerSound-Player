@@ -126,10 +126,10 @@ enum class SettingsPage(
     BACKGROUND("Background", "Blur, details, gradient, intensity, saturation", Icons.Rounded.Wallpaper, Color(0xFF4FB6A0)),
     ALBUM_ART("Album Art", "Download, quality, cache cleanup", Icons.Rounded.Album, Color(0xFF6FBF73)),
     LIBRARY("Library", "Rescan, folders, lists, search, playlists, shuffle, scanner", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7)),
-    HEADSET("Headset/Bluetooth", "Pause/resume on connection", Icons.Rounded.Headphones, Color(0xFFC9C9D6)),
-    LOCK_SCREEN("Lock Screen", "Media controls on the lock screen", Icons.Rounded.Lock, Color(0xFFE59A4F)),
-    MISC("Misc", "Swipe away, delete confirmation, error log", Icons.Rounded.MoreHoriz, Color(0xFF4FB6C9)),
-    ABOUT("About", "Version, changelog, updates", Icons.Rounded.Info, Color(0xFF9A9AB0)),
+    HEADSET("Headset/Bluetooth", "Pause/resume on connection, headset buttons", Icons.Rounded.Headphones, Color(0xFFC9C9D6)),
+    LOCK_SCREEN("Lock Screen", "Blur, default image, PowerSound on the lock screen", Icons.Rounded.Lock, Color(0xFFE59A4F)),
+    MISC("Misc", "Scrobbling, tweaks, network streams, error log", Icons.Rounded.MoreHoriz, Color(0xFF4FB6C9)),
+    ABOUT("About", "Version/changelog, updates, licenses, privacy", Icons.Rounded.Info, Color(0xFF9A9AB0)),
 
     // ---- inside Look and Feel ----
     SKIN("Skin", "Visual theme and per-skin options", Icons.Rounded.Palette, Color(0xFF8E8CF0), LOOK),
@@ -257,12 +257,22 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.LIB_SCANNER to "Symbols to Split Multiple Artists", SettingsPage.LIB_SCANNER to "Symbols to Split Multiple Composers",
     SettingsPage.LIB_SCANNER to "Symbols to Split Multiple Genres", SettingsPage.LIB_SCANNER to "Unsplit Artists",
     SettingsPage.LIB_SCANNER to "Tag Encoding", SettingsPage.LIB_SCANNER to "Always Use UTF-8 for .m3u",
-    SettingsPage.HEADSET to "Pause when headphones disconnect", SettingsPage.HEADSET to "Resume on Bluetooth connection",
-    SettingsPage.HEADSET to "Resume on wired headphones",
-    SettingsPage.LOCK_SCREEN to "Lock screen controls",
-    SettingsPage.MISC to "Stop music when the app is swiped away",
-    SettingsPage.MISC to "Ask before deleting files", SettingsPage.MISC to "Keep an error log", SettingsPage.MISC to "View error log",
-    SettingsPage.ABOUT to "Check for updates", SettingsPage.ABOUT to "Changelog", SettingsPage.ABOUT to "Version"
+    SettingsPage.HEADSET to "Resume On Wired Headset", SettingsPage.HEADSET to "Resume On Bluetooth",
+    SettingsPage.HEADSET to "Pause On Headset Disconnect", SettingsPage.HEADSET to "Pause On USB DAC connection",
+    SettingsPage.HEADSET to "Respond To Buttons", SettingsPage.HEADSET to "Wired Headset", SettingsPage.HEADSET to "Bluetooth",
+    SettingsPage.HEADSET to "Strict Resume/Pause/Stop", SettingsPage.HEADSET to "Ignore Bluetooth Commands",
+    SettingsPage.HEADSET to "Ignore Repeat/Shuffle", SettingsPage.HEADSET to "Beep", SettingsPage.HEADSET to "Beep More",
+    SettingsPage.HEADSET to "Vibrate", SettingsPage.HEADSET to "Last Processed Commands",
+    SettingsPage.LOCK_SCREEN to "Blur", SettingsPage.LOCK_SCREEN to "Show Default Image", SettingsPage.LOCK_SCREEN to "Show On Lock Screen",
+    SettingsPage.LOCK_SCREEN to "Open App Settings",
+    SettingsPage.MISC to "Scrobble via Official Last.fm app", SettingsPage.MISC to "Scrobble via Simple Scrobbler",
+    SettingsPage.MISC to "Metachanged Intent", SettingsPage.MISC to "Use Wakelock", SettingsPage.MISC to "Shutdown Intent",
+    SettingsPage.MISC to "Pause on Screen Off", SettingsPage.MISC to "Apply High Framerate",
+    SettingsPage.MISC to "Stop music when the app is swiped away", SettingsPage.MISC to "Ask before deleting files",
+    SettingsPage.MISC to "Network Stream Timeout", SettingsPage.MISC to "Network Stream Buffer", SettingsPage.MISC to "User Agent",
+    SettingsPage.MISC to "Keep an error log", SettingsPage.MISC to "View error log",
+    SettingsPage.ABOUT to "Version/Changelog", SettingsPage.ABOUT to "Check for updates", SettingsPage.ABOUT to "Get Support",
+    SettingsPage.ABOUT to "Open Source Licenses", SettingsPage.ABOUT to "Privacy Policy"
 )
 
 // ---------------------------------------------------------------- colours of the Settings screen (Settings Theme)
@@ -2410,119 +2420,6 @@ private fun SettingsPage24(page: SettingsPage?, args: PageArgs) {
     }
 }
 
-/** page == SettingsPage.HEADSET */
-@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
-@Composable
-private fun SettingsPage26(page: SettingsPage?, args: PageArgs) {
-    val st = args.st
-    val d = args.d
-    val sc = LocalSc.current
-    val context = LocalContext.current
-    val allFolders = args.allFolders
-    val onPage = args.onPage
-    val onRescan = args.onRescan
-    val onAudioInfo = args.onAudioInfo
-    val onImportAutoEq = args.onImportAutoEq
-    val onCheckUpdate = args.onCheckUpdate
-    val onChangelog = args.onChangelog
-    val onExport = args.onExport
-    val onImport = args.onImport
-    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
-    Column(Modifier.fillMaxWidth()) {
-    SwitchRow("Pause when headphones disconnect", "Bluetooth or wired", st.pauseOnDisconnect) { v -> set { it.copy(pauseOnDisconnect = v) } }
-    SwitchRow("Resume on Bluetooth connection", "Continue playing when Bluetooth earbuds connect", st.resumeOnBluetooth) { v -> set { it.copy(resumeOnBluetooth = v) } }
-    SwitchRow("Resume on wired headphones", "Continue playing when headphones are plugged in", st.resumeOnWired) { v -> set { it.copy(resumeOnWired = v) } }
-    Hint("Earbud buttons work through Android's media controls: tap = play/pause, and next/previous where your earbuds support it.")
-    }
-}
-
-/** page == SettingsPage.LOCK_SCREEN */
-@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
-@Composable
-private fun SettingsPage27(page: SettingsPage?, args: PageArgs) {
-    val st = args.st
-    val d = args.d
-    val sc = LocalSc.current
-    val context = LocalContext.current
-    val allFolders = args.allFolders
-    val onPage = args.onPage
-    val onRescan = args.onRescan
-    val onAudioInfo = args.onAudioInfo
-    val onImportAutoEq = args.onImportAutoEq
-    val onCheckUpdate = args.onCheckUpdate
-    val onChangelog = args.onChangelog
-    val onExport = args.onExport
-    val onImport = args.onImport
-    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
-    Column(Modifier.fillMaxWidth()) {
-    Hint(
-        "The lock screen and the notification show Android's media controls for PowerSound: " +
-            "cover, title, artist, a seek bar and play / pause / previous / next. They always follow the song that is playing."
-    )
-    Hint("The extra buttons of these controls are set in Look and Feel → Notifications → Buttons.")
-    }
-}
-
-/** page == SettingsPage.MISC */
-@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
-@Composable
-private fun SettingsPage28(page: SettingsPage?, args: PageArgs) {
-    val st = args.st
-    val d = args.d
-    val sc = LocalSc.current
-    val context = LocalContext.current
-    val allFolders = args.allFolders
-    val onPage = args.onPage
-    val onRescan = args.onRescan
-    val onAudioInfo = args.onAudioInfo
-    val onImportAutoEq = args.onImportAutoEq
-    val onCheckUpdate = args.onCheckUpdate
-    val onChangelog = args.onChangelog
-    val onExport = args.onExport
-    val onImport = args.onImport
-    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
-    Column(Modifier.fillMaxWidth()) {
-    var showLog by remember { mutableStateOf(false) }
-    SwitchRow("Stop music when the app is swiped away", "From the recent apps screen", st.stopOnSwipeAway) { v -> set { it.copy(stopOnSwipeAway = v) } }
-    SwitchRow("Ask before deleting files", "Show a confirmation first", st.confirmDelete) { v -> set { it.copy(confirmDelete = v) } }
-    SwitchRow("Keep an error log", "Saves crash details on the phone", st.keepCrashLog) { v -> set { it.copy(keepCrashLog = v) } }
-    ActionRow("View error log", "See, share or clear the last crash") { showLog = true }
-    if (showLog) ErrorLogDialog { showLog = false }
-    }
-}
-
-/** page == SettingsPage.ABOUT */
-@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
-@Composable
-private fun SettingsPage29(page: SettingsPage?, args: PageArgs) {
-    val st = args.st
-    val d = args.d
-    val sc = LocalSc.current
-    val context = LocalContext.current
-    val allFolders = args.allFolders
-    val onPage = args.onPage
-    val onRescan = args.onRescan
-    val onAudioInfo = args.onAudioInfo
-    val onImportAutoEq = args.onImportAutoEq
-    val onCheckUpdate = args.onCheckUpdate
-    val onChangelog = args.onChangelog
-    val onExport = args.onExport
-    val onImport = args.onImport
-    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
-    Column(Modifier.fillMaxWidth()) {
-    val version = remember {
-        runCatching {
-            @Suppress("DEPRECATION")
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: ""
-    }
-    Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { PowerSoundLogo() }
-    Hint("PowerSound Player $version")
-    ActionRow("Check for updates", "Look for a newer version on GitHub", onClick = onCheckUpdate)
-    ActionRow("Changelog", "What changed in each version", onClick = onChangelog)
-    }
-}
-
 /** page == SettingsPage.LIBRARY */
 @Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
 @Composable
@@ -2861,3 +2758,251 @@ private fun SettingsPage34(page: SettingsPage?, args: PageArgs) {
     }
     }
 }
+
+/** page == SettingsPage.HEADSET */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage26(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var showLog by remember { mutableStateOf(false) }
+    SectionLabel("Connection")
+    SwitchRow("Resume On Wired Headset", "Resume playing when a wired headset is connected", st.resumeOnWired) { v -> set { it.copy(resumeOnWired = v) } }
+    SwitchRow("Resume On Bluetooth", "Resume playing when a Bluetooth device is connected", st.resumeOnBluetooth) { v -> set { it.copy(resumeOnBluetooth = v) } }
+    SwitchRow("Pause On Headset Disconnect", "Pause when a wired / Bluetooth headset or USB DAC is disconnected", st.pauseOnDisconnect) { v -> set { it.copy(pauseOnDisconnect = v) } }
+    SwitchRow(
+        "Pause On USB DAC connection",
+        "Pause when a USB DAC is connected. This helps prevent loud noise while some USB DACs start up",
+        st.pauseOnUsbDac
+    ) { v -> set { it.copy(pauseOnUsbDac = v) } }
+    Hint("Resume after calls and other play/resume options are in Audio → Audio Focus")
+
+    SectionLabel("Buttons")
+    SwitchRow("Respond To Buttons", "Enable headset / Bluetooth controls", st.respondButtons) { v -> set { it.copy(respondButtons = v) } }
+    val modes = listOf("Single press", "Double/triple press for next/prev. track", "Long press for next track (when playing)")
+    ChipRow("Wired Headset", "What the play button of a wired headset does", modes, st.wiredPressMode) { v -> set { it.copy(wiredPressMode = v) } }
+    ChipRow("Bluetooth", "What the play button of a Bluetooth device does", modes, st.btPressMode) { v -> set { it.copy(btPressMode = v) } }
+    Hint("Double press = next track, triple press = previous track. Many earbuds (like the Soundcore Liberty) send next/previous by themselves; those always work")
+    SwitchRow(
+        "Strict Resume/Pause/Stop",
+        "Play only plays and Pause only pauses. Turn off for headsets/devices that send stray play/pause/stop commands, which are then treated as play/pause toggle",
+        st.strictPlayPause
+    ) { v -> set { it.copy(strictPlayPause = v) } }
+    StepSliderRow(
+        "Ignore Bluetooth Commands",
+        if (st.ignoreBtSec == 0) "Off" else "Ignore all Bluetooth commands for ${st.ignoreBtSec} s after a connection",
+        st.ignoreBtSec, 0, 20, "0", "20"
+    ) { v -> set { it.copy(ignoreBtSec = v) } }
+    SwitchRow("Ignore Repeat/Shuffle", "Ignore repeat and shuffle commands from Bluetooth devices and other apps completely", st.ignoreRepeatShuffle) { v ->
+        set { it.copy(ignoreRepeatShuffle = v) }
+    }
+    SwitchRow("Beep", "Short beep when a double/triple or long press changed the track", st.buttonBeep) { v -> set { it.copy(buttonBeep = v) } }
+    SwitchRow("Beep More", "Beep on all button commands", st.buttonBeepMore) { v -> set { it.copy(buttonBeepMore = v) } }
+    SwitchRow("Vibrate", "Short vibration on button commands", st.buttonVibrate) { v -> set { it.copy(buttonVibrate = v) } }
+    PlainRow("Last Processed Commands", "See which buttons PowerSound received and what it did") { showLog = true }
+    RestoreRow {
+        set {
+            it.copy(
+                resumeOnWired = d.resumeOnWired, resumeOnBluetooth = d.resumeOnBluetooth, pauseOnDisconnect = d.pauseOnDisconnect,
+                pauseOnUsbDac = d.pauseOnUsbDac, respondButtons = d.respondButtons, wiredPressMode = d.wiredPressMode,
+                btPressMode = d.btPressMode, strictPlayPause = d.strictPlayPause, ignoreBtSec = d.ignoreBtSec,
+                ignoreRepeatShuffle = d.ignoreRepeatShuffle, buttonBeep = d.buttonBeep, buttonBeepMore = d.buttonBeepMore,
+                buttonVibrate = d.buttonVibrate
+            )
+        }
+    }
+    if (showLog) {
+        val lines = remember { com.powersound.player.ButtonLog.all() }
+        TextDialog("Last Processed Commands", if (lines.isEmpty()) "No button commands since the app started." else lines.joinToString("\n")) { showLog = false }
+    }
+    }
+}
+
+/** page == SettingsPage.LOCK_SCREEN */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage27(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    val context = LocalContext.current
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    SwitchRow(
+        "Blur",
+        "The album art on the lock screen and in the notification is blurred. Some smart watches and apps that use the album art also get the blurred image",
+        st.lockBlur
+    ) { v -> set { it.copy(lockBlur = v) } }
+    SwitchRow(
+        "Show Default Image",
+        "Send a PowerSound placeholder image when a track has no album art (lock screen, notification, watches, car)",
+        st.lockDefaultImage
+    ) { v -> set { it.copy(lockDefaultImage = v) } }
+    Hint("The media buttons of the lock screen are the notification buttons: Look and Feel → Notifications → Buttons")
+
+    SectionLabel("PowerSound Lock Screen")
+    SwitchRow(
+        "Show On Lock Screen",
+        "When the screen turns off while music is playing, PowerSound shows its player on top of the lock screen. Settings, delete, tag editing and similar actions still ask to unlock",
+        st.showOnLockScreen
+    ) { v -> set { it.copy(showOnLockScreen = v) } }
+    val overlayOk = Build.VERSION.SDK_INT < 29 || Settings.canDrawOverlays(context)
+    ActionRow(
+        "Open App Settings",
+        if (overlayOk) "Allowed. PowerSound can open itself when the screen turns off"
+        else "Needed on this Android version: allow \"Display over other apps\" for PowerSound, otherwise it only stays on the lock screen when it was open",
+        enabled = st.showOnLockScreen
+    ) {
+        runCatching {
+            context.startActivity(
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+    RestoreRow { set { it.copy(lockBlur = d.lockBlur, lockDefaultImage = d.lockDefaultImage, showOnLockScreen = d.showOnLockScreen) } }
+    }
+}
+
+/** page == SettingsPage.MISC */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage28(page: SettingsPage?, args: PageArgs) {
+    val st = args.st
+    val d = args.d
+    fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
+    Column(Modifier.fillMaxWidth()) {
+    var showLog by remember { mutableStateOf(false) }
+    var edit by remember { mutableIntStateOf(0) }
+    SectionLabel("Scrobbling")
+    SwitchRow("Scrobble via Official Last.fm app", "Send the playing tracks to the Last.fm app", st.scrobbleLastfm) { v -> set { it.copy(scrobbleLastfm = v) } }
+    SwitchRow("Scrobble via Simple Scrobbler", "Scrobble to Last.fm / Libre.fm with the Simple Scrobbler app", st.scrobbleSimple) { v -> set { it.copy(scrobbleSimple = v) } }
+    NoteBlock("Most other scrobbler apps work without any setting, through the media notification or Metachanged Intent below")
+
+    SectionLabel("Tweaks")
+    SwitchRow("Metachanged Intent", "Tell other apps (widgets, watches, scrobblers) which track is playing", st.metachangedIntent) { v -> set { it.copy(metachangedIntent = v) } }
+    SwitchRow("Use Wakelock", "Keeps the phone awake enough to play. Turn on if music stops when the screen is off", st.useWakelock) { v -> set { it.copy(useWakelock = v) } }
+    ActionRow(
+        "Shutdown Intent",
+        if (st.shutdownIntent.isBlank()) "Not set. Other apps (e.g. automation apps) can send this action to make PowerSound pause and keep its state"
+        else "PowerSound pauses when it receives: ${st.shutdownIntent}"
+    ) { edit = 1 }
+    SwitchRow("Pause on Screen Off", "Experiment — pause the music when the screen turns off", st.pauseOnScreenOff) { v -> set { it.copy(pauseOnScreenOff = v) } }
+    SwitchRow("Apply High Framerate", "Experiment — ask for the highest refresh rate of the screen (smoother lists and visualizations, uses more battery)", st.highFramerate) { v ->
+        set { it.copy(highFramerate = v) }
+    }
+    SwitchRow("Stop music when the app is swiped away", "From the recent apps screen", st.stopOnSwipeAway) { v -> set { it.copy(stopOnSwipeAway = v) } }
+    SwitchRow("Ask before deleting files", "Show a confirmation first", st.confirmDelete) { v -> set { it.copy(confirmDelete = v) } }
+
+    SectionLabel("Network Streams")
+    StepSliderRow(
+        "Network Stream Timeout",
+        if (st.streamTimeoutSec > 60) "Never" else "${st.streamTimeoutSec} s",
+        st.streamTimeoutSec.coerceIn(5, 61), 5, 61, "Small", "Never"
+    ) { v -> set { it.copy(streamTimeoutSec = v) } }
+    SliderRow(
+        "Network Stream Buffer",
+        "%.1f MB".format(st.streamBufferKb / 1024f),
+        st.streamBufferKb.toFloat(), 256f..8192f,
+        subtitle = "A bigger buffer also makes streams take longer to start. Used the next time PowerSound starts"
+    ) { v -> set { it.copy(streamBufferKb = ((v / 256f).roundToInt() * 256).coerceIn(256, 8192)) } }
+    ActionRow("User Agent", if (st.userAgent.isBlank()) "Default (PowerSound Player)" else st.userAgent) { edit = 2 }
+
+    SectionLabel("Errors")
+    SwitchRow("Keep an error log", "Saves crash details on the phone", st.keepCrashLog) { v -> set { it.copy(keepCrashLog = v) } }
+    ActionRow("View error log", "See, share or clear the last crash") { showLog = true }
+    RestoreRow {
+        set {
+            it.copy(
+                scrobbleLastfm = d.scrobbleLastfm, scrobbleSimple = d.scrobbleSimple, metachangedIntent = d.metachangedIntent,
+                useWakelock = d.useWakelock, shutdownIntent = d.shutdownIntent, pauseOnScreenOff = d.pauseOnScreenOff,
+                highFramerate = d.highFramerate, stopOnSwipeAway = d.stopOnSwipeAway, confirmDelete = d.confirmDelete,
+                streamTimeoutSec = d.streamTimeoutSec, streamBufferKb = d.streamBufferKb, userAgent = d.userAgent,
+                keepCrashLog = d.keepCrashLog
+            )
+        }
+    }
+    when (edit) {
+        1 -> TextInputDialog("Shutdown Intent", st.shutdownIntent, "An intent action, e.g. com.example.SHUTDOWN. Leave empty to turn off", { v ->
+            set { it.copy(shutdownIntent = v.trim()) }
+        }) { edit = 0 }
+        2 -> TextInputDialog("User Agent", st.userAgent, "User Agent header used for network streams. Leave empty for the default", { v ->
+            set { it.copy(userAgent = v.trim()) }
+        }) { edit = 0 }
+    }
+    if (showLog) ErrorLogDialog { showLog = false }
+    }
+}
+
+/** page == SettingsPage.ABOUT */
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
+@Composable
+private fun SettingsPage29(page: SettingsPage?, args: PageArgs) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxWidth()) {
+    var dialog by remember { mutableIntStateOf(0) }
+    val version = remember {
+        runCatching {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: ""
+    }
+    Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { PowerSoundLogo() }
+    Hint("PowerSound Player $version")
+    ActionRow("Version/Changelog", "Version $version — what changed in each version", onClick = args.onChangelog)
+    ActionRow("Check for updates", "Look for a newer version on GitHub", onClick = args.onCheckUpdate)
+    SectionLabel("Other")
+    ActionRow("Get Support", "Report a problem or ask for a feature on GitHub") {
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/jsean327-bot/PowerSound-Player/issues")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+    ActionRow("Open Source Licenses", "Libraries and services PowerSound uses") { dialog = 1 }
+    ActionRow("Privacy Policy", "What PowerSound does with your data") { dialog = 2 }
+    if (dialog == 1) TextDialog("Open Source Licenses", OPEN_SOURCE_TEXT) { dialog = 0 }
+    if (dialog == 2) TextDialog("Privacy Policy", PRIVACY_TEXT) { dialog = 0 }
+    }
+}
+
+/** A long, scrollable text with an OK button. */
+@Composable
+private fun TextDialog(title: String, text: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1B1B22),
+        title = { Text(title, color = Color.White) },
+        text = {
+            Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
+                Text(text, color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } }
+    )
+}
+
+private const val OPEN_SOURCE_TEXT = """PowerSound Player is built with these open source libraries:
+
+• Kotlin and Kotlin Coroutines — JetBrains, Apache License 2.0
+• Android Jetpack (AndroidX Core, Activity, Lifecycle) — Google, Apache License 2.0
+• Jetpack Compose and Material 3 — Google, Apache License 2.0
+• AndroidX Media3 / ExoPlayer and Media3 Session — Google, Apache License 2.0
+• Guava (used by Media3) — Google, Apache License 2.0
+
+Online services (only when the matching setting is on):
+• Album art search: iTunes Search API (Apple)
+• Artist images: Deezer API
+• Updates and changelog: GitHub releases
+
+AutoEq presets you import are made by the AutoEq project (Jaakko Pasanen), MIT License.
+
+The Apache License 2.0 text: https://www.apache.org/licenses/LICENSE-2.0"""
+
+private const val PRIVACY_TEXT = """PowerSound Player has no account, no ads and no analytics.
+
+• Your music, playlists, ratings, play counts, equalizer presets and settings stay on your phone.
+• Album art: when Download Album Art / Artist Images is on, the artist, album or track name is sent to the iTunes Search API or the Deezer API to find an image. Turn these off in Settings → Album Art.
+• Updates: PowerSound asks GitHub for the latest version (no personal data is sent).
+• Scrobbling and Metachanged Intent send the playing track only to apps on your phone, and only when you turn them on.
+• Error log: crash details are saved on the phone only. They leave the phone only if you share them yourself."""

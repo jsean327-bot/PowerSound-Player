@@ -121,6 +121,7 @@ class PlaybackService : MediaSessionService() {
 
         session = MediaSession.Builder(this, SessionPlayer(player))
             .setCallback(SessionCallback())
+            .setBitmapLoader(LockArtLoader(this, scope))
             .setSessionActivity(sessionActivity)
             .build()
 
@@ -129,6 +130,10 @@ class PlaybackService : MediaSessionService() {
             var last: AppSettings? = null
             SettingsStore.settings.collect { st ->
                 player.setHandleAudioBecomingNoisy(st.pauseOnDisconnect)
+                // Settings → Misc → Use Wakelock
+                player.setWakeMode(if (st.useWakelock) C.WAKE_MODE_LOCAL else C.WAKE_MODE_NONE)
+                if (last != null && (last?.lockBlur != st.lockBlur || last?.lockDefaultImage != st.lockDefaultImage)) refreshArtwork()
+                if (last?.shutdownIntent != st.shutdownIntent) registerShutdownIntent(st.shutdownIntent)
                 session?.setCustomLayout(customLayout())
                 st.eqLayout().let { (n, a, b) -> AudioEngine.setLayout(n, a, b) }
                 applyOutputOptions(st, presetChanged = last == null || last?.outEqPreset != st.outEqPreset)
@@ -139,6 +144,7 @@ class PlaybackService : MediaSessionService() {
         player.addListener(object : Player.Listener {
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (playWhenReady) requestFocus() else if (!pausedByFocus && !pausedByCall) abandonFocus()
+                ExternalIntents.playState(this@PlaybackService, player)
                 // Settings → Notifications → Remove Notification on Disconnection
                 if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY &&
                     SettingsStore.value.removeNotifOnDisconnect
@@ -158,6 +164,7 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                ExternalIntents.metaChanged(this@PlaybackService, player)
                 // Settings → Crossfade → Silence Between Tracks
                 val ms = SettingsStore.value.silenceMs
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && ms > 0 && !PlayerCommands.stopAfterCurrent) {
@@ -171,6 +178,7 @@ class PlaybackService : MediaSessionService() {
         })
         registerDeviceCallback(player)
         registerVolumeObserver(player)
+        registerScreenReceiver(player)
     }
 
     /** Decoder → PowerSound DSP → 16-bit output. Float output stays off: it made some FLAC files distort. */
@@ -185,10 +193,29 @@ class PlaybackService : MediaSessionService() {
                 MediaCodecAudioRenderer(this, MediaCodecSelector.DEFAULT, handler, audioListener, sink)
             )
         }
+        // Settings → Misc → Network Stream Timeout / User Agent (read for every new connection)
+        val http = androidx.media3.datasource.DataSource.Factory {
+            val st = SettingsStore.value
+            val timeout = if (st.streamTimeoutSec > 60) 0 else st.streamTimeoutSec * 1000
+            androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setUserAgent(st.userAgent.ifBlank { "PowerSound Player" })
+                .setConnectTimeoutMs(timeout)
+                .setReadTimeoutMs(timeout)
+                .setAllowCrossProtocolRedirects(true)
+                .createDataSource()
+        }
+        // Settings → Misc → Network Stream Buffer (used when the player is created)
+        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setTargetBufferBytes(SettingsStore.value.streamBufferKb.coerceIn(256, 16384) * 1024)
+            .build()
         return ExoPlayer.Builder(this, renderers)
+            .setMediaSourceFactory(
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(this, http))
+            )
+            .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ false)
             .setHandleAudioBecomingNoisy(wakeLock && SettingsStore.value.pauseOnDisconnect)
-            .apply { if (wakeLock) setWakeMode(C.WAKE_MODE_LOCAL) }
+            .apply { if (wakeLock && SettingsStore.value.useWakelock) setWakeMode(C.WAKE_MODE_LOCAL) }
             .build()
     }
 
@@ -237,6 +264,22 @@ class PlaybackService : MediaSessionService() {
         override fun pause() {
             crossfader?.abort()
             super.pause()
+        }
+
+        /** Settings → Headset → Ignore Repeat/Shuffle: Bluetooth devices / other apps can't change them. */
+        private fun fromOutside(): Boolean {
+            val c = session?.controllerForCurrentRequest ?: return false
+            return c.packageName != packageName
+        }
+
+        override fun setRepeatMode(repeatMode: Int) {
+            if (SettingsStore.value.ignoreRepeatShuffle && fromOutside()) return
+            super.setRepeatMode(repeatMode)
+        }
+
+        override fun setShuffleModeEnabled(shuffleModeEnabled: Boolean) {
+            if (SettingsStore.value.ignoreRepeatShuffle && fromOutside()) return
+            super.setShuffleModeEnabled(shuffleModeEnabled)
         }
     }
 
@@ -374,6 +417,18 @@ class PlaybackService : MediaSessionService() {
                 // the callback also lists already-connected devices right after registering: ignore those
                 if (android.os.SystemClock.elapsedRealtime() - registeredAt < 1500) return
                 val st = SettingsStore.value
+                if (addedDevices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        (android.os.Build.VERSION.SDK_INT >= 31 && it.type == AudioDeviceInfo.TYPE_BLE_HEADSET) }
+                ) buttons.btConnectedAt = android.os.SystemClock.elapsedRealtime()
+                // Settings → Headset → Pause On USB DAC connection
+                if (st.pauseOnUsbDac && player.isPlaying && addedDevices.any {
+                        it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_ACCESSORY ||
+                            it.type == AudioDeviceInfo.TYPE_USB_HEADSET
+                    }
+                ) {
+                    player.pause()
+                    return
+                }
                 val bt = addedDevices.any {
                     it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
                         (android.os.Build.VERSION.SDK_INT >= 31 && it.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
@@ -473,6 +528,11 @@ class PlaybackService : MediaSessionService() {
         deviceCallback = null
         volumeObserver?.let { contentResolver.unregisterContentObserver(it) }
         volumeObserver = null
+        screenReceiver?.let { runCatching { unregisterReceiver(it) } }
+        screenReceiver = null
+        shutdownReceiver?.let { runCatching { unregisterReceiver(it) } }
+        shutdownReceiver = null
+        main?.let { ExternalIntents.stopped(this, it) }
         abandonFocus()
         openMusicFx(0)
         crossfader?.release()
@@ -485,6 +545,171 @@ class PlaybackService : MediaSessionService() {
         session = null
         main = null
         super.onDestroy()
+    }
+
+    // ---------------------------------------------------------------- headset / Bluetooth buttons
+
+    private val buttons = ButtonHandler()
+
+    /** Last commands from headset / Bluetooth buttons (Settings → Headset → Last Processed Commands). */
+    private inner class ButtonHandler {
+        var btConnectedAt = 0L
+        private var presses = 0
+        private var pressJob: kotlinx.coroutines.Job? = null
+        private var longHandled = false
+
+        fun handle(intent: Intent): Boolean {
+            @Suppress("DEPRECATION")
+            val ev = intent.getParcelableExtra<android.view.KeyEvent>(Intent.EXTRA_KEY_EVENT) ?: return false
+            val player = session?.player ?: return false
+            val st = SettingsStore.value
+            val name = android.view.KeyEvent.keyCodeToString(ev.keyCode).removePrefix("KEYCODE_")
+            if (!st.respondButtons) { ButtonLog.add("$name — ignored (Respond To Buttons is off)"); return true }
+            val bt = outputKey == "bt"
+            if (bt && st.ignoreBtSec > 0 &&
+                android.os.SystemClock.elapsedRealtime() - btConnectedAt < st.ignoreBtSec * 1000L
+            ) { ButtonLog.add("$name — ignored (just connected)"); return true }
+            val mode = if (bt) st.btPressMode else st.wiredPressMode
+            when (ev.keyCode) {
+                android.view.KeyEvent.KEYCODE_HEADSETHOOK, android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    when (mode) {
+                        0 -> if (ev.repeatCount == 0) { toggle(player); log(name, "play/pause") }
+                        1 -> if (ev.repeatCount == 0) {
+                            // count presses: 1 play/pause, 2 next, 3 previous
+                            presses++
+                            pressJob?.cancel()
+                            pressJob = scope.launch {
+                                delay(450)
+                                val n = presses
+                                presses = 0
+                                when {
+                                    n >= 3 -> { player.seekToPrevious(); log(name, "×3 previous", true) }
+                                    n == 2 -> { player.seekToNext(); log(name, "×2 next", true) }
+                                    else -> { toggle(player); log(name, "play/pause") }
+                                }
+                            }
+                        }
+                        else -> {
+                            // long press for next track (when playing)
+                            if (ev.repeatCount == 0) {
+                                longHandled = false
+                                pressJob?.cancel()
+                                pressJob = scope.launch {
+                                    delay(600)
+                                    if (!longHandled) { toggle(player); log(name, "play/pause") }
+                                }
+                            } else if (!longHandled) {
+                                longHandled = true
+                                pressJob?.cancel()
+                                if (player.isPlaying) { player.seekToNext(); log(name, "long press → next", true) }
+                            }
+                        }
+                    }
+                }
+                android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> if (ev.repeatCount == 0) {
+                    // Strict Resume/Pause/Stop off: a stray "play" from some devices toggles instead
+                    if (st.strictPlayPause || !player.playWhenReady) { startPlay(player); log(name, "play") } else { player.pause(); log(name, "pause (not strict)") }
+                }
+                android.view.KeyEvent.KEYCODE_MEDIA_PAUSE, android.view.KeyEvent.KEYCODE_MEDIA_STOP -> if (ev.repeatCount == 0) {
+                    if (st.strictPlayPause || player.playWhenReady) { player.pause(); log(name, "pause") } else { startPlay(player); log(name, "play (not strict)") }
+                }
+                android.view.KeyEvent.KEYCODE_MEDIA_NEXT, android.view.KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD ->
+                    if (ev.repeatCount == 0) { player.seekToNext(); log(name, "next") }
+                android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS, android.view.KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD ->
+                    if (ev.repeatCount == 0) { player.seekToPrevious(); log(name, "previous") }
+                android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekTo(player.currentPosition + 10_000); log(name, "+10 s") }
+                android.view.KeyEvent.KEYCODE_MEDIA_REWIND -> { player.seekTo((player.currentPosition - 10_000).coerceAtLeast(0)); log(name, "-10 s") }
+                else -> return false
+            }
+            return true
+        }
+
+        private fun startPlay(player: Player) {
+            if (player.playbackState == Player.STATE_IDLE) player.prepare()
+            player.play()
+        }
+
+        private fun toggle(player: Player) = if (player.playWhenReady) player.pause() else startPlay(player)
+
+        /** Beep on multi-press / long-press commands; Beep More on all; Vibrate. */
+        private fun log(key: String, action: String, special: Boolean = false) {
+            ButtonLog.add("$key → $action (${if (outputKey == "bt") "Bluetooth" else "wired"})")
+            val st = SettingsStore.value
+            if ((st.buttonBeep && special) || st.buttonBeepMore) beep()
+            if (st.buttonVibrate) vibrate()
+        }
+    }
+
+    private fun beep() = runCatching {
+        val tg = android.media.ToneGenerator(AudioManager.STREAM_MUSIC, 60)
+        tg.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 120)
+        scope.launch { delay(400); tg.release() }
+    }
+
+    private fun vibrate() = runCatching {
+        val v = if (android.os.Build.VERSION.SDK_INT >= 31) getSystemService(android.os.VibratorManager::class.java).defaultVibrator
+        else @Suppress("DEPRECATION") getSystemService(android.os.Vibrator::class.java)
+        v.vibrate(android.os.VibrationEffect.createOneShot(40, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+    }
+
+    // ---------------------------------------------------------------- screen off, shutdown intent, lock screen
+
+    private var screenReceiver: android.content.BroadcastReceiver? = null
+    private var shutdownReceiver: android.content.BroadcastReceiver? = null
+
+    private fun registerScreenReceiver(player: ExoPlayer) {
+        val r = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != Intent.ACTION_SCREEN_OFF) return
+                val st = SettingsStore.value
+                // Settings → Misc → Pause on Screen Off
+                if (st.pauseOnScreenOff && player.isPlaying) { player.pause(); return }
+                // Settings → Lock Screen → Show On Lock Screen (needs "Display over other apps" on newer Android)
+                if (st.showOnLockScreen && player.isPlaying &&
+                    (android.os.Build.VERSION.SDK_INT < 29 || android.provider.Settings.canDrawOverlays(context))
+                ) {
+                    runCatching {
+                        startActivity(
+                            Intent(context, MainActivity::class.java)
+                                .putExtra(MainActivity.EXTRA_FROM_NOTIFICATION, true)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        )
+                    }
+                }
+            }
+        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, r, android.content.IntentFilter(Intent.ACTION_SCREEN_OFF), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        screenReceiver = r
+    }
+
+    /** Settings → Misc → Shutdown Intent: another app sends this action, PowerSound pauses (its state is kept). */
+    private fun registerShutdownIntent(action: String) {
+        shutdownReceiver?.let { runCatching { unregisterReceiver(it) } }
+        shutdownReceiver = null
+        if (action.isBlank()) return
+        val r = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                main?.pause()
+            }
+        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, r, android.content.IntentFilter(action.trim()), androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+        )
+        shutdownReceiver = r
+    }
+
+    /** Lock screen art options changed: load the current cover again. */
+    private fun refreshArtwork() {
+        val p = main ?: return
+        val i = p.currentMediaItemIndex
+        val item = p.currentMediaItem ?: return
+        val md = item.mediaMetadata
+        // a changed address makes the session load the image again
+        val uri = md.artworkUri ?: return
+        val fresh = android.net.Uri.parse(uri.toString().substringBefore('#') + "#" + System.currentTimeMillis())
+        p.replaceMediaItem(i, item.buildUpon().setMediaMetadata(md.buildUpon().setArtworkUri(fresh).build()).build())
     }
 
     // ---------------------------------------------------------------- notification buttons
@@ -547,6 +772,9 @@ class PlaybackService : MediaSessionService() {
             return MediaSession.ConnectionResult.accept(commands.build(), base.availablePlayerCommands)
         }
 
+        override fun onMediaButtonEvent(session: MediaSession, controllerInfo: MediaSession.ControllerInfo, intent: Intent): Boolean =
+            buttons.handle(intent)
+
         override fun onPostConnect(mediaSession: MediaSession, controller: MediaSession.ControllerInfo) {
             mediaSession.setCustomLayout(controller, customLayout())
         }
@@ -572,7 +800,10 @@ class PlaybackService : MediaSessionService() {
                     ?: item.mediaId.toLongOrNull()?.let {
                         ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, it)
                     }
-                if (uri != null) item.buildUpon().setUri(uri).build() else item
+                // the lock screen / notification art is loaded by LockArtLoader from this address
+                val art = item.mediaId.toLongOrNull()?.let { android.net.Uri.parse("$ART_SCHEME:$it") }
+                val md = if (art != null) item.mediaMetadata.buildUpon().setArtworkUri(art).build() else item.mediaMetadata
+                if (uri != null) item.buildUpon().setUri(uri).setMediaMetadata(md).build() else item
             }.toMutableList()
             return Futures.immediateFuture(resolved)
         }
