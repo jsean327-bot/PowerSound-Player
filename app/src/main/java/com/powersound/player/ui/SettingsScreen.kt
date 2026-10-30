@@ -87,6 +87,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -118,9 +120,9 @@ enum class SettingsPage(
 ) {
     LOOK("Look and Feel", "Skin, player interface, language, notifications", Icons.Rounded.Palette, Color(0xFF8E8CF0)),
     AUDIO("Audio", "Crossfade, replay gain, focus, equalizer, outputs", Icons.Rounded.VolumeUp, Color(0xFFE0708A)),
-    VISUALIZATION("Visualization", "Faded controls opacity, preset duration", Icons.Rounded.GraphicEq, Color(0xFFB07CFF)),
-    BACKGROUND("Background", "Blur, intensity, saturation", Icons.Rounded.Wallpaper, Color(0xFF4FB6A0)),
-    ALBUM_ART("Album Art", "Quality, cache cleanup", Icons.Rounded.Album, Color(0xFF6FBF73)),
+    VISUALIZATION("Visualization", "Faded controls opacity, preset duration, spectrum", Icons.Rounded.GraphicEq, Color(0xFFB07CFF)),
+    BACKGROUND("Background", "Blur, details, gradient, intensity, saturation", Icons.Rounded.Wallpaper, Color(0xFF4FB6A0)),
+    ALBUM_ART("Album Art", "Download, quality, cache cleanup", Icons.Rounded.Album, Color(0xFF6FBF73)),
     LIBRARY("Library", "Rescan, music folders, categories", Icons.Rounded.LibraryMusic, Color(0xFF4F8DF7)),
     HEADSET("Headset/Bluetooth", "Pause/resume on connection", Icons.Rounded.Headphones, Color(0xFFC9C9D6)),
     LOCK_SCREEN("Lock Screen", "Media controls on the lock screen", Icons.Rounded.Lock, Color(0xFFE59A4F)),
@@ -207,10 +209,22 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.OUT_SPEAKER to "Speaker output", SettingsPage.OUT_USB to "USB DAC output", SettingsPage.OUT_OTHER to "Other Output Devices",
     SettingsPage.BIT_PERFECT to "Perfect Bit Perfect", SettingsPage.BIT_PERFECT to "64-bit Audio Pipeline",
     SettingsPage.TWEAKS to "Pause/Resume on Volume", SettingsPage.TWEAKS to "MusicFX", SettingsPage.TWEAKS to "Restore Reverb Presets",
-    SettingsPage.VISUALIZATION to "Faded controls opacity", SettingsPage.VISUALIZATION to "Change preset automatically",
-    SettingsPage.BACKGROUND to "Blurred album art background", SettingsPage.BACKGROUND to "Blur", SettingsPage.BACKGROUND to "Intensity",
-    SettingsPage.BACKGROUND to "Saturation",
-    SettingsPage.ALBUM_ART to "High quality covers", SettingsPage.ALBUM_ART to "Clear album art cache",
+    SettingsPage.VISUALIZATION to "Visualization On Player Screen", SettingsPage.VISUALIZATION to "Equalizer Screen Spectrum",
+    SettingsPage.VISUALIZATION to "Visualization in Library", SettingsPage.VISUALIZATION to "Preset Duration",
+    SettingsPage.VISUALIZATION to "Top Visualization Panel Opacity", SettingsPage.VISUALIZATION to "Faded Controls Opacity",
+    SettingsPage.VISUALIZATION to "UI Timeout", SettingsPage.VISUALIZATION to "Visible Album Art", SettingsPage.VISUALIZATION to "Ignore Touch",
+    SettingsPage.VISUALIZATION to "Track Opacity", SettingsPage.VISUALIZATION to "Hide System Bars For Full Screen",
+    SettingsPage.VISUALIZATION to "Scaled Bars For Faded Controls", SettingsPage.VISUALIZATION to "HD", SettingsPage.VISUALIZATION to "Crop Aspect",
+    SettingsPage.VISUALIZATION to "Force 30 FPS", SettingsPage.VISUALIZATION to "Visualization Presets",
+    SettingsPage.BACKGROUND to "Enable Blurred Backgrounds", SettingsPage.BACKGROUND to "List Background", SettingsPage.BACKGROUND to "Lyrics Background",
+    SettingsPage.BACKGROUND to "Background Gradient", SettingsPage.BACKGROUND to "Background Gradient Color",
+    SettingsPage.BACKGROUND to "Background Gradient For Lists", SettingsPage.BACKGROUND to "Background Blur",
+    SettingsPage.BACKGROUND to "Background Details", SettingsPage.BACKGROUND to "Background Intensity", SettingsPage.BACKGROUND to "Background Saturation",
+    SettingsPage.ALBUM_ART to "Download Album Art", SettingsPage.ALBUM_ART to "Download Artist Images", SettingsPage.ALBUM_ART to "High Resolution",
+    SettingsPage.ALBUM_ART to "Download Only On Wi-Fi", SettingsPage.ALBUM_ART to "Also Search By Title/Filename",
+    SettingsPage.ALBUM_ART to "Prefer Downloaded Album Art", SettingsPage.ALBUM_ART to "Reset Negative Status", SettingsPage.ALBUM_ART to "Delete Cache",
+    SettingsPage.ALBUM_ART to "Force Default Image", SettingsPage.ALBUM_ART to "Use 24-bit RGB", SettingsPage.ALBUM_ART to "Increase Resolution",
+    SettingsPage.ALBUM_ART to "Aspect Ratio",
     SettingsPage.LIBRARY to "Rescan library", SettingsPage.LIBRARY to "Music folders", SettingsPage.LIBRARY to "Skip short files",
     SettingsPage.LIBRARY to "Long songs", SettingsPage.LIBRARY to "Library categories",
     SettingsPage.HEADSET to "Pause when headphones disconnect", SettingsPage.HEADSET to "Resume on Bluetooth connection",
@@ -1004,32 +1018,160 @@ private fun SettingsContent(
                 }
 
                 page == SettingsPage.VISUALIZATION -> {
-                    SliderRow("Faded controls opacity", "${(st.vizFadedOpacity * 100).roundToInt()}%", st.vizFadedOpacity, 0.1f..0.9f) { v ->
+                    SwitchRow(
+                        "Visualization On Player Screen",
+                        "Visualization can be switched on with the Player Screen 🎵 button. It is shown when music is playing",
+                        st.vizOnPlayer
+                    ) { v -> set { it.copy(vizOnPlayer = v) } }
+                    ChipRow("Equalizer Screen Spectrum", null, listOf("Disabled", "Classic", "Rounded"), st.eqSpectrum) { v -> set { it.copy(eqSpectrum = v) } }
+                    SwitchRow(
+                        "Visualization in Library",
+                        "Visible behind the lists when visualization on the Player Screen is on. Some presets may make the lists harder to read",
+                        st.vizInLibrary
+                    ) { v -> set { it.copy(vizInLibrary = v) } }
+                    val secs = listOf(0, 5, 10, 15, 20, 30, 45, 60, 90, 120)
+                    StepSliderRow(
+                        "Preset Duration", if (st.vizPresetSeconds == 0) "Never change automatically" else "Change each: ${st.vizPresetSeconds} s",
+                        secs.indexOf(st.vizPresetSeconds).coerceAtLeast(0), 0, secs.lastIndex, "Never", "2 min"
+                    ) { i -> set { it.copy(vizPresetSeconds = secs[i]) } }
+                    SliderRow("Top Visualization Panel Opacity", "${(st.vizPanelOpacity * 100).roundToInt()}%", st.vizPanelOpacity, 0f..1f) { v ->
+                        set { it.copy(vizPanelOpacity = (v * 20).roundToInt() / 20f) }
+                    }
+                    SliderRow("Faded Controls Opacity", "${(st.vizFadedOpacity * 100).roundToInt()}%", st.vizFadedOpacity, 0f..1f) { v ->
                         set { it.copy(vizFadedOpacity = (v * 20).roundToInt() / 20f) }
                     }
-                    ChoiceRow(
-                        "Change preset automatically",
-                        listOf("Never", "Every 15 s", "Every 30 s", "Every minute", "Every 2 minutes"),
-                        listOf(0, 15, 30, 60, 120).indexOf(st.vizPresetSeconds).coerceAtLeast(0)
-                    ) { i -> set { it.copy(vizPresetSeconds = listOf(0, 15, 30, 60, 120)[i]) } }
-                    Hint("Turn a visualization on with the 🎵 button on the player screen.")
+                    StepSliderRow("UI Timeout", "Time to show the controls during active visualization: ${st.vizUiTimeoutMs} ms", st.vizUiTimeoutMs / 500, 1, 10, "0.5 s", "5 s") { v ->
+                        set { it.copy(vizUiTimeoutMs = v * 500) }
+                    }
+                    SwitchRow("Visible Album Art", "Keep the album art visible during visualization", st.vizAlbumArt) { v -> set { it.copy(vizAlbumArt = v) } }
+                    SwitchRow("Ignore Touch", "In Fade Controls mode the first touch only shows the controls", st.vizIgnoreTouch) { v -> set { it.copy(vizIgnoreTouch = v) } }
+                    SliderRow(
+                        "Track Opacity", "${(st.vizTrackOpacity * 100).roundToInt()}%", st.vizTrackOpacity, 0f..1f,
+                        subtitle = "Track labels, rating, menu and album art (if visible) opacity"
+                    ) { v -> set { it.copy(vizTrackOpacity = (v * 20).roundToInt() / 20f) } }
+                    SwitchRow("Hide System Bars For Full Screen", "Hide the status bar and navigation completely in Full Screen mode", st.vizHideBars) { v -> set { it.copy(vizHideBars = v) } }
+                    SwitchRow(
+                        "Scaled Bars For Faded Controls",
+                        "Bars visualizations fit the album art area in Fade Controls mode. If disabled, bars are always full-screen",
+                        st.vizScaledBars
+                    ) { v -> set { it.copy(vizScaledBars = v) } }
+                    SwitchRow("HD", "Twice as many bars, uses a bit more battery", st.vizHd) { v -> set { it.copy(vizHd = v) } }
+                    SwitchRow("Crop Aspect", "Keep round / wave visualizations square instead of stretching them", st.vizCrop) { v -> set { it.copy(vizCrop = v) } }
+                    SwitchRow("Force 30 FPS", "Reduce the frame rate to 30 frames per second (saves battery)", st.viz30fps) { v -> set { it.copy(viz30fps = v) } }
+                    NoteBlock("Visualization Delay: the extra delay that keeps the visualization and lyrics in time with the sound is set for each output (Audio → Audio Outputs)")
+                    SectionLabel("Presets")
+                    Hint("Built-in: ${VizPreset.values().size}. Switched-off presets are skipped by the ◀ ▶ buttons and Preset Duration.")
+                    VizPreset.values().forEach { p ->
+                        SwitchRow(p.label, null, p.name !in st.vizDisabledPresets) { on ->
+                            set {
+                                val off = if (on) it.vizDisabledPresets - p.name else it.vizDisabledPresets + p.name
+                                // keep at least one preset on
+                                it.copy(vizDisabledPresets = if (off.size >= VizPreset.values().size) it.vizDisabledPresets else off)
+                            }
+                        }
+                    }
+                    RestoreRow {
+                        set {
+                            it.copy(
+                                vizOnPlayer = d.vizOnPlayer, eqSpectrum = d.eqSpectrum, vizInLibrary = d.vizInLibrary, vizPresetSeconds = d.vizPresetSeconds,
+                                vizPanelOpacity = d.vizPanelOpacity, vizFadedOpacity = d.vizFadedOpacity, vizUiTimeoutMs = d.vizUiTimeoutMs,
+                                vizAlbumArt = d.vizAlbumArt, vizIgnoreTouch = d.vizIgnoreTouch, vizTrackOpacity = d.vizTrackOpacity,
+                                vizHideBars = d.vizHideBars, vizScaledBars = d.vizScaledBars, vizHd = d.vizHd, vizCrop = d.vizCrop,
+                                viz30fps = d.viz30fps, vizDisabledPresets = d.vizDisabledPresets
+                            )
+                        }
+                    }
                 }
 
                 page == SettingsPage.BACKGROUND -> {
-                    SwitchRow("Blurred album art background", "The current cover, blurred, behind every screen", st.bgEnabled) { v -> set { it.copy(bgEnabled = v) } }
-                    SliderRow("Blur", "${st.bgBlur} dp", st.bgBlur.toFloat(), 0f..150f, enabled = st.bgEnabled) { v -> set { it.copy(bgBlur = v.roundToInt()) } }
-                    SliderRow("Intensity", "${(st.bgIntensity * 100).roundToInt()}%", st.bgIntensity, 0.1f..1f, enabled = st.bgEnabled) { v ->
+                    var pickColor by remember { mutableStateOf(false) }
+                    SwitchRow("Enable Blurred Backgrounds", "The current album art, blurred, behind the screens", st.bgEnabled) { v -> set { it.copy(bgEnabled = v) } }
+                    SwitchRow("List Background", "Also behind the library lists", st.bgList) { v -> set { it.copy(bgList = v) } }
+                    SwitchRow("Lyrics Background", "Also behind the lyrics", st.bgLyrics) { v -> set { it.copy(bgLyrics = v) } }
+                    NoteBlock("Lyrics and list backgrounds are dimmed a bit more to keep the text readable")
+                    StepSliderRow("Background Gradient", "${st.bgGradient}", st.bgGradient, 0, 8, "None", "Max") { v -> set { it.copy(bgGradient = v) } }
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { pickColor = true }
+                            .padding(horizontal = 18.dp, vertical = 10.dp)
+                    ) {
+                        Text("Background Gradient Color", color = sc.text, fontSize = 18.sp, fontFamily = sc.family, fontWeight = sc.titleWeight)
+                        Text("#%06X".format(st.bgGradientColor and 0xFFFFFF), color = sc.sub, fontSize = 13.sp, fontFamily = sc.family)
+                        Spacer(Modifier.height(6.dp))
+                        Box(
+                            Modifier
+                                .size(width = 46.dp, height = 24.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(st.bgGradientColor))
+                                .border(1.dp, sc.chipBorder, RoundedCornerShape(50))
+                        )
+                    }
+                    SwitchRow("Background Gradient For Lists", "Also apply the gradient to the list background", st.bgGradientLists) { v -> set { it.copy(bgGradientLists = v) } }
+                    StepSliderRow("Background Blur", "${st.bgBlurStep}", st.bgBlurStep, 0, 10, "Less", "More", enabled = st.bgEnabled) { v -> set { it.copy(bgBlurStep = v) } }
+                    StepSliderRow("Background Details", "${st.bgDetails}", st.bgDetails, 0, 10, "Solid Color", "Detailed", enabled = st.bgEnabled) { v -> set { it.copy(bgDetails = v) } }
+                    SliderRow("Background Intensity", "${(st.bgIntensity * 100).roundToInt()}%", st.bgIntensity, 0f..2f, enabled = st.bgEnabled) { v ->
                         set { it.copy(bgIntensity = (v * 20).roundToInt() / 20f) }
                     }
-                    SliderRow("Saturation", "${(st.bgSaturation * 100).roundToInt()}%", st.bgSaturation, 0f..2f, enabled = st.bgEnabled) { v ->
+                    SliderRow("Background Saturation", "${(st.bgSaturation * 100).roundToInt()}%", st.bgSaturation, 0f..3f, enabled = st.bgEnabled) { v ->
                         set { it.copy(bgSaturation = (v * 20).roundToInt() / 20f) }
                     }
+                    RestoreRow {
+                        set {
+                            it.copy(
+                                bgEnabled = d.bgEnabled, bgList = d.bgList, bgLyrics = d.bgLyrics, bgGradient = d.bgGradient,
+                                bgGradientColor = d.bgGradientColor, bgGradientLists = d.bgGradientLists, bgBlurStep = d.bgBlurStep,
+                                bgDetails = d.bgDetails, bgIntensity = d.bgIntensity, bgSaturation = d.bgSaturation
+                            )
+                        }
+                    }
+                    if (pickColor) ColorPickerDialog(Color(st.bgGradientColor), onPick = { c -> set { it.copy(bgGradientColor = c.toArgb()) } }) { pickColor = false }
                 }
 
                 page == SettingsPage.ALBUM_ART -> {
-                    SwitchRow("High quality covers", "Sharper covers on the player screen (uses a bit more memory)", st.artHighQuality) { v -> set { it.copy(artHighQuality = v) } }
-                    ActionRow("Clear album art cache", "Read every cover again from the files") { ArtworkLoader.clear() }
-                    Hint("Covers are read from the pictures embedded in your music files.")
+                    var confirm by remember { mutableStateOf(0) } // 1 reset negative, 2 delete cache
+                    SectionLabel("Download")
+                    SwitchRow("Download Album Art", "Automatically search and download missing album art (iTunes)", st.artDownload) { v -> set { it.copy(artDownload = v) } }
+                    SwitchRow(
+                        "Download Artist Images", "For Artists, Album Artists and Composers (Deezer). If disabled, the album art is used",
+                        st.artDownloadArtist
+                    ) { v -> set { it.copy(artDownloadArtist = v) } }
+                    SwitchRow("High Resolution", "Higher downloaded image resolution, uses more storage and data", st.artHighRes) { v -> set { it.copy(artHighRes = v) } }
+                    SwitchRow("Download Only On Wi-Fi", "Images are downloaded only when Wi-Fi is connected", st.artWifiOnly) { v -> set { it.copy(artWifiOnly = v) } }
+                    SwitchRow("Also Search By Title/Filename", "Search for album art even if the album tag is missing", st.artSearchTitle) { v -> set { it.copy(artSearchTitle = v) } }
+                    SwitchRow(
+                        "Prefer Downloaded Album Art", "Prefer downloaded album art over the embedded picture and Cover.jpg/Folder.jpg",
+                        st.artPreferDownloaded
+                    ) { v -> set { it.copy(artPreferDownloaded = v) }; ArtworkLoader.clear() }
+                    PlainRow("Reset Negative Status", "Clear the stored \"not found\" status of album/artist images") { confirm = 1 }
+                    PlainRow("Delete Cache", "Downloaded images and the image cache will be deleted") { confirm = 2 }
+                    SectionLabel("Advanced Tweaks")
+                    SwitchRow("Force Default Image", "Always show the default image instead of any album art", st.artForceDefault) { v -> set { it.copy(artForceDefault = v) }; ArtworkLoader.clear() }
+                    SwitchRow("Use 24-bit RGB", "Higher colour quality for album art. Needs 2x more memory per image", st.art24bit) { v -> set { it.copy(art24bit = v) }; ArtworkLoader.clear() }
+                    SwitchRow("Increase Resolution", "Sharper album art on the Player Screen. Uses more memory", st.artHighQuality) { v -> set { it.copy(artHighQuality = v) } }
+                    ChipRow(
+                        "Aspect Ratio", "Keep album art aspect ratio as is. Tall images won't fill some places fully",
+                        listOf("Default", "Keep Aspect Ratio", "Square"), st.artAspect
+                    ) { v -> set { it.copy(artAspect = v) } }
+                    NoteBlock("Cover.jpg / Folder.jpg next to the songs are read when \"All files access\" is allowed (Look and Feel → Lyrics → Scan LRC Files asks for it)")
+                    RestoreRow {
+                        set {
+                            it.copy(
+                                artDownload = d.artDownload, artDownloadArtist = d.artDownloadArtist, artHighRes = d.artHighRes,
+                                artWifiOnly = d.artWifiOnly, artSearchTitle = d.artSearchTitle, artPreferDownloaded = d.artPreferDownloaded,
+                                artForceDefault = d.artForceDefault, art24bit = d.art24bit, artHighQuality = d.artHighQuality, artAspect = d.artAspect
+                            )
+                        }
+                        ArtworkLoader.clear()
+                    }
+                    if (confirm == 1) ConfirmDialog(
+                        "Reset Negative Status", "PowerSound will search again for album/artist images that were not found before.",
+                        onOk = { ArtworkLoader.resetNegative(context) }
+                    ) { confirm = 0 }
+                    if (confirm == 2) ConfirmDialog(
+                        "Delete Cache", "Downloaded images and the image cache will be deleted.",
+                        onOk = { ArtworkLoader.deleteCache(context) }
+                    ) { confirm = 0 }
                 }
 
                 page == SettingsPage.LIBRARY -> {
@@ -1686,4 +1828,120 @@ fun HelpDialog(onDismiss: () -> Unit) {
             }
         }
     )
+}
+
+
+/** Colour picker: saturation/value square, hue bar, hex field and a palette (Background Gradient Color). */
+@Composable
+private fun ColorPickerDialog(initial: Color, onPick: (Color) -> Unit, onDismiss: () -> Unit) {
+    val hsv0 = remember {
+        FloatArray(3).also { android.graphics.Color.colorToHSV(initial.toArgb(), it) }
+    }
+    var hue by remember { mutableStateOf(hsv0[0]) }
+    var sat by remember { mutableStateOf(hsv0[1]) }
+    var value by remember { mutableStateOf(hsv0[2]) }
+    val color = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value)))
+    var hex by remember(color) { mutableStateOf("%06X".format(color.toArgb() and 0xFFFFFF)) }
+    val palette = listOf(
+        0xFFFFFFFF, 0xFFD0D0D8, 0xFF9A9AB0, 0xFF5A5A6E, 0xFF2A2A36, 0xFF000000,
+        0xFF0F2440, 0xFF1F4F9E, 0xFF4F9DFF, 0xFF3A1F5E, 0xFFB07CFF, 0xFF5E1F3A,
+        0xFFFF4D5E, 0xFFFF8A1F, 0xFFE8C14A, 0xFF1F5E3A, 0xFF3DDC84, 0xFF4FB6C9
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1B1B22),
+        text = {
+            Column {
+                Row(Modifier.fillMaxWidth().height(190.dp)) {
+                    androidx.compose.foundation.Canvas(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(8.dp))
+                            .pointerInput(Unit) {
+                                androidx.compose.foundation.gestures.detectDragGestures(
+                                    onDragStart = { o -> sat = (o.x / size.width).coerceIn(0f, 1f); value = 1f - (o.y / size.height).coerceIn(0f, 1f) }
+                                ) { ch, _ -> sat = (ch.position.x / size.width).coerceIn(0f, 1f); value = 1f - (ch.position.y / size.height).coerceIn(0f, 1f) }
+                            }
+                            .pointerInput(Unit) {
+                                androidx.compose.foundation.gestures.detectTapGestures { o ->
+                                    sat = (o.x / size.width).coerceIn(0f, 1f); value = 1f - (o.y / size.height).coerceIn(0f, 1f)
+                                }
+                            }
+                    ) {
+                        val pure = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, 1f, 1f)))
+                        drawRect(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.White, pure)))
+                        drawRect(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+                        drawCircle(Color.White, 8.dp.toPx(), androidx.compose.ui.geometry.Offset(sat * size.width, (1f - value) * size.height), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    androidx.compose.foundation.Canvas(
+                        Modifier
+                            .width(28.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(6.dp))
+                            .pointerInput(Unit) {
+                                androidx.compose.foundation.gestures.detectDragGestures(
+                                    onDragStart = { o -> hue = (o.y / size.height).coerceIn(0f, 1f) * 360f }
+                                ) { ch, _ -> hue = (ch.position.y / size.height).coerceIn(0f, 1f) * 360f }
+                            }
+                            .pointerInput(Unit) {
+                                androidx.compose.foundation.gestures.detectTapGestures { o -> hue = (o.y / size.height).coerceIn(0f, 1f) * 360f }
+                            }
+                    ) {
+                        val stops = (0..6).map { Color(android.graphics.Color.HSVToColor(floatArrayOf(it * 60f, 1f, 1f))) }
+                        drawRect(androidx.compose.ui.graphics.Brush.verticalGradient(stops))
+                        val y = hue / 360f * size.height
+                        drawLine(Color.White, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), strokeWidth = 3.dp.toPx())
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(width = 46.dp, height = 26.dp).clip(RoundedCornerShape(50)).background(color).border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(50)))
+                    Spacer(Modifier.width(12.dp))
+                    Text("#", color = Color.White)
+                    BasicTextField(
+                        value = hex,
+                        onValueChange = { t ->
+                            val clean = t.uppercase().filter { it in "0123456789ABCDEF" }.take(6)
+                            hex = clean
+                            if (clean.length == 6) {
+                                val c = (0xFF000000 or clean.toLong(16)).toInt()
+                                val h = FloatArray(3).also { android.graphics.Color.colorToHSV(c, it) }
+                                hue = h[0]; sat = h[1]; value = h[2]
+                            }
+                        },
+                        singleLine = true,
+                        textStyle = TextStyle(color = Color.White, fontSize = 18.sp),
+                        cursorBrush = SolidColor(Color.White),
+                        modifier = Modifier.width(110.dp)
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                FlowRowPalette(palette.map { Color(it) }) { c ->
+                    val h = FloatArray(3).also { android.graphics.Color.colorToHSV(c.toArgb(), it) }
+                    hue = h[0]; sat = h[1]; value = h[2]
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(color); onDismiss() }) { Text("OK") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FlowRowPalette(colors: List<Color>, onPick: (Color) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        colors.forEach { c ->
+            Box(
+                Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(c)
+                    .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
+                    .clickable { onPick(c) }
+            )
+        }
+    }
 }

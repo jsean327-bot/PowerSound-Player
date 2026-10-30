@@ -76,6 +76,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -107,9 +109,11 @@ fun Artwork(
     placeholder: @Composable BoxScope.() -> Unit = { NotePlaceholder() }
 ) {
     val context = LocalContext.current
+    val gen by ArtworkLoader.generation.collectAsState()
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
     val bitmap by produceState<ImageBitmap?>(
         initialValue = songId?.let { ArtworkLoader.cached(it, sizePx) },
-        songId, sizePx
+        songId, sizePx, gen, st.artForceDefault, st.art24bit
     ) {
         value = songId?.let { ArtworkLoader.load(context, it, sizePx) }
     }
@@ -121,15 +125,48 @@ fun Artwork(
     ) {
         val b = bitmap
         if (b != null) {
+            // Settings → Album Art → Aspect Ratio: default (crop near-square covers), keep aspect ratio, square
+            val ratio = b.width.toFloat() / b.height.coerceAtLeast(1)
+            val fit = when (st.artAspect) {
+                1 -> true
+                2 -> false
+                else -> ratio < 0.8f || ratio > 1.25f
+            }
             Image(
                 bitmap = b,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+                contentScale = if (fit) ContentScale.Fit else ContentScale.Crop
             )
         } else {
             placeholder()
         }
+    }
+}
+
+/** Artist / album artist / composer picture (Settings → Album Art → Download Artist Images), else the album art. */
+@Composable
+fun ArtistArtwork(
+    name: String,
+    fallbackSongId: Long?,
+    modifier: Modifier = Modifier,
+    sizePx: Int = 384,
+    cornerDp: Int = 0,
+    placeholder: @Composable BoxScope.() -> Unit = { BarsPlaceholder() }
+) {
+    val context = LocalContext.current
+    val gen by ArtworkLoader.generation.collectAsState()
+    val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
+    val img by produceState<ImageBitmap?>(null, name, gen, st.artDownloadArtist, st.artForceDefault) {
+        value = ArtworkLoader.loadArtist(context, name, sizePx)
+    }
+    val i = img
+    if (i != null) {
+        Box(modifier.clip(RoundedCornerShape(com.powersound.player.ui.cornerDp(cornerDp).dp))) {
+            Image(bitmap = i, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
+    } else {
+        Artwork(fallbackSongId, modifier, sizePx = sizePx, cornerDp = cornerDp, placeholder = placeholder)
     }
 }
 
@@ -168,47 +205,66 @@ fun BoxScope.BarsPlaceholder() {
     }
 }
 
-/** Blurred cover of the current song behind every screen (Settings → Background). */
+/**
+ * Blurred cover of the current song (Settings → Background).
+ * [forList] = behind lists / lyrics: always dimmed a bit more so text stays readable.
+ */
 @Composable
-fun AppBackground(songId: Long?) {
+fun AppBackground(songId: Long?, forList: Boolean = false, modifier: Modifier = Modifier.fillMaxSize()) {
     val context = LocalContext.current
     val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
-    val bitmap by produceState<ImageBitmap?>(null, songId, st.bgEnabled) {
-        value = if (st.bgEnabled) songId?.let { ArtworkLoader.load(context, it, 192) } else null
+    val gen by ArtworkLoader.generation.collectAsState()
+    // Background Details: 0 = one solid colour … 10 = detailed
+    val detailPx = listOf(1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48)[st.bgDetails.coerceIn(0, 10)]
+    val bitmap by produceState<ImageBitmap?>(null, songId, st.bgEnabled, detailPx, gen) {
+        value = if (st.bgEnabled && songId != null) {
+            ArtworkLoader.load(context, songId, 192)?.let { img ->
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    val src = img.asAndroidBitmap()
+                    android.graphics.Bitmap.createScaledBitmap(src, detailPx, detailPx, true).asImageBitmap()
+                }
+            }
+        } else null
     }
     val bg = MaterialTheme.colorScheme.background
-    val saturation = remember(st.bgSaturation) {
-        androidx.compose.ui.graphics.ColorFilter.colorMatrix(
-            androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(st.bgSaturation) }
-        )
+    // Saturation 0–300 %, Intensity 0–200 % (above 100 % the image is also brightened)
+    val filter = remember(st.bgSaturation, st.bgIntensity) {
+        val m = androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(st.bgSaturation) }
+        val bright = st.bgIntensity.coerceAtLeast(1f)
+        if (bright > 1f) {
+            val b = androidx.compose.ui.graphics.ColorMatrix(
+                floatArrayOf(bright, 0f, 0f, 0f, 0f, 0f, bright, 0f, 0f, 0f, 0f, 0f, bright, 0f, 0f, 0f, 0f, 0f, 1f, 0f)
+            )
+            m.timesAssign(b)
+        }
+        androidx.compose.ui.graphics.ColorFilter.colorMatrix(m)
     }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(bg)
-    ) {
+    Box(modifier.background(bg)) {
         val b = bitmap
         if (b != null && st.bgEnabled) {
             Image(
                 bitmap = b,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                alpha = st.bgIntensity,
-                colorFilter = saturation,
+                alpha = st.bgIntensity.coerceIn(0f, 1f),
+                colorFilter = filter,
+                filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(st.bgBlur.dp)
+                    .blur((st.bgBlurStep * 16).dp)
             )
         }
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(bg.copy(alpha = 0.35f), bg.copy(alpha = 0.75f), bg.copy(alpha = 0.95f))
-                    )
-                )
-        )
+        if (forList) Box(Modifier.fillMaxSize().background(bg.copy(alpha = 0.45f)))
+        // Background Gradient (0–8) in the chosen colour
+        val g = st.bgGradient.coerceIn(0, 8) / 8f
+        if (g > 0f && (!forList || st.bgGradientLists)) {
+            val c = Color(st.bgGradientColor)
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(listOf(c.copy(alpha = 0.25f * g), c.copy(alpha = 0.6f * g), c.copy(alpha = 0.95f * g))))
+            )
+        }
     }
 }
 
@@ -559,7 +615,7 @@ fun PageHeader(
 
 /** Square tile with cover art and the title/subtitle chips, like the Folders and Albums grids. */
 @Composable
-fun GroupTile(title: String, subtitle: String, coverId: Long?, onClick: () -> Unit) {
+fun GroupTile(title: String, subtitle: String, coverId: Long?, key: String = "", onClick: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -567,13 +623,18 @@ fun GroupTile(title: String, subtitle: String, coverId: Long?, onClick: () -> Un
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
     ) {
-        Artwork(
-            songId = coverId,
-            modifier = Modifier.fillMaxSize(),
-            sizePx = 384,
-            cornerDp = 0,
-            placeholder = { BarsPlaceholder() }
-        )
+        val person = key.startsWith("artist:") || key.startsWith("albumartist:") || key.startsWith("composer:")
+        if (person) {
+            ArtistArtwork(title, coverId, Modifier.fillMaxSize())
+        } else {
+            Artwork(
+                songId = coverId,
+                modifier = Modifier.fillMaxSize(),
+                sizePx = 384,
+                cornerDp = 0,
+                placeholder = { BarsPlaceholder() }
+            )
+        }
         Column(
             Modifier
                 .align(Alignment.BottomStart)

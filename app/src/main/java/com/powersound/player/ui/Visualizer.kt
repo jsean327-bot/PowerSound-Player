@@ -10,6 +10,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -40,6 +42,20 @@ enum class VizPreset(val label: String) {
     MIRROR_WAVE("Mirror Wave");
 
     fun next(dir: Int): VizPreset = values()[(ordinal + dir + values().size) % values().size]
+
+    /** Next preset that is not switched off in Settings → Visualization → Presets. */
+    fun nextEnabled(dir: Int): VizPreset {
+        val off = com.powersound.player.data.SettingsStore.value.vizDisabledPresets
+        var p = this
+        repeat(values().size) {
+            p = p.next(dir)
+            if (p.name !in off) return p
+        }
+        return this
+    }
+
+    /** Bar-type presets (Settings → Visualization → Scaled Bars For Faded Controls). */
+    val isBars: Boolean get() = this == SPECTRUM_CENTERED || this == SPECTRUM
 }
 
 /** Live visualization of what is playing, redrawn every frame. */
@@ -49,19 +65,30 @@ fun VisualizerView(preset: VizPreset, accent: Color, modifier: Modifier = Modifi
         VisualizerBus.active = true
         onDispose { VisualizerBus.active = false }
     }
+    val st = com.powersound.player.data.SettingsStore.value
     var frame by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(Unit) {
-        while (true) withFrameMillis { frame = it }
+    LaunchedEffect(st.viz30fps) {
+        var last = 0L
+        while (true) withFrameMillis { t ->
+            // Settings → Visualization → Force 30 FPS
+            if (!st.viz30fps || t - last >= 32) {
+                frame = t
+                last = t
+            }
+        }
     }
-    val bands = 64
-    val spec = remember { FloatArray(bands) }
-    val smooth = remember { FloatArray(bands) }
+    // Settings → Visualization → HD: twice the bars
+    val bands = if (st.vizHd) 128 else 64
+    val spec = remember(bands) { FloatArray(bands) }
+    val smooth = remember(bands) { FloatArray(bands) }
     val work = remember { FloatArray(1024) }
     val re = remember { FloatArray(1024) }
     val im = remember { FloatArray(1024) }
     val wave = remember { FloatArray(1024) }
 
-    Canvas(modifier) {
+    // Settings → Visualization → Crop Aspect: keep a square drawing area instead of stretching
+    val area = if (st.vizCrop && !preset.isBars) modifier.then(Modifier.wrapContentSize().aspectRatio(1f)) else modifier
+    Canvas(area) {
         if (frame < 0L) return@Canvas // reading the frame clock redraws every frame
         VisualizerBus.spectrum(bands, spec, work, re, im)
         for (i in 0 until bands) smooth[i] = maxOf(spec[i], smooth[i] * 0.86f)
@@ -72,7 +99,7 @@ fun VisualizerView(preset: VizPreset, accent: Color, modifier: Modifier = Modifi
         when (preset) {
             VizPreset.SPECTRUM_CENTERED -> {
                 val n = bands
-                val gap = 3.dp.toPx()
+                val gap = (if (bands > 64) 1.5f else 3f).dp.toPx()
                 val bw = (w - gap * (n - 1)) / n
                 for (i in 0 until n) {
                     val v = smooth[i]
@@ -87,7 +114,7 @@ fun VisualizerView(preset: VizPreset, accent: Color, modifier: Modifier = Modifi
             }
             VizPreset.SPECTRUM -> {
                 val n = bands
-                val gap = 2.dp.toPx()
+                val gap = (if (bands > 64) 1f else 2f).dp.toPx()
                 val bw = (w - gap * (n - 1)) / n
                 for (i in 0 until n) {
                     val v = smooth[i]
@@ -134,6 +161,53 @@ fun VisualizerView(preset: VizPreset, accent: Color, modifier: Modifier = Modifi
                     drawLine(if (v > 0.8f) accent else white.copy(alpha = 0.4f + 0.6f * v), start, end, strokeWidth = stroke, cap = StrokeCap.Round)
                 }
                 drawCircle(white.copy(alpha = 0.25f), r - 6f, c, style = Stroke(1.5.dp.toPx()))
+            }
+        }
+    }
+}
+
+
+/**
+ * Spectrum behind the Equalizer sliders (Settings → Visualization → Equalizer Screen Spectrum).
+ * [rounded] draws soft round bars, otherwise classic flat bars.
+ */
+@Composable
+fun EqSpectrum(rounded: Boolean, color: Color, modifier: Modifier = Modifier) {
+    DisposableEffect(Unit) {
+        VisualizerBus.active = true
+        onDispose { VisualizerBus.active = false }
+    }
+    var frame by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) {
+        var last = 0L
+        while (true) withFrameMillis { t -> if (t - last >= 32) { frame = t; last = t } }
+    }
+    val bands = 32
+    val spec = remember { FloatArray(bands) }
+    val smooth = remember { FloatArray(bands) }
+    val work = remember { FloatArray(1024) }
+    val re = remember { FloatArray(1024) }
+    val im = remember { FloatArray(1024) }
+    Canvas(modifier) {
+        if (frame < 0L) return@Canvas
+        VisualizerBus.spectrum(bands, spec, work, re, im)
+        for (i in 0 until bands) smooth[i] = maxOf(spec[i], smooth[i] * 0.88f)
+        val w = size.width
+        val h = size.height
+        val gap = 3.dp.toPx()
+        val bw = (w - gap * (bands - 1)) / bands
+        for (i in 0 until bands) {
+            val bh = smooth[i] * h * 0.95f
+            if (bh < 1f) continue
+            if (rounded) {
+                drawRoundRect(
+                    color.copy(alpha = 0.18f + 0.22f * smooth[i]),
+                    topLeft = Offset(i * (bw + gap), h - bh),
+                    size = Size(bw, bh),
+                    cornerRadius = CornerRadius(bw / 2f)
+                )
+            } else {
+                drawRect(color.copy(alpha = 0.22f), topLeft = Offset(i * (bw + gap), h - bh), size = Size(bw, bh))
             }
         }
     }

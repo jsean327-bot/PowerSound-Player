@@ -321,6 +321,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     st.excludedFolders.none { ex -> s.folder == ex || s.folder.startsWith("$ex/") }
             }
             songById = songs.associateBy { it.id }
+            val byId = songById
+            com.powersound.player.data.ArtworkLoader.songInfo = { byId[it] }
             _library.value = LibraryState(
                 loading = false,
                 loaded = true,

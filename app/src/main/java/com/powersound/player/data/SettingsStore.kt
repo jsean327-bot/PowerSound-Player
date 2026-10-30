@@ -122,13 +122,43 @@ data class AppSettings(
     // ---- Visualization ----
     val vizFadedOpacity: Float = 0.42f,
     val vizPresetSeconds: Int = 0,       // 0 = keep the same preset
+    val vizOnPlayer: Boolean = true,
+    val eqSpectrum: Int = 2,             // 0 disabled, 1 classic, 2 rounded
+    val vizInLibrary: Boolean = false,
+    val vizPanelOpacity: Float = 0.6f,
+    val vizUiTimeoutMs: Int = 1500,
+    val vizAlbumArt: Boolean = true,
+    val vizIgnoreTouch: Boolean = false,
+    val vizTrackOpacity: Float = 0.25f,
+    val vizHideBars: Boolean = false,
+    val vizScaledBars: Boolean = true,
+    val vizHd: Boolean = false,
+    val vizCrop: Boolean = false,
+    val viz30fps: Boolean = false,
+    val vizDisabledPresets: Set<String> = emptySet(),
     // ---- Background ----
     val bgEnabled: Boolean = true,
     val bgBlur: Int = 80,                // dp
     val bgIntensity: Float = 0.55f,
     val bgSaturation: Float = 1f,
+    val bgList: Boolean = true,
+    val bgLyrics: Boolean = true,
+    val bgGradient: Int = 4,             // 0 none .. 8 max
+    val bgGradientColor: Int = 0xFF000000.toInt(),
+    val bgGradientLists: Boolean = true,
+    val bgBlurStep: Int = 5,             // 0 .. 10
+    val bgDetails: Int = 5,              // 0 solid colour .. 10 detailed
     // ---- Album Art ----
-    val artHighQuality: Boolean = true,
+    val artHighQuality: Boolean = true,      // "Increase Resolution"
+    val artDownload: Boolean = true,
+    val artDownloadArtist: Boolean = true,
+    val artHighRes: Boolean = true,
+    val artWifiOnly: Boolean = true,
+    val artForceDefault: Boolean = false,
+    val art24bit: Boolean = true,
+    val artSearchTitle: Boolean = true,
+    val artPreferDownloaded: Boolean = false,
+    val artAspect: Int = 0,                  // 0 default, 1 keep aspect ratio, 2 square
     // ---- Library ----
     val minDurationSec: Int = 0,
     val excludedFolders: Set<String> = emptySet(),
@@ -260,6 +290,15 @@ object SettingsStore {
         put("outNoDuck", JSONArray().apply { s.outNoDuck.forEach { put(it) } })
         put("outDelay", JSONObject().apply { s.outDelayMs.forEach { (k, v) -> put(k, v) } })
         put("outRate", JSONObject().apply { s.outRate.forEach { (k, v) -> put(k, v) } })
+        put("vizOn", s.vizOnPlayer); put("eqSpec", s.eqSpectrum); put("vizLib", s.vizInLibrary); put("vizPanel", s.vizPanelOpacity.toDouble())
+        put("vizUi", s.vizUiTimeoutMs); put("vizArt", s.vizAlbumArt); put("vizIgnore", s.vizIgnoreTouch); put("vizTrack", s.vizTrackOpacity.toDouble())
+        put("vizBars", s.vizHideBars); put("vizScaled", s.vizScaledBars); put("vizHd", s.vizHd); put("vizCrop", s.vizCrop); put("viz30", s.viz30fps)
+        put("vizOff", JSONArray().apply { s.vizDisabledPresets.forEach { put(it) } })
+        put("bgList", s.bgList); put("bgLyrics", s.bgLyrics); put("bgGrad", s.bgGradient); put("bgGradColor", s.bgGradientColor)
+        put("bgGradLists", s.bgGradientLists); put("bgBlurStep", s.bgBlurStep); put("bgDetails", s.bgDetails)
+        put("artDl", s.artDownload); put("artDlArtist", s.artDownloadArtist); put("artHiRes", s.artHighRes); put("artWifi", s.artWifiOnly)
+        put("artDefault", s.artForceDefault); put("art24", s.art24bit); put("artTitle", s.artSearchTitle); put("artPreferDl", s.artPreferDownloaded)
+        put("artAspect", s.artAspect)
         put("bitPerfect", s.perfectBitPerfect); put("volZero", s.pauseOnVolumeZero); put("musicFx", s.musicFx)
     }
 
@@ -383,7 +422,37 @@ object SettingsStore {
             outRate = o.optJSONObject("outRate")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: d.outRate,
             perfectBitPerfect = o.optBoolean("bitPerfect", d.perfectBitPerfect),
             pauseOnVolumeZero = o.optBoolean("volZero", d.pauseOnVolumeZero),
-            musicFx = o.optBoolean("musicFx", d.musicFx)
+            musicFx = o.optBoolean("musicFx", d.musicFx),
+            vizOnPlayer = o.optBoolean("vizOn", d.vizOnPlayer),
+            eqSpectrum = o.optInt("eqSpec", d.eqSpectrum),
+            vizInLibrary = o.optBoolean("vizLib", d.vizInLibrary),
+            vizPanelOpacity = o.optDouble("vizPanel", d.vizPanelOpacity.toDouble()).toFloat(),
+            vizUiTimeoutMs = o.optInt("vizUi", d.vizUiTimeoutMs),
+            vizAlbumArt = o.optBoolean("vizArt", d.vizAlbumArt),
+            vizIgnoreTouch = o.optBoolean("vizIgnore", d.vizIgnoreTouch),
+            vizTrackOpacity = o.optDouble("vizTrack", d.vizTrackOpacity.toDouble()).toFloat(),
+            vizHideBars = o.optBoolean("vizBars", d.vizHideBars),
+            vizScaledBars = o.optBoolean("vizScaled", d.vizScaledBars),
+            vizHd = o.optBoolean("vizHd", d.vizHd),
+            vizCrop = o.optBoolean("vizCrop", d.vizCrop),
+            viz30fps = o.optBoolean("viz30", d.viz30fps),
+            vizDisabledPresets = strings("vizOff"),
+            bgList = o.optBoolean("bgList", d.bgList),
+            bgLyrics = o.optBoolean("bgLyrics", d.bgLyrics),
+            bgGradient = o.optInt("bgGrad", d.bgGradient),
+            bgGradientColor = o.optInt("bgGradColor", d.bgGradientColor),
+            bgGradientLists = o.optBoolean("bgGradLists", d.bgGradientLists),
+            bgBlurStep = o.optInt("bgBlurStep", d.bgBlurStep),
+            bgDetails = o.optInt("bgDetails", d.bgDetails),
+            artDownload = o.optBoolean("artDl", d.artDownload),
+            artDownloadArtist = o.optBoolean("artDlArtist", d.artDownloadArtist),
+            artHighRes = o.optBoolean("artHiRes", d.artHighRes),
+            artWifiOnly = o.optBoolean("artWifi", d.artWifiOnly),
+            artForceDefault = o.optBoolean("artDefault", d.artForceDefault),
+            art24bit = o.optBoolean("art24", d.art24bit),
+            artSearchTitle = o.optBoolean("artTitle", d.artSearchTitle),
+            artPreferDownloaded = o.optBoolean("artPreferDl", d.artPreferDownloaded),
+            artAspect = o.optInt("artAspect", d.artAspect)
         )
     }
 }

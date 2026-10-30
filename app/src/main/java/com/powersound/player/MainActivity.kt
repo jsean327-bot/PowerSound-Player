@@ -381,7 +381,18 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     val openSongMenu: (Song) -> Unit = { s -> songMenuInfo = null; songMenu = s }
 
     Box(Modifier.fillMaxSize()) {
-        AppBackground(currentId)
+        // Settings → Background → List Background
+        AppBackground(if (appSettings.bgList) currentId else null, forList = true)
+        // Settings → Visualization → Visualization in Library
+        if (appSettings.vizInLibrary && appSettings.vizOnPlayer && vm.vizMode != com.powersound.player.ui.VizMode.OFF && player.isPlaying && !showNowPlaying) {
+            com.powersound.player.ui.VisualizerView(
+                preset = vm.vizPreset,
+                accent = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = 0.35f }
+            )
+        }
 
         // Each tab keeps its scroll positions / search text while you switch tabs.
         tabHolder.SaveableStateProvider(tab.name) {

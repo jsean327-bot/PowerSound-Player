@@ -121,6 +121,10 @@ fun EqPage(bottomInset: Dp) {
                 .background(Panel)
                 .padding(vertical = 12.dp)
         ) {
+          Box(Modifier.fillMaxWidth().height(250.dp)) {
+            // Settings → Visualization → Equalizer Screen Spectrum
+            val spec = com.powersound.player.data.SettingsStore.settings.collectAsState().value.eqSpectrum
+            if (spec != 0) EqSpectrum(spec == 2, Color.White, Modifier.matchParentSize().padding(horizontal = 8.dp, vertical = 4.dp))
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -155,6 +159,7 @@ fun EqPage(bottomInset: Dp) {
                     )
                 }
             }
+          }
             Spacer(Modifier.height(8.dp))
             ResponseCurve(settings)
             Text(

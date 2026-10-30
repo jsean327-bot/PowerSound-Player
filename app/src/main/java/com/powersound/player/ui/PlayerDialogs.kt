@@ -443,6 +443,10 @@ fun LyricsSheet(song: Song, position: StateFlow<PlaybackPos>, onSeek: (Long) -> 
     var zoom by remember { mutableStateOf(1f) }
     val baseSp = when (st.lyricsSize) { 0 -> 13f; 2 -> 20f; else -> 16f } * zoom
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
+      Box {
+        // Settings → Background → Lyrics Background
+        if (st.bgLyrics) AppBackground(song.id, forList = true, modifier = Modifier.matchParentSize())
+      Column {
         Text(
             song.title,
             color = Color.White,
@@ -504,6 +508,8 @@ fun LyricsSheet(song: Song, position: StateFlow<PlaybackPos>, onSeek: (Long) -> 
                 }
             }
         }
+      }
+      }
     }
 }
 

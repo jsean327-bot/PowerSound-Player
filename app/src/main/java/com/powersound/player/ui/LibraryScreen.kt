@@ -221,7 +221,7 @@ fun GroupGridScreen(
                 }
             }
             itemsIndexed(shown, key = { _, g -> g.key }) { _, g ->
-                GroupTile(g.title, g.subtitle, g.coverId) { onOpen(g) }
+                GroupTile(g.title, g.subtitle, g.coverId, g.key) { onOpen(g) }
             }
         }
 

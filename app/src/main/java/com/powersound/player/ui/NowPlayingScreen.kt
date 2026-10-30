@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -111,6 +112,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -206,6 +208,9 @@ fun NowPlayingScreen(
     val more by rememberUpdatedState(onMore)
     val appSettings by com.powersound.player.data.SettingsStore.settings.collectAsState()
     val st = appSettings
+    // Settings → Visualization → Visualization On Player Screen: shown only while music is playing
+    val vizRequested = vizMode
+    val vizMode = if (st.vizOnPlayer && state.isPlaying) vizRequested else VizMode.OFF
 
     // 0 = fully open, 1 = gone. Follows the finger, then finishes smoothly when released.
     val closeP = remember { Animatable(0f) }
@@ -237,7 +242,7 @@ fun NowPlayingScreen(
     var showControls by remember { mutableStateOf(false) }
     LaunchedEffect(showControls) {
         if (showControls) {
-            delay(3500)
+            delay(st.vizUiTimeoutMs.toLong()) // Settings → Visualization → UI Timeout
             showControls = false
         }
     }
@@ -248,7 +253,24 @@ fun NowPlayingScreen(
         val sec = appSettings.vizPresetSeconds
         if (vizMode != VizMode.OFF && sec > 0) {
             delay(sec * 1000L)
-            onVizPreset(vizPreset.next(1))
+            onVizPreset(vizPreset.nextEnabled(1))
+        }
+    }
+    // Settings → Visualization → Hide System Bars For Full Screen
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(vizMode == VizMode.FULL && st.vizHideBars) {
+        val hide = vizMode == VizMode.FULL && st.vizHideBars
+        val window = (hostView.context as? android.app.Activity)?.window
+        val ctl = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, hostView) }
+        if (hide && ctl != null) {
+            ctl.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            ctl.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose {
+            if (hide && ctl != null) {
+                ctl.show(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+                if (!st.hideStatusBar) ctl.show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            }
         }
     }
     val contentAlpha by animateFloatAsState(
@@ -260,6 +282,19 @@ fun NowPlayingScreen(
         tween(animMs(300)),
         label = "controls"
     )
+    // Settings → Visualization → Track Opacity (labels, rating, menu, album art)
+    val trackAlpha by animateFloatAsState(
+        when (vizMode) {
+            VizMode.OFF -> 1f
+            VizMode.FADE -> if (showControls) 1f else appSettings.vizTrackOpacity
+            VizMode.FULL -> if (showControls) 1f else 0f
+        },
+        tween(animMs(300)),
+        label = "track"
+    )
+    // Settings → Visualization → Visible Album Art
+    val artVisible = vizMode == VizMode.OFF || st.vizAlbumArt
+    var coverRect by remember { mutableStateOf(Rect.Zero) }
 
     // ---- long-press scrubbing on the waveform / button area ----
     var scrubbing by remember { mutableStateOf(false) }
@@ -364,6 +399,13 @@ fun NowPlayingScreen(
             }
             .background(MaterialTheme.colorScheme.background)
             .pointerInput(Unit) {
+                // any touch shows the faded controls again (the touch itself still works)
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    showControls = true
+                }
+            }
+            .pointerInput(Unit) {
                 var up = 0f
                 detectVerticalDragGestures(
                     onDragStart = { up = 0f },
@@ -407,10 +449,20 @@ fun NowPlayingScreen(
         }
 
         if (vizMode != VizMode.OFF) {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val scaled = vizMode == VizMode.FADE && st.vizScaledBars && vizPreset.isBars && coverRect != Rect.Zero
             VisualizerView(
                 preset = vizPreset,
                 accent = accent,
-                modifier = Modifier
+                modifier = if (scaled) {
+                    // Settings → Visualization → Scaled Bars For Faded Controls: bars inside the album art area
+                    with(density) {
+                        Modifier
+                            .offset { androidx.compose.ui.unit.IntOffset(coverRect.left.toInt(), coverRect.top.toInt()) }
+                            .size(coverRect.width.toDp(), coverRect.height.toDp())
+                            .alpha(0.85f)
+                    }
+                } else Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
                     .navigationBarsPadding()
@@ -422,7 +474,6 @@ fun NowPlayingScreen(
         Column(
             Modifier
                 .fillMaxSize()
-                .alpha(contentAlpha)
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .padding(horizontal = 14.dp, vertical = 6.dp),
@@ -430,6 +481,7 @@ fun NowPlayingScreen(
         ) {
             Box(
                 Modifier
+                    .alpha(contentAlpha)
                     .padding(vertical = 6.dp)
                     .width(40.dp)
                     .height(4.dp)
@@ -442,9 +494,10 @@ fun NowPlayingScreen(
                 Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
+                    .onGloballyPositioned { coverRect = it.boundsInRoot() }
                     .graphicsLayer {
                         translationX = artX.value
-                        alpha = 1f - (kotlin.math.abs(artX.value) / size.width).coerceIn(0f, 1f) * 0.6f
+                        alpha = (1f - (kotlin.math.abs(artX.value) / size.width).coerceIn(0f, 1f) * 0.6f) * trackAlpha
                     }
                     .clip(RoundedCornerShape(cornerDp(24).dp))
                     .pointerInput(Unit) {
@@ -494,10 +547,10 @@ fun NowPlayingScreen(
                 if (st.artAnimation && st.animations != 0) {
                     // Settings → Player Screen → Album Art Animation
                     Crossfade(np?.songId, animationSpec = tween(animMs(380)), label = "art") { id ->
-                        Artwork(id, Modifier.fillMaxSize(), sizePx = artSize, cornerDp = 0, placeholder = { BarsPlaceholder() })
+                        Artwork(id, Modifier.fillMaxSize().alpha(if (artVisible) 1f else 0f), sizePx = artSize, cornerDp = 0, placeholder = { BarsPlaceholder() })
                     }
                 } else {
-                    Artwork(np?.songId, Modifier.fillMaxSize(), sizePx = artSize, cornerDp = 0, placeholder = { BarsPlaceholder() })
+                    Artwork(np?.songId, Modifier.fillMaxSize().alpha(if (artVisible) 1f else 0f), sizePx = artSize, cornerDp = 0, placeholder = { BarsPlaceholder() })
                 }
                 if (layout == 0) {
                     Box(
@@ -543,7 +596,7 @@ fun NowPlayingScreen(
             }
 
             // Alternative layout / Full cover: labels (and buttons) below the cover
-            if (layout != 0) {
+            if (layout != 0) Column(Modifier.fillMaxWidth().alpha(trackAlpha), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(10.dp))
                 Text(
                     title,
@@ -572,6 +625,7 @@ fun NowPlayingScreen(
                 }
             }
 
+          Column(Modifier.fillMaxWidth().weight(1f).alpha(contentAlpha), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(if (layout == 0) 12.dp else 8.dp))
 
             // ---- row of small buttons (editable); long press the empty space to edit ----
@@ -579,10 +633,10 @@ fun NowPlayingScreen(
             @Composable
             fun ButtonFor(id: String) {
                 when (id) {
-                    "viz" -> SmallPill(
-                        Icons.Rounded.GraphicEq, vizMode != VizMode.OFF, st.buttonsBg,
+                    "viz" -> if (st.vizOnPlayer) SmallPill(
+                        Icons.Rounded.GraphicEq, vizRequested != VizMode.OFF, st.buttonsBg,
                         onClick = {
-                            val m = vizMode.next()
+                            val m = vizRequested.next()
                             onVizMode(m)
                             showToast(m.label)
                         },
@@ -815,6 +869,7 @@ fun NowPlayingScreen(
                     .combinedClickable(onClick = { metaMode++ }, onLongClick = onAudioInfo)
                     .padding(horizontal = 12.dp, vertical = 4.dp)
             )
+          }
         }
 
         // full-screen visualization: tap shows the controls for a moment
@@ -824,7 +879,8 @@ fun NowPlayingScreen(
                     .fillMaxSize()
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { showControls = true }
             )
-        } else if (vizMode == VizMode.FADE && !showControls) {
+        } else if (vizMode == VizMode.FADE && !showControls && st.vizIgnoreTouch) {
+            // Settings → Visualization → Ignore Touch: the first touch only shows the controls
             Box(
                 Modifier
                     .fillMaxSize()
@@ -840,7 +896,7 @@ fun NowPlayingScreen(
                     .padding(horizontal = 10.dp, vertical = 8.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color.Black.copy(alpha = 0.55f))
+                    .background(Color.Black.copy(alpha = st.vizPanelOpacity)) // Top Visualization Panel Opacity
                     .padding(start = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -850,10 +906,10 @@ fun NowPlayingScreen(
                     Text(vizPreset.label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Text("Built-in • tap for list", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
                 }
-                IconButton(onClick = { onVizPreset(vizPreset.next(-1)) }) {
+                IconButton(onClick = { onVizPreset(vizPreset.nextEnabled(-1)) }) {
                     Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = "Previous preset", tint = Color.White)
                 }
-                IconButton(onClick = { onVizPreset(vizPreset.next(1)) }) {
+                IconButton(onClick = { onVizPreset(vizPreset.nextEnabled(1)) }) {
                     Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = "Next preset", tint = Color.White)
                 }
                 IconButton(onClick = { onVizMode(VizMode.OFF) }) {
