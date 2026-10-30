@@ -11,6 +11,10 @@ data class FxSettings(
     val tempoEnabled: Boolean = false,
     val tempo: Double = 1.0,            // 0.5x .. 2.0x, pitch kept
     val volume: Double = 1.0,           // 0 .. 1  (1 = full, untouched)
+    // ---- 3D Surround: virtual speakers around and above you, in a studio ----
+    val spatialEnabled: Boolean = false,
+    val spatialAmount: Double = 0.6,    // 0 .. 1  how much comes from around and above
+    val spatialRoom: Double = 0.35,     // 0 .. 1  studio reverb
     // ---- reverb (all 0 .. 1) ----
     val reverbEnabled: Boolean = false,
     val damp: Double = 0.5,
@@ -25,7 +29,7 @@ data class FxSettings(
     /** True when any effect changes the sound (otherwise audio can pass through untouched). */
     val active: Boolean
         get() = kotlin.math.abs(balance) > 0.001 || stereoExpand > 0.001 || mono ||
-            volume < 0.999 || reverbEnabled
+            volume < 0.999 || reverbEnabled || spatialEnabled
 
     val preDelayMs: Double get() = preDelay * 200.0
 }
@@ -63,6 +67,7 @@ fun FxSettings.withReverb(p: ReverbPreset) = copy(
 fun FxSettings.toJson(): JSONObject = JSONObject().apply {
     put("balance", balance); put("expand", stereoExpand); put("mono", mono)
     put("tempoOn", tempoEnabled); put("tempo", tempo); put("volume", volume)
+    put("s3d", spatialEnabled); put("s3dAmt", spatialAmount); put("s3dRoom", spatialRoom)
     put("revOn", reverbEnabled); put("damp", damp); put("filter", filter); put("fade", fade)
     put("pre", preDelay); put("preMix", preDelayMix); put("size", size); put("mix", mix)
     put("revPreset", reverbPreset)
@@ -77,6 +82,9 @@ fun fxFromJson(o: JSONObject): FxSettings {
         tempoEnabled = o.optBoolean("tempoOn", d.tempoEnabled),
         tempo = o.optDouble("tempo", d.tempo),
         volume = o.optDouble("volume", d.volume),
+        spatialEnabled = o.optBoolean("s3d", d.spatialEnabled),
+        spatialAmount = o.optDouble("s3dAmt", d.spatialAmount),
+        spatialRoom = o.optDouble("s3dRoom", d.spatialRoom),
         reverbEnabled = o.optBoolean("revOn", d.reverbEnabled),
         damp = o.optDouble("damp", d.damp),
         filter = o.optDouble("filter", d.filter),

@@ -491,6 +491,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun tapSong(songs: List<Song>, index: Int, sourceKey: String?, openPlayer: () -> Unit) {
         val st = com.powersound.player.data.SettingsStore.value
         val song = songs.getOrNull(index) ?: return
+        // Settings → Library → Lists → Click Restarts Track (off): the song that is playing goes on from where it is,
+        // whichever list it is tapped in
+        val c = controller
+        if (!st.clickRestarts && st.listItemAction != 2 && c != null && c.mediaItemCount > 0 &&
+            c.currentMediaItem?.mediaId == song.id.toString()
+        ) {
+            if (!c.isPlaying) togglePlay()
+            if (st.listItemAction == 0) openPlayer()
+            return
+        }
         when (st.listItemAction) {
             2 -> addToQueue(listOf(song))
             else -> {
@@ -1104,6 +1114,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         countPlay(c)
         updateAudioInfo(id)
         applySongSettings(id)
+        prefetchWaveforms(c, id)
+    }
+
+    private var waveForId: Long? = null
+
+    /** The waveform of the song that starts now and of the next one are read in the background, so they show at once. */
+    private fun prefetchWaveforms(c: MediaController, id: Long?) {
+        if (id == null || id == waveForId) return
+        waveForId = id
+        val app = getApplication<Application>()
+        com.powersound.player.data.Waveform.prefetch(app, id)
+        val next = c.nextMediaItemIndex
+        if (next != androidx.media3.common.C.INDEX_UNSET) {
+            c.getMediaItemAt(next).mediaId.toLongOrNull()?.let { com.powersound.player.data.Waveform.prefetch(app, it) }
+        }
     }
 
     /** Settings → Library → Count As Played: the play counts once this part of the song has been heard. */

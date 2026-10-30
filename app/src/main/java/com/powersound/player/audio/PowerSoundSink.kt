@@ -264,7 +264,10 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
                 gainR = min(1.0, 1.0 + fx.balance),
                 gain = fx.volume.coerceIn(0.0, 1.0) * linearGain(rg),
                 reverb = if (reverbOn) fx else null,
-                limiter = s.limiter
+                limiter = s.limiter,
+                spatial = fx.spatialEnabled,
+                spatialAmount = fx.spatialAmount,
+                spatialRoom = fx.spatialRoom
             )
         )
     }

@@ -155,6 +155,42 @@ private fun EffectsPage(bottomInset: Dp) {
             .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = bottomInset + 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // 3D Surround: virtual speakers around and above you, in a studio
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            FxToggle("3D Surround", fx.spatialEnabled) { edit { it.copy(spatialEnabled = !it.spatialEnabled) } }
+            Spacer(Modifier.weight(1f))
+            PowerKnob(
+                label = "Around",
+                valueText = "${(fx.spatialAmount * 100).roundToInt()}%",
+                fraction = fx.spatialAmount.toFloat(),
+                bipolar = false,
+                enabled = fx.spatialEnabled,
+                sizeDp = 76,
+                onChange = { f -> edit { it.copy(spatialAmount = (f * 100).roundToInt() / 100.0, spatialEnabled = true) } },
+                onReset = { edit { it.copy(spatialAmount = FxSettings().spatialAmount) } }
+            )
+            Spacer(Modifier.width(10.dp))
+            PowerKnob(
+                label = "Room",
+                valueText = "${(fx.spatialRoom * 100).roundToInt()}%",
+                fraction = fx.spatialRoom.toFloat(),
+                bipolar = false,
+                enabled = fx.spatialEnabled,
+                sizeDp = 76,
+                onChange = { f -> edit { it.copy(spatialRoom = (f * 100).roundToInt() / 100.0, spatialEnabled = true) } },
+                onReset = { edit { it.copy(spatialRoom = FxSettings().spatialRoom) } }
+            )
+        }
+        Text(
+            "For headphones and earbuds: the song plays on virtual speakers in front of you, beside and behind you and above you, " +
+                "in a studio. The voice stays clear in the middle. Around = how much comes from around and above, Room = studio echo.",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 11.sp,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+        )
+
+        Spacer(Modifier.height(18.dp))
+
         // Balance • Stereo expand
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
             PowerKnob(

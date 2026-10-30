@@ -364,6 +364,7 @@ fun AudioInfoDialog(song: Song?, audioInfo: String, dspSummary: String, onDismis
             } else if (engine.eqBlocked) dsp.add("Equalizer off for this output")
             if (engine.replayGainDb != 0.0) dsp.add("Replay Gain %+.1f dB".format(engine.replayGainDb))
             val effects = listOfNotNull(
+                if (fx.spatialEnabled) "3D Surround (around ${(fx.spatialAmount * 100).toInt()}%, room ${(fx.spatialRoom * 100).toInt()}%)" else null,
                 if (fx.reverbEnabled) "Reverb (${fx.reverbPreset})" else null,
                 if (fx.tempoEnabled && fx.tempo != 1.0) "Tempo %.2fx".format(fx.tempo) else null,
                 if (fx.mono) "Mono" else null,

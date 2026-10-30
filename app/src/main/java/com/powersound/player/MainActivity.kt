@@ -1220,6 +1220,7 @@ private fun dspSummary(): String {
     if (eq.enabled) parts.add("EQ ${eq.bands.size} bands (${eq.presetName})")
     if (eq.enabled && eq.toneEnabled && (eq.bassDb != 0.0 || eq.trebleDb != 0.0)) parts.add("Bass/Treble")
     if (eq.enabled && eq.limiter) parts.add("Limiter")
+    if (fx.spatialEnabled) parts.add("3D Surround")
     if (fx.reverbEnabled) parts.add("Reverb (${fx.reverbPreset})")
     if (fx.tempoEnabled && fx.tempo != 1.0) parts.add("Tempo %.2fx".format(fx.tempo))
     if (fx.mono) parts.add("Mono")

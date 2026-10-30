@@ -213,7 +213,8 @@ object AudioEngine {
     fun resetEffects() = updateFx {
         val d = FxSettings()
         it.copy(balance = d.balance, stereoExpand = d.stereoExpand, mono = d.mono,
-            tempoEnabled = d.tempoEnabled, tempo = d.tempo, volume = d.volume)
+            tempoEnabled = d.tempoEnabled, tempo = d.tempo, volume = d.volume,
+            spatialEnabled = d.spatialEnabled, spatialAmount = d.spatialAmount, spatialRoom = d.spatialRoom)
     }
 
     fun resetReverb() = updateFx {

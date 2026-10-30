@@ -1348,7 +1348,11 @@ private fun SettingsPage2(page: SettingsPage?, args: PageArgs) {
     }
     ChipRow("Font", null, listOf("Default", "Alternative font", "Bold", "Bold+"), st.appFont) { v -> set { it.copy(appFont = v) } }
     ChipRow("Rounded Corners", null, listOf("More rounded", "Less rounded"), if (st.moreRounded) 0 else 1) { v -> set { it.copy(moreRounded = v == 0) } }
-    ChipRow("Seekbar Style", null, listOf("Default", "Static Seekbar", "Simple Seekbar (with Pro Buttons)"), st.seekbarStyle) { v ->
+    ChipRow(
+        "Seekbar Style",
+        "Default: the song's waveform moves to the left, about a minute of it, now in the middle. Static: the whole song at once",
+        listOf("Default", "Static Seekbar", "Simple Seekbar (with Pro Buttons)"), st.seekbarStyle
+    ) { v ->
         set { it.copy(seekbarStyle = v) }
     }
     SwitchRow("Pro Buttons", "Category change (or -10/+10 s) buttons next to Play. Always enabled for Simple Seekbar", st.proButtons || st.seekbarStyle == 2) { v ->
@@ -3013,6 +3017,8 @@ Online services (only when the matching setting is on):
 • Updates and changelog: GitHub releases
 
 AutoEq (Jaakko Pasanen), MIT License: the built-in "Liberty 4 NC (AutoEq)" preset (measurement by DHRME) and the presets you import.
+
+3D Surround uses head-related impulse responses derived from the SADIE II database (University of York; Subject 002, Neumann KU100), Apache License 2.0, as shipped with Google's Resonance Audio.
 
 The Apache License 2.0 text: https://www.apache.org/licenses/LICENSE-2.0"""
 

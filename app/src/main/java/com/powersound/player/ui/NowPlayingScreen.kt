@@ -91,12 +91,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -105,6 +107,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -127,9 +130,11 @@ import com.powersound.player.PlayerUiState
 import com.powersound.player.RepeatMode
 import com.powersound.player.ShuffleMode
 import com.powersound.player.data.Song
+import com.powersound.player.data.WaveData
 import com.powersound.player.data.Waveform
 import com.powersound.player.data.formatTime
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
@@ -323,9 +328,11 @@ fun NowPlayingScreen(
         }
     }
 
-    val peaks by produceState<FloatArray?>(np?.songId?.let { Waveform.cached(it) }, np?.songId, st.seekbarStyle) {
-        // Settings → Skin → Seekbar Style: "Static Seekbar" doesn't read the song's waveform
-        value = if (st.seekbarStyle == 0) np?.songId?.let { Waveform.load(context, it) } else null
+    // the song's waveform; it appears while the song is being read (Settings → Skin → Seekbar Style)
+    val wave by produceState<WaveData?>(np?.songId?.let { Waveform.cached(it) }, np?.songId, st.seekbarStyle) {
+        val id = np?.songId
+        value = id?.let { Waveform.cached(it) }
+        if (id != null && st.seekbarStyle != 2) Waveform.load(context, id) { value = it }
     }
 
     val layout = st.layout
@@ -719,9 +726,13 @@ fun NowPlayingScreen(
             val fraction = (pos.positionMs.toFloat() / duration).coerceIn(0f, 1f)
             val durationNow by rememberUpdatedState(duration)
             var dragFrac by remember { mutableStateOf<Float?>(null) }
-            val dragging = dragFrac
+            var dragMs by remember { mutableStateOf<Long?>(null) }
+            val dragFracNow: Float? = dragFrac
+            val dragMsNow: Long? = dragMs
+            val dragging: Float? = dragFracNow ?: dragMsNow?.let { it.toFloat() / duration }
             val shownFrac = if (scrubbing) scrubFrac else dragging ?: fraction
             val simple = st.seekbarStyle == 2
+            val fxNow = com.powersound.player.audio.AudioEngine.fxSnapshot
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -737,9 +748,10 @@ fun NowPlayingScreen(
                             .fillMaxWidth()
                             .height(28.dp)
                     )
-                } else {
+                } else if (st.seekbarStyle == 1) {
+                    // Static Seekbar: the whole song at once
                     WaveSeekBar(
-                        peaks = peaks,
+                        peaks = wave?.bars(90),
                         fraction = shownFrac,
                         cursor = if (scrubbing) scrubFrac else null,
                         onDrag = { f -> dragFrac = f },
@@ -750,7 +762,26 @@ fun NowPlayingScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .fillMaxHeight()
-                            .heightIn(max = 104.dp)
+                            .heightIn(max = 150.dp)
+                    )
+                } else {
+                    // Default: about a minute of the song, moving to the left; now is the line in the middle
+                    ScrollingWaveSeekBar(
+                        wave = wave,
+                        positionMs = pos.positionMs,
+                        durationMs = duration,
+                        playing = state.isPlaying,
+                        speed = if (fxNow.tempoEnabled) fxNow.tempo.toFloat() else 1f,
+                        previewMs = if (scrubbing) (scrubFrac * duration).toLong() else null,
+                        onPreview = { ms -> dragMs = ms },
+                        onSeek = { ms ->
+                            dragMs = null
+                            onSeek(ms)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                            .heightIn(max = 170.dp)
                     )
                 }
             }
@@ -1199,5 +1230,118 @@ fun WaveSeekBar(
             val cx = cursor * size.width
             drawLine(Color.White, Offset(cx, 0f), Offset(cx, size.height), strokeWidth = 2.dp.toPx())
         }
+    }
+}
+
+/**
+ * Seek bar like Poweramp's: the song's real loudness, about a minute of it, moving to the left while it plays.
+ * Now is the line in the middle; what has played is dimmer, what is coming is bright.
+ * Drag it like a tape to look ahead or back (the time shows where you will land) and let go to jump there;
+ * tap a bar to jump to it. Parts that are still being read show as small dots.
+ */
+@Composable
+fun ScrollingWaveSeekBar(
+    wave: WaveData?,
+    positionMs: Long,
+    durationMs: Long,
+    playing: Boolean,
+    speed: Float,
+    /** A position chosen elsewhere (long press between the buttons) to show, or null. */
+    previewMs: Long?,
+    onPreview: (Long?) -> Unit,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val windowMs = 60_000f
+    val barMs = 1000L
+    val dur = durationMs.coerceAtLeast(1L)
+    val posNow by rememberUpdatedState(positionMs)
+    val durNow by rememberUpdatedState(dur)
+    val seekTo by rememberUpdatedState(onSeek)
+    val previewTo by rememberUpdatedState(onPreview)
+    var dragTo by remember { mutableStateOf<Float?>(null) }
+    // smooth movement between the player's position updates (4 per second): redrawn every frame while playing
+    val anchor = remember(positionMs) { positionMs to System.nanoTime() }
+    var frame by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(playing) {
+        if (playing) while (isActive) withFrameNanos { frame = it }
+    }
+    val playedColor = Color.White.copy(alpha = 0.34f)
+    val comingColor = Color.White.copy(alpha = 0.95f)
+    val pendingColor = Color.White.copy(alpha = 0.30f)
+    Canvas(
+        modifier
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { o ->
+                    val pxPerMs = size.width / windowMs
+                    val t = posNow + (o.x - size.width / 2f) / pxPerMs
+                    seekTo(t.toLong().coerceIn(0L, durNow))
+                })
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        dragTo = posNow.toFloat()
+                        previewTo(posNow)
+                    },
+                    onHorizontalDrag = { change, dx ->
+                        change.consume()
+                        val pxPerMs = size.width / windowMs
+                        val d = ((dragTo ?: posNow.toFloat()) - dx / pxPerMs).coerceIn(0f, durNow.toFloat())
+                        dragTo = d
+                        previewTo(d.toLong())
+                    },
+                    onDragEnd = {
+                        dragTo?.let { seekTo(it.toLong()) }
+                        dragTo = null
+                        previewTo(null)
+                    },
+                    onDragCancel = {
+                        dragTo = null
+                        previewTo(null)
+                    }
+                )
+            }
+    ) {
+        if (frame < 0L) return@Canvas // read here, so only this drawing is redone each frame
+        val now = dragTo?.toLong() ?: previewMs ?: if (playing) {
+            anchor.first + ((System.nanoTime() - anchor.second) / 1_000_000.0 * speed).toLong().coerceIn(0L, 400L)
+        } else anchor.first
+        val pos = now.coerceIn(0L, dur)
+        val w = size.width
+        val h = size.height
+        val center = w / 2f
+        val midY = h / 2f
+        val pxPerMs = w / windowMs
+        val slot = barMs * pxPerMs
+        val gap = (slot * 0.30f).coerceAtLeast(1.5f)
+        val bw = (slot - gap).coerceAtLeast(1f)
+        val first = ((pos - center / pxPerMs) / barMs).toLong() - 1
+        val last = ((pos + (w - center) / pxPerMs) / barMs).toLong() + 1
+        for (k in first..last) {
+            val startMs = k * barMs
+            if (k < 0 || startMs >= dur) continue
+            val x = center + (startMs - pos) * pxPerMs
+            if (x + bw < 0f || x > w) continue
+            val lv = wave?.level(startMs, minOf(startMs + barMs, dur)) ?: -1f
+            if (lv < 0f) {
+                drawCircle(pendingColor, radius = (bw * 0.32f).coerceAtMost(2.5.dp.toPx()), center = Offset(x + bw / 2f, midY))
+                continue
+            }
+            val bh = (0.07f + 0.93f * lv) * h
+            val top = midY - bh / 2f
+            val radius = CornerRadius(bw / 2f)
+            when {
+                x + bw <= center -> drawRoundRect(playedColor, Offset(x, top), Size(bw, bh), radius)
+                x >= center -> drawRoundRect(comingColor, Offset(x, top), Size(bw, bh), radius)
+                else -> {
+                    // the bar that is playing now: dim up to the line, bright after it
+                    clipRect(right = center) { drawRoundRect(playedColor, Offset(x, top), Size(bw, bh), radius) }
+                    clipRect(left = center) { drawRoundRect(comingColor, Offset(x, top), Size(bw, bh), radius) }
+                }
+            }
+        }
+        // now
+        drawLine(Color.White, Offset(center, h * 0.03f), Offset(center, h * 0.97f), strokeWidth = 2.dp.toPx())
     }
 }

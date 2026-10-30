@@ -175,7 +175,7 @@ data class AppSettings(
     val headerButtons: Boolean = true,
     val bottomButtons: Int = 2,              // 0 disabled, 1 semi-transparent, 2 enabled
     val trackNumberMode: Int = 0,            // 0 disabled, 1 separate number, 2 in the meta, 3 in the title everywhere
-    val clickRestarts: Boolean = true,
+    val clickRestarts: Boolean = false,
     val listItemAction: Int = 0,             // 0 play and go to player, 1 play and stay, 2 enqueue and stay
     val deleteAction: Boolean = true,
     val joinAlbums: Boolean = true,
@@ -367,7 +367,7 @@ object SettingsStore {
         put("notifNav", s.notifNavigateToList); put("keepNotif", s.keepNotification); put("notifDisc", s.removeNotifOnDisconnect)
         put("ignVideo", s.ignoreVideo); put("countPct", s.countPlayedPct); put("staticNav", s.staticNavbar); put("navSeek", s.navbarSeekbar)
         put("hdrMeta", s.headersMeta); put("az", s.azScroll); put("hdrBtn", s.headerButtons); put("botBtn", s.bottomButtons); put("trackNoMode", s.trackNumberMode)
-        put("clickRestart", s.clickRestarts); put("itemAction", s.listItemAction); put("delAction", s.deleteAction); put("joinAlb", s.joinAlbums)
+        put("clickRestart2", s.clickRestarts); put("itemAction", s.listItemAction); put("delAction", s.deleteAction); put("joinAlb", s.joinAlbums)
         put("aaTracks", s.albumArtistTracks); put("aaAlbums", s.albumArtistAlbums); put("aaAATracks", s.albumArtistAATracks)
         put("hideUnkAlb", s.hideUnknownAlbum); put("hideUnkArt", s.hideUnknownArtist); put("unsplit", s.showUnsplit); put("hierRoot", s.hierImmediateRoot)
         put("keepArt", s.keepArticles); put("srchTracks", s.searchTracksOnly); put("srchTitles", s.searchTitlesOnly)
@@ -525,7 +525,7 @@ object SettingsStore {
             headerButtons = o.optBoolean("hdrBtn", d.headerButtons),
             bottomButtons = o.optInt("botBtn", d.bottomButtons),
             trackNumberMode = if (o.has("trackNoMode")) o.optInt("trackNoMode", 0) else if (o.optBoolean("trackNo", false)) 3 else 0,
-            clickRestarts = o.optBoolean("clickRestart", d.clickRestarts),
+            clickRestarts = o.optBoolean("clickRestart2", d.clickRestarts), // new key: the new default (off) applies to everyone
             listItemAction = o.optInt("itemAction", d.listItemAction),
             deleteAction = o.optBoolean("delAction", d.deleteAction),
             joinAlbums = o.optBoolean("joinAlb", d.joinAlbums),

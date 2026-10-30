@@ -128,17 +128,25 @@ class PolyphaseResampler(
             val base = phase * taps
             val first = center - (half - 1)
             if (ch == 2) {
+                // two independent sums per channel (taps is a multiple of 4)
                 var a0 = 0.0
                 var a1 = 0.0
+                var b0 = 0.0
+                var b1 = 0.0
                 var idx = first * 2
-                for (k in 0 until taps) {
-                    val c = t[base + k]
-                    a0 += h[idx] * c
-                    a1 += h[idx + 1] * c
-                    idx += 2
+                var k = 0
+                while (k < taps) {
+                    val c0 = t[base + k]
+                    val c1 = t[base + k + 1]
+                    a0 += h[idx] * c0
+                    a1 += h[idx + 1] * c0
+                    b0 += h[idx + 2] * c1
+                    b1 += h[idx + 3] * c1
+                    idx += 4
+                    k += 2
                 }
-                out[produced * 2] = a0
-                out[produced * 2 + 1] = a1
+                out[produced * 2] = a0 + b0
+                out[produced * 2 + 1] = a1 + b1
             } else {
                 for (c0 in 0 until ch) {
                     var a = 0.0

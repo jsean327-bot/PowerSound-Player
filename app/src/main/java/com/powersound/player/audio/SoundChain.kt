@@ -23,7 +23,11 @@ class ChainParams(
     val gain: Double = 1.0,
     /** Reverb settings, or null when the reverb is off. */
     val reverb: FxSettings? = null,
-    val limiter: Boolean = true
+    val limiter: Boolean = true,
+    /** 3D Surround (stereo only). */
+    val spatial: Boolean = false,
+    val spatialAmount: Double = 0.6,
+    val spatialRoom: Double = 0.35
 ) {
     companion object {
         val NEUTRAL = ChainParams()
@@ -36,7 +40,7 @@ class ChainParams(
  *   decoded samples (any bit depth, as float)
  *   → resampler (to the output's rate; skipped when the rates match)
  *   → preamp → Tone bass → equalizer bands → Tone treble
- *   → mono / stereo expand / reverb / balance
+ *   → mono / stereo expand / reverb → 3D Surround (virtual speakers around you) → balance
  *   → volume, Replay Gain, ducking, fade-in after a seek (all glide, no clicks)
  *   → look-ahead peak limiter
  *   → output (32-bit float, or 16-bit with dither — see [PowerSoundSink])
@@ -64,6 +68,7 @@ class SoundChain(
     private var state = DoubleArray(0)
     private var reverb: Reverb? = null
     private var reverbSettings: FxSettings? = null
+    private var spatializer: Spatializer? = null
 
     private var gainNow = 1.0
     private val glide = 1.0 - exp(-1.0 / (0.010 * rate))   // 10 ms
@@ -103,12 +108,19 @@ class SoundChain(
             reverbSettings = rv
         }
         limiter.enabled = p.limiter
+        if (p.spatial && channels == 2) {
+            val sp = spatializer ?: Spatializer(rate).also { spatializer = it }
+            sp.configure(p.spatialAmount, p.spatialRoom)
+        } else {
+            spatializer = null
+        }
     }
 
     /** After a seek: forget the past; optionally fade in over 60 ms (Crossfade → Fade on Seek). */
     fun reset(fadeIn: Boolean) {
         state.fill(0.0)
         reverb?.reset()
+        spatializer?.reset()
         resampler?.reset()
         limiter.reset()
         if (fadeIn && !bitPerfect) {
@@ -178,11 +190,12 @@ class SoundChain(
         val ch = channels
         val buf = frame
         val rev = reverb
+        val sp = spatializer
         val stereo = ch == 2
         val viz = VisualizerBus.active
         val target = p.gain * duck
         val o = out
-        var touched = p.eqOn || p.fxOn || resampler != null
+        var touched = p.eqOn || p.fxOn || resampler != null || sp != null
 
         for (f in 0 until n) {
             val si0 = f * ch
@@ -206,10 +219,10 @@ class SoundChain(
             }
 
             // ---- effects ----
-            if (p.fxOn) {
-                if (stereo) {
-                    var l = buf[0]
-                    var r = buf[1]
+            if (stereo && (p.fxOn || sp != null)) {
+                var l = buf[0]
+                var r = buf[1]
+                if (p.fxOn) {
                     if (p.mono) {
                         val m = (l + r) * 0.5
                         l = m
@@ -225,9 +238,16 @@ class SoundChain(
                         l = rev.outL
                         r = rev.outR
                     }
-                    buf[0] = l * p.gainL
-                    buf[1] = r * p.gainR
-                } else if (rev != null) {
+                }
+                if (sp != null) {
+                    sp.process(l, r)
+                    l = sp.outL
+                    r = sp.outR
+                }
+                buf[0] = l * p.gainL
+                buf[1] = r * p.gainR
+            } else if (p.fxOn) {
+                if (rev != null) {
                     for (k0 in 0 until ch) {
                         rev.process(buf[k0], buf[k0])
                         buf[k0] = (rev.outL + rev.outR) * 0.5
