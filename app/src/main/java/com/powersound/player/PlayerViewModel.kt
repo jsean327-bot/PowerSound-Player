@@ -147,7 +147,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val stats: StateFlow<Stats> get() = StatsStore.stats
 
     // ---- navigation ----
-    val stack = mutableStateListOf<Screen>(Screen.Home)
+    // the app always opens on Library → Folders (back goes to the Library page)
+    val stack = mutableStateListOf<Screen>(Screen.Home, Screen.Cat(Category.FOLDERS))
     var tab by mutableStateOf(Tab.LIBRARY)
 
     // ---- visualization (remembered between openings of the player) ----

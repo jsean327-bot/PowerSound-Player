@@ -248,9 +248,9 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     val stats by vm.stats.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
 
-    // Settings → Look and Feel → Start at Library (off: the app opens on the Player Screen)
+    // The app always opens on Library → Folders (the Player Screen opens from the bottom bar or the notification)
     val ui = remember { AppUi() }
-    val showNowPlayingState = rememberSaveable { mutableStateOf(!com.powersound.player.data.SettingsStore.value.startAtLibrary) }
+    val showNowPlayingState = rememberSaveable { mutableStateOf(false) }
     var showNowPlaying by showNowPlayingState
     var showMenu by ui::showMenu
     var showQueue by ui::showQueue

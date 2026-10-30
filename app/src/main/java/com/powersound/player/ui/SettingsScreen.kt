@@ -175,7 +175,7 @@ private val OUTPUT_PAGES = listOf(
 private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.LOOK to "Skin", SettingsPage.LOOK to "Follow Day/Night Mode", SettingsPage.LOOK to "Settings Theme",
     SettingsPage.LOOK to "Settings Font", SettingsPage.LOOK to "Language", SettingsPage.LOOK to "Icon",
-    SettingsPage.LOOK to "Screen Orientation", SettingsPage.LOOK to "Animations", SettingsPage.LOOK to "Start at Library",
+    SettingsPage.LOOK to "Screen Orientation", SettingsPage.LOOK to "Animations", 
     SettingsPage.LOOK to "Hide Status Bar", SettingsPage.LOOK to "Keep Screen On", SettingsPage.LOOK to "Settings Shortcuts in Main Menu",
     SettingsPage.LOOK to "Show tips again",
     SettingsPage.SKIN to "Accent colour", SettingsPage.SKIN to "Layout", SettingsPage.SKIN to "Track Labels", SettingsPage.SKIN to "Labels Background",
@@ -1255,9 +1255,7 @@ private fun SettingsPage1(page: SettingsPage?, args: PageArgs) {
     ChipRow("Animations", "Disable/enable or change UI animation speed where possible", listOf("Disabled", "Fast", "Default"), st.animations) { v ->
         set { it.copy(animations = v) }
     }
-    SwitchRow("Start at Library", "Changes the startup screen. Back action returns from the Player Screen to the current list", st.startAtLibrary) { v ->
-        set { it.copy(startAtLibrary = v) }
-    }
+    Hint("PowerSound always opens on Library → Folders")
     SwitchRow("Hide Status Bar", null, st.hideStatusBar) { v -> set { it.copy(hideStatusBar = v) } }
     NoteBlock("Some phones can't change the status bar / navigation bar right away. You may need to leave and enter the app once for these options to apply")
     SwitchRow("Keep Screen On", "Always keep the screen on in the app", st.keepScreenOn) { v -> set { it.copy(keepScreenOn = v) } }
