@@ -18,6 +18,10 @@ object VisualizerBus {
     @Volatile
     private var writePos = 0
 
+    /** Sample rate of what is written (the sound chain's output rate). */
+    @Volatile
+    var rate = 48000
+
     /** Set by the screen while a visualization is visible, so nothing is copied otherwise. */
     @Volatile
     var active = false
@@ -30,7 +34,6 @@ object VisualizerBus {
 
     /** Latest [n] samples (oldest first), [AudioEngine.outputDelayMs] back in time (Audio Outputs → Visualization Delay). */
     fun latest(n: Int, out: FloatArray) {
-        val rate = AudioEngine.inputRate.takeIf { it > 0 } ?: 48000
         val delay = (AudioEngine.outputDelayMs.toLong() * rate / 1000).toInt().coerceIn(0, SIZE - n - 1)
         val end = (writePos - delay + SIZE) and (SIZE - 1)
         for (i in 0 until n) {

@@ -346,12 +346,12 @@ fun AudioInfoDialog(song: Song?, audioInfo: String, dspSummary: String, onDismis
     // the audio path, step by step (like Settings → Audio → Audio Info)
     val steps = buildList {
         add("Track" to listOfNotNull(audioInfo.ifBlank { song?.formatLabel }, song?.let { "%.1f MB • %s".format(it.size / 1_048_576.0, formatTime(it.durationMs)) }).joinToString("\n"))
-        add("Decoder" to (engine.decoderName.ifBlank { "Android MediaCodec" } + "\n16-bit PCM"))
+        add("Decoder" to (engine.decoderName.ifBlank { "Android MediaCodec" } + "\n" + engine.inputEncoding.ifBlank { "PCM" }))
         if (st.perfectBitPerfect) {
             add("DSP" to "Perfect Bit Perfect: no processing")
         } else {
             val dsp = ArrayList<String>()
-            if (engine.inputRate > 0) dsp.add("${khz(engine.inputRate)} • Float64")
+            if (engine.inputRate > 0) dsp.add("${khz(engine.inputRate)} • 64-bit floating point")
             if (eq.enabled && !engine.eqBlocked) {
                 val parametric = eq.bands.any { it.type != com.powersound.player.audio.BandType.PEAK }
                 dsp.add("Equalizer: ${if (parametric) "parametric" else "graphic"}, ${eq.bands.size} bands (${eq.presetName})")
@@ -359,7 +359,7 @@ fun AudioInfoDialog(song: Song?, audioInfo: String, dspSummary: String, onDismis
                 if (eq.toneEnabled && (eq.bassDb != 0.0 || eq.trebleDb != 0.0)) {
                     dsp.add("Tone: Bass ${eq.bassFreq.toInt()} Hz %+.1f dB, Treble %.1f kHz %+.1f dB".format(eq.bassDb, eq.trebleFreq / 1000, eq.trebleDb))
                 }
-                if (eq.limiter) dsp.add("Limiter")
+                if (eq.limiter) dsp.add("Look-ahead limiter (only above 0 dB)")
                 if (eq.autoHeadroom && engine.headroomDb < -0.05) dsp.add("Headroom %.1f dB".format(engine.headroomDb))
             } else if (engine.eqBlocked) dsp.add("Equalizer off for this output")
             if (engine.replayGainDb != 0.0) dsp.add("Replay Gain %+.1f dB".format(engine.replayGainDb))
@@ -377,11 +377,17 @@ fun AudioInfoDialog(song: Song?, audioInfo: String, dspSummary: String, onDismis
                 listOf("No fading", "Short crossfade", "Crossfade")[st.manualFade]
             add("Crossfade" to fade)
             if (engine.outputRate > 0 && engine.outputRate != engine.inputRate) {
-                add("Resampler" to "${khz(engine.inputRate)} → ${khz(engine.outputRate)}, ${if (st.resamplerType == 1) "very high" else "high"} quality")
+                add(
+                    "Resampler" to "${khz(engine.inputRate)} → ${khz(engine.outputRate)} (the output's own rate), " +
+                        if (st.resamplerType == 1) "very high quality, 160 dB" else "high quality, 130 dB"
+                )
             } else add("Resampler" to "No resampling")
-            add("Dither" to com.powersound.player.audio.Ditherer.NAMES.getOrElse(st.dither) { "" })
+            if (engine.outputEncoding == "16-bit") add("Dither" to com.powersound.player.audio.Ditherer.NAMES.getOrElse(st.dither) { "" })
         }
-        add("Output" to "${engine.currentOutput}\nAndroid AudioTrack • 16-bit" + if (engine.outputRate > 0) " • ${khz(engine.outputRate)}" else "")
+        add(
+            "Output" to "${engine.currentOutput}\nAndroid AudioTrack • ${engine.outputEncoding.ifBlank { "32-bit float" }}" +
+                if (engine.outputRate > 0) " • ${khz(engine.outputRate)}" else ""
+        )
     }
     AlertDialog(
         onDismissRequest = onDismiss,

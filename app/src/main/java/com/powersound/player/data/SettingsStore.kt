@@ -112,7 +112,8 @@ data class AppSettings(
     val outNoEq: Set<String> = emptySet(),
     val outNoDuck: Set<String> = emptySet(),
     val outDelayMs: Map<String, Int> = mapOf("bt" to 300),
-    val outRate: Map<String, Int> = emptyMap(),   // 0 follow track, 1 phone's native rate, else Hz
+    val outRate: Map<String, Int> = emptyMap(),   // 0 follow track, 1 the output's native rate (default), else Hz
+    val outFormat: Map<String, Int> = emptyMap(), // 0 32-bit float (default), 1 16-bit
     // ---- Audio → Bit Perfect ----
     val perfectBitPerfect: Boolean = false,
     // ---- Audio → Advanced Tweaks ----
@@ -390,6 +391,7 @@ object SettingsStore {
         put("outNoDuck", JSONArray().apply { s.outNoDuck.forEach { put(it) } })
         put("outDelay", JSONObject().apply { s.outDelayMs.forEach { (k, v) -> put(k, v) } })
         put("outRate", JSONObject().apply { s.outRate.forEach { (k, v) -> put(k, v) } })
+        put("outFormat", JSONObject().apply { s.outFormat.forEach { (k, v) -> put(k, v) } })
         put("vizOn", s.vizOnPlayer); put("eqSpec", s.eqSpectrum); put("vizLib", s.vizInLibrary); put("vizPanel", s.vizPanelOpacity.toDouble())
         put("vizUi", s.vizUiTimeoutMs); put("vizArt", s.vizAlbumArt); put("vizIgnore", s.vizIgnoreTouch); put("vizTrack", s.vizTrackOpacity.toDouble())
         put("vizBars", s.vizHideBars); put("vizScaled", s.vizScaledBars); put("vizHd", s.vizHd); put("vizCrop", s.vizCrop); put("viz30", s.viz30fps)
@@ -583,6 +585,7 @@ object SettingsStore {
             outNoDuck = strings("outNoDuck"),
             outDelayMs = o.optJSONObject("outDelay")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: d.outDelayMs,
             outRate = o.optJSONObject("outRate")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: d.outRate,
+            outFormat = o.optJSONObject("outFormat")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: d.outFormat,
             perfectBitPerfect = o.optBoolean("bitPerfect", d.perfectBitPerfect),
             pauseOnVolumeZero = o.optBoolean("volZero", d.pauseOnVolumeZero),
             musicFx = o.optBoolean("musicFx", d.musicFx),

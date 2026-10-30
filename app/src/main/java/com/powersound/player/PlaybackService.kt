@@ -15,7 +15,6 @@ import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.Renderer
@@ -34,7 +33,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.powersound.player.audio.AudioEngine
 import com.powersound.player.audio.BUILT_IN_PRESETS
 import com.powersound.player.audio.Crossfader
-import com.powersound.player.audio.PowerSoundProcessor
+import com.powersound.player.audio.PowerSoundSink
 import com.powersound.player.data.AppSettings
 import com.powersound.player.data.NOTIF_ACTIONS
 import com.powersound.player.data.SettingsStore
@@ -181,16 +180,18 @@ class PlaybackService : MediaSessionService() {
         registerScreenReceiver(player)
     }
 
-    /** Decoder → PowerSound DSP → 16-bit output. Float output stays off: it made some FLAC files distort. */
+    /**
+     * Decoder (32-bit float) → PowerSound's 64-bit sound chain → 32-bit float to Android ([PowerSoundSink]).
+     * Android's own sink only plays what PowerSound hands it; the tempo uses Android's time stretching.
+     */
     private fun buildPlayer(wakeLock: Boolean): ExoPlayer {
         val renderers = RenderersFactory { handler, _, audioListener, _, _ ->
-            @Suppress("DEPRECATION")
-            val sink = DefaultAudioSink.Builder()
-                .setEnableFloatOutput(false)
-                .setAudioProcessors(arrayOf<AudioProcessor>(PowerSoundProcessor()))
+            val androidSink = DefaultAudioSink.Builder(this)
+                .setEnableFloatOutput(true)
+                .setEnableAudioTrackPlaybackParams(true)
                 .build()
             arrayOf<Renderer>(
-                MediaCodecAudioRenderer(this, MediaCodecSelector.DEFAULT, handler, audioListener, sink)
+                MediaCodecAudioRenderer(this, softwareDecodersFirst, handler, audioListener, PowerSoundSink(androidSink))
             )
         }
         // Settings → Misc → Network Stream Timeout / User Agent (read for every new connection)
@@ -217,6 +218,16 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(wakeLock && SettingsStore.value.pauseOnDisconnect)
             .apply { if (wakeLock && SettingsStore.value.useWakelock) setWakeMode(C.WAKE_MODE_LOCAL) }
             .build()
+    }
+
+    /**
+     * Android's own (Google) audio decoders first: they deliver 32-bit float, so 24-bit FLAC keeps every bit.
+     * Some phone makers' decoders only give 16-bit.
+     */
+    private val softwareDecodersFirst = MediaCodecSelector { mime, secure, tunneling ->
+        val list = androidx.media3.exoplayer.mediacodec.MediaCodecUtil.getDecoderInfos(mime, secure, tunneling)
+        if (!mime.startsWith("audio/")) list
+        else list.sortedBy { if (it.name.startsWith("c2.android.") || it.name.startsWith("OMX.google.")) 0 else 1 }
     }
 
     // ---------------------------------------------------------------- the player the session sees
@@ -390,14 +401,16 @@ class PlaybackService : MediaSessionService() {
         AudioEngine.currentOutput = name
         AudioEngine.outputKey = key
         AudioEngine.outputDelayMs = st.outDelayMs[key] ?: 0
+        AudioEngine.nativeRate() // the new output's own rate (Audio Outputs → Sample Rate → Native)
         AudioEngine.applyOptions(
             bitPerfect = st.perfectBitPerfect,
             eqBlocked = key in st.outNoEq,
             fadeOnSeek = st.fadeOnSeek,
             ditherType = st.dither,
-            resamplerVeryHigh = st.resamplerType == 1,
+            resamplerQuality = st.resamplerType,
             resamplerCutoff = st.resamplerCutoff.toDouble(),
-            outputRateRule = st.outRate[key] ?: 0
+            outputRateRule = st.outRate[key] ?: 1,
+            outputFloat = (st.outFormat[key] ?: 0) == 0
         )
         // the equalizer preset assigned to this output
         if (switched || presetChanged) {

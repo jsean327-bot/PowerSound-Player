@@ -1226,7 +1226,8 @@ private fun dspSummary(): String {
     if (fx.stereoExpand > 0.0) parts.add("Stereo expand")
     if (fx.balance != 0.0) parts.add("Balance")
     if (fx.volume < 1.0) parts.add("Volume ${(fx.volume * 100).toInt()}%")
-    return if (parts.isEmpty()) "Off — bit-exact pass-through" else parts.joinToString(" • ") + " • 64-bit float DSP with dither"
+    val out = if (com.powersound.player.audio.AudioEngine.outputEncoding == "16-bit") "16-bit with dither" else "32-bit float output"
+    return if (parts.isEmpty()) "Off — bit-exact pass-through" else parts.joinToString(" • ") + " • 64-bit DSP, $out"
 }
 
 @Composable

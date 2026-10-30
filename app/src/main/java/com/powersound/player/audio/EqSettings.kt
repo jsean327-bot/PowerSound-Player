@@ -145,7 +145,35 @@ val BUILT_IN_PRESETS = listOf(
     EqPreset("Classical", listOf(3.0, 2.0, 1.0, 0.0, -1.0, -1.0, 0.0, 1.0, 2.0, 3.0)),
     EqPreset("Electronic", listOf(5.0, 4.0, 1.0, 0.0, -2.0, 1.5, 1.0, 2.0, 4.0, 5.0)),
     EqPreset("Hip-Hop", listOf(5.0, 4.5, 1.5, 3.0, -1.0, -1.0, 1.0, -0.5, 2.0, 3.0)),
-    EqPreset("Arabic", listOf(3.0, 2.5, 1.0, 0.0, 1.0, 2.5, 3.0, 2.0, 1.5, 1.0))
+    EqPreset("Arabic", listOf(3.0, 2.5, 1.0, 0.0, 1.0, 2.5, 3.0, 2.0, 1.5, 1.0)),
+    // Gentle, for voices: less boom and mud, a little more presence and air, softer "s" sounds.
+    EqPreset(
+        "Vocal Clarity", emptyList(), preampDb = 0.0,
+        bands = listOf(
+            EqBand(80.0, -1.5, 0.70, BandType.LOW_SHELF),
+            EqBand(280.0, -1.5, 1.0),
+            EqBand(2800.0, 2.0, 0.9),
+            EqBand(6800.0, -1.0, 3.0),
+            EqBand(11000.0, 1.5, 0.70, BandType.HIGH_SHELF)
+        )
+    ),
+    // Soundcore Liberty 4 NC corrected to the Harman in-ear target. AutoEq project (Jaakko Pasanen, MIT license),
+    // measurement by DHRME. Made for the earbuds' default sound (Soundcore app EQ off / "Soundcore Signature").
+    EqPreset(
+        "Liberty 4 NC (AutoEq)", emptyList(), preampDb = -3.6,
+        bands = listOf(
+            EqBand(79.0, -4.7, 0.79),
+            EqBand(89.0, -1.0, 6.00),
+            EqBand(105.0, -1.6, 0.70, BandType.LOW_SHELF),
+            EqBand(264.0, -1.8, 0.35),
+            EqBand(2383.0, 4.0, 0.26),
+            EqBand(2945.0, -1.0, 3.83),
+            EqBand(4874.0, 1.1, 3.01),
+            EqBand(7369.0, -6.0, 1.88),
+            EqBand(8013.0, 1.3, 5.99),
+            EqBand(10000.0, -3.0, 0.70, BandType.HIGH_SHELF)
+        )
+    )
 )
 
 fun linearGain(db: Double): Double = 10.0.pow(db / 20.0)

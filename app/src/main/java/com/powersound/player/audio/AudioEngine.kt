@@ -75,14 +75,18 @@ object AudioEngine {
         private set
     @Volatile var ditherType = 2
         private set
-    @Volatile var resamplerVeryHigh = false
+    /** Settings → Resampler → Resampler Type: 0 high quality (130 dB), 1 very high quality (160 dB). */
+    @Volatile var resamplerQuality = 0
         private set
     @Volatile var resamplerCutoff = 0.97
         private set
-    /** Output sample rate rule of the current output: 0 follow track, 1 the phone's native rate, else Hz. */
-    @Volatile var outputRateRule = 0
+    /** Output sample rate rule of the current output: 0 follow track, 1 the output's native rate (default), else Hz. */
+    @Volatile var outputRateRule = 1
         private set
-    /** The phone's native output rate (usually 48000). */
+    /** Audio Outputs → output → Output Format: true = 32-bit float (hi-res, default), false = 16-bit with dither. */
+    @Volatile var outputFloat = true
+        private set
+    /** The native rate of the output that plays now (usually 48000). */
     @Volatile var deviceRate = 48000
     /** Volume reduction while another app speaks (Audio Focus → Duck Volume). */
     @Volatile var duckGain = 1.0
@@ -94,6 +98,12 @@ object AudioEngine {
         private set
     @Volatile var channelCount = 0
         private set
+    /** What the decoder delivers, e.g. "32-bit float" (Audio Info). */
+    @Volatile var inputEncoding = ""
+        private set
+    /** What goes to Android, e.g. "32-bit float" (Audio Info). */
+    @Volatile var outputEncoding = ""
+        private set
     @Volatile var decoderName = ""
     @Volatile var audioSessionId = 0
     @Volatile var currentOutput = "Speaker"
@@ -103,14 +113,36 @@ object AudioEngine {
 
     fun outputRateFor(trackRate: Int): Int = when (val r = outputRateRule) {
         0 -> trackRate
-        1 -> deviceRate
+        1 -> nativeRate()
         else -> r
     }
 
-    fun reportFormat(inRate: Int, outRate: Int, channels: Int) {
+    /**
+     * The rate Android's mixer runs at for music right now (speaker, Bluetooth, USB …). Sending exactly this rate
+     * means Android doesn't resample again: PowerSound's own resampler does it once, with far more precision.
+     */
+    fun nativeRate(): Int {
+        val r = runCatching { android.media.AudioTrack.getNativeOutputSampleRate(android.media.AudioManager.STREAM_MUSIC) }
+            .getOrDefault(0)
+        return if (r in 8000..768000) r.also { deviceRate = it } else deviceRate
+    }
+
+    fun reportFormat(inRate: Int, outRate: Int, channels: Int, float: Boolean) {
         inputRate = inRate
         outputRate = outRate
         channelCount = channels
+        outputEncoding = if (float) "32-bit float" else "16-bit"
+    }
+
+    /** [encoding] is the decoder's PCM encoding (Media3 C.ENCODING_PCM_…). */
+    fun reportInput(encoding: Int) {
+        inputEncoding = when (encoding) {
+            androidx.media3.common.C.ENCODING_PCM_FLOAT -> "32-bit float"
+            androidx.media3.common.C.ENCODING_PCM_32BIT, androidx.media3.common.C.ENCODING_PCM_32BIT_BIG_ENDIAN -> "32-bit"
+            androidx.media3.common.C.ENCODING_PCM_24BIT, androidx.media3.common.C.ENCODING_PCM_24BIT_BIG_ENDIAN -> "24-bit"
+            androidx.media3.common.C.ENCODING_PCM_8BIT -> "8-bit"
+            else -> "16-bit"
+        }
     }
 
     /** Copies the audio options from the app settings (called on every settings / output change). */
@@ -119,18 +151,20 @@ object AudioEngine {
         eqBlocked: Boolean,
         fadeOnSeek: Boolean,
         ditherType: Int,
-        resamplerVeryHigh: Boolean,
+        resamplerQuality: Int,
         resamplerCutoff: Double,
-        outputRateRule: Int
+        outputRateRule: Int,
+        outputFloat: Boolean
     ) {
         val changed = bitPerfect != this.bitPerfect || eqBlocked != this.eqBlocked || ditherType != this.ditherType
         this.bitPerfect = bitPerfect
         this.eqBlocked = eqBlocked
         this.fadeOnSeek = fadeOnSeek
         this.ditherType = ditherType
-        this.resamplerVeryHigh = resamplerVeryHigh
+        this.resamplerQuality = resamplerQuality
         this.resamplerCutoff = resamplerCutoff
         this.outputRateRule = outputRateRule
+        this.outputFloat = outputFloat
         if (changed) version += 1
     }
 
@@ -307,7 +341,8 @@ object AudioEngine {
 
     private fun publish(s: EqSettings) {
         _settings.value = s
-        headroomDb = if (s.autoHeadroom) -max(0.0, maxBoostDb(s)) else 0.0
+        // only the part of the boost that the preamp doesn't already cover (AutoEq presets bring their own preamp)
+        headroomDb = if (s.autoHeadroom) -max(0.0, maxBoostDb(s) + s.preampDb) else 0.0
         snapshot = s
         version += 1
     }

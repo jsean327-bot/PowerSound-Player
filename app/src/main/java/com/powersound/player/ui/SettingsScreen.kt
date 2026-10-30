@@ -216,6 +216,7 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.OUTPUTS to "Audio Outputs", SettingsPage.OUT_BT to "Bluetooth output", SettingsPage.OUT_WIRED to "Wired Headset/AUX output",
     SettingsPage.OUT_SPEAKER to "Speaker output", SettingsPage.OUT_USB to "USB DAC output", SettingsPage.OUT_OTHER to "Other Output Devices",
     SettingsPage.BIT_PERFECT to "Perfect Bit Perfect", SettingsPage.BIT_PERFECT to "64-bit Audio Pipeline",
+    SettingsPage.OUT_BT to "Output Format", SettingsPage.OUT_BT to "Sample Rate",
     SettingsPage.TWEAKS to "Pause/Resume on Volume", SettingsPage.TWEAKS to "MusicFX", SettingsPage.TWEAKS to "Restore Reverb Presets",
     SettingsPage.VISUALIZATION to "Visualization On Player Screen", SettingsPage.VISUALIZATION to "Equalizer Screen Spectrum",
     SettingsPage.VISUALIZATION to "Visualization in Library", SettingsPage.VISUALIZATION to "Preset Duration",
@@ -809,11 +810,13 @@ private fun ConfirmDialog(title: String, text: String, onOk: () -> Unit, onDismi
 }
 
 private val OUTPUT_RATES = listOf(0, 1, 44100, 48000, 88200, 96000, 176400, 192000)
-private val OUTPUT_RATE_LABELS = listOf("Follow Track", "Auto", "44.1 kHz", "48 kHz", "88.2 kHz", "96 kHz", "176.4 kHz", "192 kHz")
+private val OUTPUT_RATE_LABELS = listOf("Follow Track", "Native", "44.1 kHz", "48 kHz", "88.2 kHz", "96 kHz", "176.4 kHz", "192 kHz")
+private val OUTPUT_FORMAT_LABELS = listOf("32-bit float (Hi-Res)", "16-bit")
 
 private fun outputSummary(st: AppSettings, key: String): String {
     val parts = ArrayList<String>()
-    parts.add(OUTPUT_RATE_LABELS[OUTPUT_RATES.indexOf(st.outRate[key] ?: 0).coerceAtLeast(0)])
+    parts.add(OUTPUT_FORMAT_LABELS[(st.outFormat[key] ?: 0).coerceIn(0, 1)])
+    parts.add(OUTPUT_RATE_LABELS[OUTPUT_RATES.indexOf(st.outRate[key] ?: 1).coerceAtLeast(0)])
     st.outEqPreset[key]?.let { parts.add("EQ: $it") }
     if (key in st.outNoEq) parts.add("No Equ/Tone")
     return parts.joinToString(" • ")
@@ -834,7 +837,10 @@ private fun OutputPage(st: AppSettings, key: String, set: ((AppSettings) -> AppS
     // status like the reference: device, driver, status
     Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Output Device: " + if (active) engine.currentOutput else OUTPUT_LABEL[key], color = sc.text, fontSize = 14.sp, fontFamily = sc.family)
-        Text("Output Driver: Android AudioTrack, 16-bit PCM", color = sc.sub, fontSize = 13.sp, fontFamily = sc.family)
+        Text(
+            "Output Driver: Android AudioTrack, " + if ((st.outFormat[key] ?: 0) == 0) "32-bit float" else "16-bit PCM",
+            color = sc.sub, fontSize = 13.sp, fontFamily = sc.family
+        )
         Text(
             if (active && engine.inputRate > 0) {
                 val inK = engine.inputRate / 1000.0
@@ -844,13 +850,22 @@ private fun OutputPage(st: AppSettings, key: String, set: ((AppSettings) -> AppS
             color = if (active) MaterialTheme.colorScheme.primary else sc.sub, fontSize = 13.sp, fontFamily = sc.family
         )
     }
-    val rateIndex = OUTPUT_RATES.indexOf(st.outRate[key] ?: 0).coerceAtLeast(0)
+    ChipRow(
+        "Output Format", "What PowerSound sends to this output", OUTPUT_FORMAT_LABELS, (st.outFormat[key] ?: 0).coerceIn(0, 1)
+    ) { i -> set { it.copy(outFormat = if (i == 0) it.outFormat - key else it.outFormat + (key to i)) } }
+    Hint(
+        "32-bit float keeps every bit of 24-bit files and of the 64-bit processing, with no rounding and no dither. " +
+            "Use 16-bit only if this output has trouble with it."
+    )
+    val rateIndex = OUTPUT_RATES.indexOf(st.outRate[key] ?: 1).coerceAtLeast(0)
     ChipRow("Sample Rate", "The sample rate PowerSound sends to this output", OUTPUT_RATE_LABELS, rateIndex) { i ->
-        set { it.copy(outRate = if (i == 0) it.outRate - key else it.outRate + (key to OUTPUT_RATES[i])) }
+        set { it.copy(outRate = if (i == 1) it.outRate - key else it.outRate + (key to OUTPUT_RATES[i])) }
     }
     Hint(
-        "Follow Track: no resampling. Auto: the phone's own rate (${engine.deviceRate / 1000.0} kHz), so Android doesn't resample. " +
-            "A new sample rate starts with the next track."
+        "Native (recommended): the output's own rate (now ${engine.deviceRate / 1000.0} kHz). PowerSound converts once, " +
+            "with its own 64-bit resampler, and catches the peaks this creates on loud recordings — so Android doesn't resample " +
+            "again with its simpler converter and nothing clips. Follow Track: no conversion by PowerSound (Android may still convert). " +
+            "A change starts with the next track."
     )
     SwitchRow("No Equ/Tone", "Disable the equalizer and tone for this output", key in st.outNoEq) { v ->
         set { it.copy(outNoEq = if (v) it.outNoEq + key else it.outNoEq - key) }
@@ -1733,7 +1748,7 @@ private fun SettingsPage10(page: SettingsPage?, args: PageArgs) {
     PlainRow("Equalizer", "Equalizer settings, number of bands, frequencies") { onPage(SettingsPage.EQ_SETTINGS) }
     PlainRow("Resampler", "Resampling/dither settings") { onPage(SettingsPage.RESAMPLER) }
     PlainRow("Audio Outputs", "Wired Headset, Speaker, Bluetooth, USB and other outputs") { onPage(SettingsPage.OUTPUTS) }
-    PlainRow("Bit Perfect", "64-bit audio pipeline, Perfect Bit Perfect") { onPage(SettingsPage.BIT_PERFECT) }
+    PlainRow("Bit Perfect", "Hi-Res 64-bit audio path, Perfect Bit Perfect") { onPage(SettingsPage.BIT_PERFECT) }
     PlainRow("Advanced Tweaks", "Pause/resume on volume, MusicFX, presets reset") { onPage(SettingsPage.TWEAKS) }
     }
 }
@@ -1926,10 +1941,11 @@ private fun SettingsPage14(page: SettingsPage?, args: PageArgs) {
     ChipRow("Tone Values", null, listOf("Hidden", "dB", "%"), st.toneValues) { v -> set { it.copy(toneValues = v) } }
     SwitchRow("Auto Save", "Changes are saved into the loaded user preset", st.eqAutoSave) { v -> set { it.copy(eqAutoSave = v) } }
     SwitchRow(
-        "Smooth Equalizer/Tone Gains", "Automatically reduce the volume by the biggest boost so the equalizer/tone never overloads",
+        "Smooth Equalizer/Tone Gains",
+        "Automatically lower the volume by the biggest boost (minus what the preset's own preamp already lowers), so boosts never overload and the limiter rarely has to act",
         eq.autoHeadroom
     ) { v -> com.powersound.player.audio.AudioEngine.update { it.copy(autoHeadroom = v) } }
-    PlainRow("Import AutoEq Presets", "Import \"ParametricEQ.txt\" files from the AutoEq project (e.g. for your earbuds)", onClick = onImportAutoEq)
+    PlainRow("Import AutoEq Presets", "Import \"ParametricEQ.txt\" files from the AutoEq project (e.g. for your earbuds). \"Liberty 4 NC (AutoEq)\" is built in", onClick = onImportAutoEq)
     PlainRow("Restore Equalizer Presets", "Imported AutoEq presets are removed, built-in presets stay") { confirmRestore = true }
     RestoreRow {
         set {
@@ -2051,8 +2067,9 @@ private fun SettingsPage17(page: SettingsPage?, args: PageArgs) {
     fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
     Column(Modifier.fillMaxWidth()) {
     NoteBlock(
-        "PowerSound resamples only when an output has a fixed Sample Rate (Audio Outputs → output → Sample Rate)",
-        "Use \"Follow Track\" there to avoid resampling completely"
+        "PowerSound converts a track to the output's own rate (Audio Outputs → output → Sample Rate → Native), once, in 64-bit",
+        "High quality: 130 dB stop band, distortion below -134 dB. Very high quality: 160 dB, below -160 dB — " +
+            "both far under what a 24-bit file can hold. Very high uses a little more battery"
     )
     ChipRow("Resampler Type", null, listOf("High quality", "Very high quality"), st.resamplerType) { v -> set { it.copy(resamplerType = v) } }
     KnobRow(
@@ -2062,7 +2079,7 @@ private fun SettingsPage17(page: SettingsPage?, args: PageArgs) {
         onReset = { set { it.copy(resamplerCutoff = d.resamplerCutoff) } }
     )
     ChoiceRow("Dither", com.powersound.player.audio.Ditherer.NAMES, st.dither) { v -> set { it.copy(dither = v) } }
-    Hint("Dither is used whenever the 64-bit processing is reduced to the 16-bit output. Triangular is a safe choice; noise shaping moves the noise to frequencies the ear hears less.")
+    Hint("Dither is only used for outputs set to 16-bit (Audio Outputs → output → Output Format). The default 32-bit float output needs none. Triangular is a safe choice; noise shaping moves the noise to frequencies the ear hears less.")
     RestoreRow { set { it.copy(resamplerType = d.resamplerType, resamplerCutoff = d.resamplerCutoff, dither = d.dither) } }
     }
 }
@@ -2126,7 +2143,7 @@ private fun SettingsPage19(page: SettingsPage?, args: PageArgs) {
             it.copy(
                 outEqPreset = it.outEqPreset - key, outNoEq = it.outNoEq - key, outNoDuck = it.outNoDuck - key,
                 outDelayMs = (it.outDelayMs - key).let { m -> val dv = d.outDelayMs[key]; if (dv != null) m + (key to dv) else m },
-                outRate = it.outRate - key
+                outRate = it.outRate - key, outFormat = it.outFormat - key
             )
         }
     }
@@ -2153,8 +2170,10 @@ private fun SettingsPage20(page: SettingsPage?, args: PageArgs) {
     fun set(change: (AppSettings) -> AppSettings) = SettingsStore.update(change)
     Column(Modifier.fillMaxWidth()) {
     NoteBlock(
-        "PowerSound always processes in 64-bit floating point: equalizer, tone, effects, reverb and resampler",
-        "When nothing is switched on, the decoded audio goes to the output untouched"
+        "The decoder delivers 32-bit float (24-bit FLAC keeps all 24 bits), PowerSound processes in 64-bit floating point and " +
+            "sends 32-bit float to Android",
+        "When nothing changes the sound, every sample passes bit-for-bit. A look-ahead limiter only acts on peaks above 0 dB " +
+            "(EQ boosts, Replay Gain, resampling) and never bends the waveform"
     )
     SwitchRow(
         "Perfect Bit Perfect",
@@ -2993,7 +3012,7 @@ Online services (only when the matching setting is on):
 • Artist images: Deezer API
 • Updates and changelog: GitHub releases
 
-AutoEq presets you import are made by the AutoEq project (Jaakko Pasanen), MIT License.
+AutoEq (Jaakko Pasanen), MIT License: the built-in "Liberty 4 NC (AutoEq)" preset (measurement by DHRME) and the presets you import.
 
 The Apache License 2.0 text: https://www.apache.org/licenses/LICENSE-2.0"""
 
