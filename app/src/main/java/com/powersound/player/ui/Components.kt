@@ -677,6 +677,22 @@ fun GroupTile(title: String, subtitle: String, coverId: Long?, key: String = "",
     }
 }
 
+/**
+ * Keys for a lazy list or grid: each item's own key, or "key#2", "key#3"… when the same key comes again
+ * (a song twice in a playlist). Two items with one key make Compose stop the app, so lists use these.
+ */
+fun <T> uniqueKeys(items: List<T>, keyOf: (T) -> Any): List<Any> {
+    val used = HashSet<Any>(items.size * 2)
+    return items.map { item ->
+        val k = keyOf(item)
+        if (used.add(k)) k else {
+            var n = 2
+            var alt: Any = "$k#$n"
+            while (!used.add(alt)) alt = "$k#${++n}"
+            alt
+        }
+    }
+}
 
 /**
  * Pinch with two fingers: spread = zoom in, pinch = zoom out. One step per gesture.

@@ -21,7 +21,9 @@ data class Song(
     val genre: String,
     val dateAdded: Long,
     /** Full path of the file (may be empty on some phones). */
-    val path: String = ""
+    val path: String = "",
+    /** True when the file has its own album artist tag ([albumArtist] is otherwise the track artist). */
+    val hasAlbumArtist: Boolean = false
 ) {
     /** File name without extension, for "Filename as title". */
     val fileName: String

@@ -170,6 +170,7 @@ fun GroupGridScreen(
     }
     val allSongs = remember(shown) { shown.flatMap { it.songs } }
     val keys = remember(shown) { shown.map { letterKey(com.powersound.player.data.MusicRepository.sortKey(it.title)) } }
+    val lazyKeys = remember(shown) { uniqueKeys(shown) { it.key } }
     val headerItems = if (query != null) 2 else 1
     val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
 
@@ -230,7 +231,7 @@ fun GroupGridScreen(
                     FilterField(query ?: "", { query = it }, { query = null })
                 }
             }
-            itemsIndexed(shown, key = { _, g -> g.key }) { _, g ->
+            itemsIndexed(shown, key = { i, _ -> lazyKeys[i] }) { _, g ->
                 GroupTile(g.title, g.subtitle, g.coverId, g.key) { onOpen(g) }
             }
         }
@@ -359,6 +360,8 @@ fun SongListScreen(
     }
     val indexOn = showIndex && st.azScroll && (sort == 0 || sort == 1)
     val keys = remember(shown, indexOn) { if (indexOn) shown.map { letterKey(it.title) } else emptyList() }
+    // a playlist may hold the same song twice
+    val lazyKeys = remember(shown) { uniqueKeys(shown) { it.id } }
     val headerItems = if (query != null) 2 else 1
     val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
 
@@ -417,7 +420,7 @@ fun SongListScreen(
                     )
                 }
             }
-            itemsIndexed(shown, key = { _, s -> s.id }) { i, s ->
+            itemsIndexed(shown, key = { i, _ -> lazyKeys[i] }) { i, s ->
                 SongRow(
                     song = s,
                     isCurrent = s.id == currentId,

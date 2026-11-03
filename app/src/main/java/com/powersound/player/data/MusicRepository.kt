@@ -79,7 +79,8 @@ object MusicRepository {
                 val album = clean(c.getString(albumCol)) ?: "Unknown album"
                 val title = clean(c.getString(titleCol))
                     ?: data?.let { File(it).nameWithoutExtension } ?: "Unknown"
-                val albumArtist = (if (albumArtistCol >= 0) clean(c.getString(albumArtistCol)) else null) ?: artist
+                val albumArtistTag = if (albumArtistCol >= 0) clean(c.getString(albumArtistCol)) else null
+                val albumArtist = albumArtistTag ?: artist
 
                 songs.add(
                     Song(
@@ -98,7 +99,8 @@ object MusicRepository {
                         composer = (if (composerCol >= 0) clean(c.getString(composerCol)) else null) ?: "",
                         genre = (if (genreCol >= 0) clean(c.getString(genreCol)) else null) ?: "",
                         dateAdded = if (addedCol >= 0) c.getLong(addedCol) else 0L,
-                        path = data ?: ""
+                        path = data ?: "",
+                        hasAlbumArtist = albumArtistTag != null
                     )
                 )
             }
@@ -158,7 +160,8 @@ object MusicRepository {
         val showCombined = SettingsStore.value.showUnsplit
         for (s in songs) {
             val full = nameOf(s)
-            val names = splitNames(full, symbols, unsplit)
+            // distinct: "A; A" must not put the song twice in A's list
+            val names = splitNames(full, symbols, unsplit).distinct()
             for (n in names) map.getOrPut(n) { ArrayList() }.add(s)
             if (showCombined && names.size > 1) map.getOrPut(full) { ArrayList() }.add(s)
         }
@@ -177,22 +180,36 @@ object MusicRepository {
         }.sortedBy { sortKey(it.title) }
 
     /**
-     * Albums. "Join Albums" (on): tracks with the same album name and album artist are one album, even when
-     * Android gave them different album ids; tracks without an album artist tag join by name.
+     * Albums. "Join Albums" (on): tracks with the same album name and album artist tag are one album, even when
+     * Android gave them different album ids (a duet with its own track artist stays in its album); tracks without
+     * an album artist tag join by name. Off: Android's own albums.
+     *
+     * Every album has its own key: lists (Albums, Search) use the key to tell items apart, and two albums with
+     * the same key made the app crash.
      */
     fun albums(songs: List<Song>): List<Group> {
         val st = SettingsStore.value
-        val grouped: Map<Any, List<Song>> = if (st.joinAlbums) {
-            songs.groupBy { s -> s.album.lowercase().trim() + "\u0001" + (if (s.albumArtist != s.artist) s.albumArtist.lowercase() else "") }
-        } else songs.groupBy { it.albumId }
-        return grouped.map { (_, list) ->
+        val grouped: Map<String, List<Song>> = if (st.joinAlbums) {
+            songs.groupBy { s -> s.album.lowercase().trim() + " ‖ " + (if (s.hasAlbumArtist) s.albumArtist.lowercase().trim() else "") }
+        } else songs.groupBy { it.albumId.toString() }
+        val used = HashSet<String>()
+        return grouped.map { (k, list) ->
             val first = list.first()
             // Album Artist Label for Albums: album artist (and sort by it) instead of the track artist
-            val names = if (st.albumArtistAlbums) list.map { it.albumArtist }.distinct() else list.map { it.artist }.distinct()
+            val label = if (st.albumArtistAlbums) {
+                list.map { it.albumArtist }.distinct().singleOrNull()
+            } else {
+                list.map { it.artist }.distinct().singleOrNull()
+                    // tracks by several artists (duets) but one album artist tag: that artist, not "Various artists"
+                    ?: list.filter { it.hasAlbumArtist }.map { it.albumArtist }.distinct().singleOrNull()
+            }
+            var key = "album:$k"
+            var n = 2
+            while (!used.add(key)) key = "album:$k#${n++}"
             Group(
-                key = "album:${first.albumId}",
+                key = key,
                 title = first.album,
-                subtitle = if (names.size == 1) names.first() else "Various artists",
+                subtitle = label ?: "Various artists",
                 songs = list.sortedWith(compareBy({ it.track }, { it.title.lowercase() }))
             )
         }.let { list ->
