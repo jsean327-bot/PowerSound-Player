@@ -128,6 +128,8 @@ class MainActivity : ComponentActivity() {
         val openedFromNotification = kotlinx.coroutines.flow.MutableStateFlow(0L)
         /** Bumped when the app comes back to the front (Settings → Audio Focus → Resume On Reopen). */
         val reopened = kotlinx.coroutines.flow.MutableStateFlow(0L)
+        /** A file another app asked PowerSound to play ("Open with"), until the app has started playing it. */
+        val openedUri = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
         const val EXTRA_FROM_NOTIFICATION = "powersound.fromNotification"
     }
 
@@ -136,7 +138,8 @@ class MainActivity : ComponentActivity() {
         applySystemBars(com.powersound.player.data.SettingsStore.value)
         super.onCreate(savedInstanceState)
         com.powersound.player.data.CrashLog.install(this)
-        handleIntent(intent)
+        // after a screen rotation Android gives the same intent again: an opened file must not play twice
+        handleIntent(intent, openFile = savedInstanceState == null)
         setContent {
             val appSettings by com.powersound.player.data.SettingsStore.settings.collectAsStateWithLifecycle()
             // Settings → Look and Feel: orientation, status bar, navigation bar
@@ -186,10 +189,14 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    private fun handleIntent(intent: android.content.Intent?) {
+    private fun handleIntent(intent: android.content.Intent?, openFile: Boolean = true) {
         if (intent?.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false) == true) {
             openedFromNotification.value = System.currentTimeMillis()
             intent.removeExtra(EXTRA_FROM_NOTIFICATION)
+        }
+        // "Open with PowerSound": the file plays as soon as the library is ready
+        if (openFile && intent?.action == android.content.Intent.ACTION_VIEW) {
+            intent.data?.let { openedUri.value = it }
         }
     }
 
@@ -265,7 +272,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     var showShuffleMenu by ui::showShuffleMenu
     var playlistFor by ui::playlistFor
     var confirmDelete by ui::confirmDelete
-    var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
+    var pendingDeleteIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     val settingsOpenState = rememberSaveable { mutableStateOf(false) }
     var settingsOpen by settingsOpenState
     var settingsPage by ui::settingsPage
@@ -399,29 +406,94 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         }
     }
 
-    // Deleting a music file needs the user's OK from Android (Android 11+ shows its own dialog).
+    // Deleting music files needs the user's OK from Android (Android 11+ shows one dialog for all of them).
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        val id = pendingDeleteId
-        if (result.resultCode == Activity.RESULT_OK && id != null) vm.onSongDeleted(id)
-        pendingDeleteId = null
+        val ids = pendingDeleteIds
+        if (result.resultCode == Activity.RESULT_OK && ids.isNotEmpty()) vm.onSongsDeleted(ids)
+        pendingDeleteIds = emptyList()
     }
-    fun deleteSong(song: Song) {
-        pendingDeleteId = song.id
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val pi = MediaStore.createDeleteRequest(context.contentResolver, listOf(song.uri))
+    fun deleteSongs(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        pendingDeleteIds = songs.map { it.id }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                val pi = MediaStore.createDeleteRequest(context.contentResolver, songs.map { it.uri })
                 deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
-            } else {
-                context.contentResolver.delete(song.uri, null, null)
-                vm.onSongDeleted(song.id)
             }
+            return
+        }
+        // older Android: one file at a time; Android 10 asks about a file it doesn't allow
+        val done = ArrayList<Long>()
+        for (s in songs) {
+            try {
+                context.contentResolver.delete(s.uri, null, null)
+                done.add(s.id)
+            } catch (e: SecurityException) {
+                val rse = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) e as? RecoverableSecurityException else null
+                if (rse != null) {
+                    vm.onSongsDeleted(done)
+                    pendingDeleteIds = listOf(s.id)
+                    deleteLauncher.launch(IntentSenderRequest.Builder(rse.userAction.actionIntent.intentSender).build())
+                    return
+                }
+            } catch (_: Exception) {
+            }
+        }
+        vm.onSongsDeleted(done)
+        pendingDeleteIds = emptyList()
+    }
+    fun deleteSong(song: Song) = deleteSongs(listOf(song))
+
+    // Info/Tags → Edit → Save: Android asks the user before PowerSound may change a music file
+    var pendingTags by remember { mutableStateOf<Pair<Song, com.powersound.player.data.TagEdits>?>(null) }
+    fun runTagSave() {
+        val (s, edits) = pendingTags ?: return
+        ui.tagSaving = true
+        vm.saveTags(s, edits) { error ->
+            ui.tagSaving = false
+            pendingTags = null
+            if (error == null) {
+                ui.tagEditFor = null
+                android.widget.Toast.makeText(context, "Tags saved", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                backupMessage = error
+            }
+        }
+    }
+    val tagWriteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) runTagSave() else pendingTags = null
+    }
+    fun saveTags(song: Song, edits: com.powersound.player.data.TagEdits) {
+        pendingTags = song to edits
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+                val pi = MediaStore.createWriteRequest(context.contentResolver, listOf(song.uri))
+                tagWriteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                return
+            }
+            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+                // Android 10 says no with an exception that carries its own question
+                context.contentResolver.openFileDescriptor(song.uri, "rw")?.close()
+            }
+            runTagSave()
         } catch (e: SecurityException) {
             val rse = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) e as? RecoverableSecurityException else null
-            if (rse != null) {
-                deleteLauncher.launch(IntentSenderRequest.Builder(rse.userAction.actionIntent.intentSender).build())
-            }
-        } catch (_: Exception) {
+            if (rse != null) tagWriteLauncher.launch(IntentSenderRequest.Builder(rse.userAction.actionIntent.intentSender).build())
+            else { pendingTags = null; backupMessage = "Android didn't allow PowerSound to change this file" }
+        } catch (e: Exception) {
+            pendingTags = null
+            backupMessage = e.message ?: "Saving failed"
         }
+    }
+
+    // "Open with PowerSound" from a file manager or another app
+    val opened by MainActivity.openedUri.collectAsStateWithLifecycle()
+    LaunchedEffect(opened, library.loaded) {
+        val uri = opened ?: return@LaunchedEffect
+        if (!library.loaded) return@LaunchedEffect
+        MainActivity.openedUri.value = null
+        vm.tab = Tab.LIBRARY
+        vm.playExternal(uri) { showNowPlaying = true }
     }
     var barHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -434,7 +506,15 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     BackHandler(enabled = tab != Tab.LIBRARY && !showNowPlaying && !settingsOpen) { vm.tab = Tab.LIBRARY }
 
     val tabHolder = rememberSaveableStateHolder()
-    val openSongMenu: (Song) -> Unit = { s -> songMenuInfo = null; songMenu = s }
+    val openSongMenu: (Song) -> Unit = { s -> songMenuInfo = null; ui.songMenuSelect = null; songMenu = s }
+    // what song lists do with several selected songs (multi-select)
+    val listActions = com.powersound.player.ui.ListActions(
+        playNext = { vm.playNext(it) },
+        addToQueue = { vm.addToQueue(it) },
+        addToPlaylist = { songs -> playlistFor = songs.map { it.id } },
+        delete = { songs -> if (appSettings.confirmDelete) ui.confirmDeleteMany = songs else deleteSongs(songs) },
+        menuWithSelect = { s, select -> songMenuInfo = null; ui.songMenuSelect = select; songMenu = s }
+    )
 
     // Settings → Library → Lists → Static Navbar (off: the bar slides away while you scroll down a list)
     var navHidden by remember { mutableStateOf(false) }
@@ -479,7 +559,8 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 onSongMenu = openSongMenu,
                 onOpenQueue = { showQueue = true },
                 onOpenSettings = { settingsPage = SettingsPage.LIBRARY; settingsOpen = true },
-                onOpenPlayer = { showNowPlaying = true }
+                onOpenPlayer = { showNowPlaying = true },
+                listActions = listActions
             )
             Tab.EQ -> EqualizerScreen(bottomInset)
             Tab.SEARCH -> SearchScreen(
@@ -628,7 +709,11 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             lib = libraryActions
         )
     }
-    AppDialogs(ui, vm, player, stats, update, currentId, appSettings, showNowPlayingState, settingsOpenState) { deleteSong(it) }
+    AppDialogs(
+        ui, vm, player, stats, update, currentId, appSettings, showNowPlayingState, settingsOpenState,
+        saveTags = { s, edits -> saveTags(s, edits) },
+        deleteSongs = { deleteSongs(it) }
+    )
 }
 
 /** Everything that shows UI state the dialogs/sheets need (kept here so PowerSoundApp stays small). */
@@ -646,6 +731,13 @@ private class AppUi {
     var showShuffleMenu: Boolean by mutableStateOf(false)
     var playlistFor: List<Long>? by mutableStateOf(null)
     var confirmDelete: Song? by mutableStateOf(null)
+    /** Several songs to delete (multi-select), waiting for "Ask before deleting files". */
+    var confirmDeleteMany: List<Song>? by mutableStateOf(null)
+    /** Info/Tags → Edit. */
+    var tagEditFor: Song? by mutableStateOf(null)
+    var tagSaving: Boolean by mutableStateOf(false)
+    /** The song menu's "Select" item: starts multi-select in the list the menu was opened from. */
+    var songMenuSelect: (() -> Unit)? by mutableStateOf(null)
     var settingsPage: SettingsPage? by mutableStateOf(null)
     var showChangelog: Boolean by mutableStateOf(false)
     var showHelp: Boolean by mutableStateOf(false)
@@ -664,8 +756,10 @@ private fun AppDialogs(
     appSettings: com.powersound.player.data.AppSettings,
     showNowPlayingState: androidx.compose.runtime.MutableState<Boolean>,
     settingsOpenState: androidx.compose.runtime.MutableState<Boolean>,
-    deleteSong: (Song) -> Unit
+    saveTags: (Song, com.powersound.player.data.TagEdits) -> Unit,
+    deleteSongs: (List<Song>) -> Unit
 ) {
+    val deleteSong: (Song) -> Unit = { deleteSongs(listOf(it)) }
     val context = LocalContext.current
     var showNowPlaying by showNowPlayingState
     var settingsOpen by settingsOpenState
@@ -736,6 +830,7 @@ private fun AppDialogs(
             currentIndex = player.currentIndex,
             onPlayIndex = { vm.playQueueIndex(it) },
             onRemove = { vm.removeFromQueue(it) },
+            onMove = { from, to -> vm.moveInQueue(from, to) },
             onDismiss = { showQueue = false }
         )
     }
@@ -773,7 +868,30 @@ private fun AppDialogs(
         )
     }
     tagsFor?.let { s ->
-        InfoTagsDialog(song = s, audioInfo = if (s.id == currentId) player.audioInfo else "", onDismiss = { tagsFor = null })
+        InfoTagsDialog(
+            song = s,
+            audioInfo = if (s.id == currentId) player.audioInfo else "",
+            onDismiss = { tagsFor = null },
+            onEdit = { tagsFor = null; ui.tagEditFor = s }
+        )
+    }
+    ui.tagEditFor?.let { s ->
+        com.powersound.player.ui.TagEditorDialog(
+            song = s,
+            saving = ui.tagSaving,
+            onSave = { edits -> saveTags(s, edits) },
+            onDismiss = { if (!ui.tagSaving) ui.tagEditFor = null }
+        )
+    }
+    ui.confirmDeleteMany?.let { list ->
+        AlertDialog(
+            onDismissRequest = { ui.confirmDeleteMany = null },
+            containerColor = Color(0xFF1B1B22),
+            title = { Text("Delete ${list.size} files?", color = Color.White) },
+            text = { Text("The selected songs will be deleted from your phone.", color = Color.White.copy(alpha = 0.8f)) },
+            confirmButton = { TextButton(onClick = { ui.confirmDeleteMany = null; deleteSongs(list) }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { ui.confirmDeleteMany = null }) { Text("Cancel") } }
+        )
     }
     artFor?.let { id -> AlbumArtDialog(songId = id, onDismiss = { artFor = null }) }
     if (showAudioInfo) {
@@ -807,7 +925,7 @@ private fun AppDialogs(
             rating = stats.rating(s.id),
             stars = stats.stars(s.id),
             onStars = { n -> vm.setStars(s.id, n) },
-            onDismiss = { songMenu = null },
+            onDismiss = { songMenu = null; ui.songMenuSelect = null },
             onLike = { vm.like(s.id) },
             onDislike = { vm.dislike(s.id) },
             onDelete = { if (appSettings.confirmDelete) confirmDelete = s else deleteSong(s) },
@@ -824,7 +942,9 @@ private fun AppDialogs(
             onFolder = { showNowPlaying = false; vm.goToFolder(s) },
             onGenre = { showNowPlaying = false; vm.goToGenre(s) },
             onPlayNext = { vm.playNext(listOf(s)) },
-            onAddToQueue = { vm.addToQueue(listOf(s)) }
+            onAddToQueue = { vm.addToQueue(listOf(s)) },
+            // opened from a song list: "Select" starts multi-select there
+            onSelect = ui.songMenuSelect
         )
     }
 }
@@ -848,7 +968,8 @@ private fun LibraryHost(
     onSongMenu: (Song) -> Unit,
     onOpenQueue: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenPlayer: () -> Unit
+    onOpenPlayer: () -> Unit,
+    listActions: com.powersound.player.ui.ListActions?
 ) {
     val holder = rememberSaveableStateHolder()
     val scope = rememberCoroutineScope()
@@ -999,7 +1120,7 @@ private fun LibraryHost(
                         )
                 ) {
                     holder.SaveableStateProvider(screen.id) {
-                        ScreenContent(screen, vm, library, player, stats, bottomInset, onSongMenu, onOpenQueue, onOpenSettings, onOpenPlayer)
+                        ScreenContent(screen, vm, library, player, stats, bottomInset, onSongMenu, onOpenQueue, onOpenSettings, onOpenPlayer, listActions)
                     }
                 }
             }
@@ -1018,7 +1139,8 @@ private fun ScreenContent(
     onSongMenu: (Song) -> Unit,
     onOpenQueue: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenPlayer: () -> Unit
+    onOpenPlayer: () -> Unit,
+    listActions: com.powersound.player.ui.ListActions?
 ) {
     val currentId = player.nowPlaying?.songId
     // Settings → Library → Lists → List Item Action
@@ -1029,7 +1151,8 @@ private fun ScreenContent(
     val playlists by com.powersound.player.data.LibraryStores.playlists.collectAsStateWithLifecycle()
     val bookmarks by com.powersound.player.data.LibraryStores.bookmarks.collectAsStateWithLifecycle()
     var nameDialog by remember { mutableStateOf<Pair<String, (String) -> Unit>?>(null) }
-    var playlistSongMenu by remember { mutableStateOf<Pair<Long, Song>?>(null) }
+    // a song's menu inside a playlist: (playlist id, song, start multi-select or null)
+    var playlistSongMenu by remember { mutableStateOf<Triple<Long, Song, (() -> Unit)?>?>(null) }
 
     when (screen) {
         Screen.Home -> {
@@ -1134,7 +1257,8 @@ private fun ScreenContent(
                         onShuffle = { vm.shuffleAll(it, key) },
                         onSongMenu = onSongMenu,
                         onAddToQueue = addQueue,
-                        rowExtra = if (cat == Category.MOST_PLAYED) { s -> "${stats.plays[s.id] ?: 0}×" } else null
+                        rowExtra = if (cat == Category.MOST_PLAYED) { s -> "${stats.plays[s.id] ?: 0}×" } else null,
+                        actions = listActions
                     ) { pills ->
                         PageHeader("Library", cat.label, cat.icon(), cat.color(), { vm.pop() }) { pills() }
                     }
@@ -1155,7 +1279,7 @@ private fun ScreenContent(
                 emptyText = if (isPlaylist) "This playlist is empty.\nAdd songs from the ⋮ menu of any song." else "No songs",
                 onPlay = { list, i -> tap(list, i, group.key) },
                 onShuffle = { vm.shuffleAll(it, group.key) },
-                onSongMenu = { s -> if (playlistId != null) playlistSongMenu = playlistId to s else onSongMenu(s) },
+                onSongMenu = { s -> if (playlistId != null) playlistSongMenu = Triple(playlistId, s, null) else onSongMenu(s) },
                 onAddToQueue = addQueue,
                 extraMenu = if (playlistId != null) listOf(
                     "Rename playlist" to {
@@ -1169,7 +1293,17 @@ private fun ScreenContent(
                 ) else listOf("Add all to a playlist" to { nameDialog = "New playlist" to { n: String -> com.powersound.player.data.LibraryStores.createPlaylist(n, group.songs.map { it.id }); Unit } }),
                 listKind = when (group.key.substringBefore(':')) {
                     "album" -> "album"; "folder" -> "folder"; "albumartist" -> "albumartist"; else -> ""
-                }
+                },
+                // in a playlist, the selected songs are taken out of the playlist (the files stay)
+                actions = if (playlistId == null) listActions else listActions?.copy(
+                    delete = { songs ->
+                        val ids = songs.map { it.id }.toSet()
+                        val p = com.powersound.player.data.LibraryStores.playlists.value.firstOrNull { it.id == playlistId }
+                        if (p != null) com.powersound.player.data.LibraryStores.replacePlaylistSongs(playlistId, p.songIds.filterNot { it in ids })
+                    },
+                    deleteRemoves = true,
+                    menuWithSelect = { s, select -> playlistSongMenu = Triple(playlistId, s, select) }
+                )
             ) { pills ->
                 ArtHeader(group, screen.backLabel, { vm.pop() }) { pills() }
             }
@@ -1200,13 +1334,17 @@ private fun ScreenContent(
     nameDialog?.let { (title, save) ->
         SaveNameDialog(title, onSave = save, onDismiss = { nameDialog = null })
     }
-    playlistSongMenu?.let { (pid, s) ->
+    playlistSongMenu?.let { (pid, s, select) ->
         ChoiceDialog(
             title = s.title,
-            options = listOf("Remove from playlist", "Song menu…"),
+            options = if (select != null) listOf("Remove from playlist", "Select", "Song menu…") else listOf("Remove from playlist", "Song menu…"),
             selected = -1,
             onPick = { i ->
-                if (i == 0) com.powersound.player.data.LibraryStores.removeFromPlaylist(pid, s.id) else onSongMenu(s)
+                when {
+                    i == 0 -> com.powersound.player.data.LibraryStores.removeFromPlaylist(pid, s.id)
+                    select != null && i == 1 -> select()
+                    else -> onSongMenu(s)
+                }
             },
             onDismiss = { playlistSongMenu = null }
         )
