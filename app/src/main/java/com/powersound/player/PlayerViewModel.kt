@@ -272,7 +272,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     if (_library.value.loaded) loadLibrary(force = true)
                 }
                 if (prev.replayGain != st.replayGain || prev.rgSource != st.rgSource || prev.replayGainPreamp != st.replayGainPreamp ||
-                    prev.replayGainNoTagDb != st.replayGainNoTagDb
+                    prev.replayGainNoTagDb != st.replayGainNoTagDb || prev.eqAssign != st.eqAssign
                 ) {
                     gainForId = null
                     applySongSettings(_player.value.nowPlaying?.songId)
@@ -352,6 +352,39 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         infoForId = null
         refresh(true)
         tryRestoreQueue()
+    }
+
+    // ---- Song menu → EQ Preset: a preset for a song, its album or its artist ----
+
+    /** The preset that was on before an assigned one took over (it comes back for other songs). */
+    private var presetBeforeAssign: String? = null
+
+    /** The album key of a song (for "album:…" assignments). */
+    fun albumKeyOf(song: Song): String? = _library.value.albums.firstOrNull { g -> g.songs.any { it.id == song.id } }?.key
+
+    /** (assignment key, preset name) for the song, else its album, else its artist; null when none. */
+    fun assignedPreset(song: Song): Pair<String, String>? {
+        val map = com.powersound.player.data.SettingsStore.value.eqAssign
+        if (map.isEmpty()) return null
+        return listOfNotNull("song:${song.id}", albumKeyOf(song), "artist:${song.artist}")
+            .firstNotNullOfOrNull { k -> map[k]?.let { k to it } }
+    }
+
+    private fun findPreset(name: String) =
+        (com.powersound.player.audio.BUILT_IN_PRESETS + AudioEngine.customPresets.value).firstOrNull { it.name == name }
+
+    private fun applyEqAssignment(songId: Long?) {
+        val song = song(songId)
+        val target = song?.let { assignedPreset(it)?.second }
+        val current = AudioEngine.settings.value.presetName
+        if (target != null) {
+            if (presetBeforeAssign == null) presetBeforeAssign = current
+            if (current != target) findPreset(target)?.let { AudioEngine.applyPreset(it) }
+        } else {
+            val back = presetBeforeAssign ?: return
+            presetBeforeAssign = null
+            if (current != back) findPreset(back)?.let { AudioEngine.applyPreset(it) }
+        }
     }
 
     // ---- Replay Gain → Scan Loudness ----
@@ -908,6 +941,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (songId == gainForId) return
         gainForId = songId
         gainJob?.cancel()
+        applyEqAssignment(songId)
         val st = com.powersound.player.data.SettingsStore.value
         if (songId == null || st.replayGain == 0) {
             AudioEngine.setReplayGain(0.0)

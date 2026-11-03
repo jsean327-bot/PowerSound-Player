@@ -42,10 +42,22 @@ object StatsStore {
         if (prefs != null) return
         val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs = p
+        logFile = java.io.File(context.applicationContext.filesDir, "plays.log")
         _stats.value = p.getString(KEY, null)?.let { runCatching { fromJson(JSONObject(it)) }.getOrNull() } ?: Stats()
     }
 
+    private var logFile: java.io.File? = null
+
+    /** Every play with its time ("time,songId" lines), for Statistics → This month / This year. */
+    fun playLog(): List<Pair<Long, Long>> = runCatching {
+        logFile?.takeIf { it.exists() }?.readLines()?.mapNotNull { l ->
+            val (t, id) = l.split(',').takeIf { it.size == 2 } ?: return@mapNotNull null
+            (t.toLongOrNull() ?: return@mapNotNull null) to (id.toLongOrNull() ?: return@mapNotNull null)
+        }
+    }.getOrNull() ?: emptyList()
+
     fun recordPlay(id: Long) {
+        runCatching { logFile?.appendText("${System.currentTimeMillis()},$id\n") }
         val s = _stats.value
         save(
             s.copy(
@@ -56,7 +68,10 @@ object StatsStore {
     }
 
     /** Settings → Library → Reset Stats: play counts and last-played times go, ratings stay. */
-    fun resetPlays() = save(_stats.value.copy(plays = emptyMap(), lastPlayed = emptyMap()))
+    fun resetPlays() {
+        runCatching { logFile?.delete() }
+        save(_stats.value.copy(plays = emptyMap(), lastPlayed = emptyMap()))
+    }
 
     /** 1 = liked, -1 = disliked, 11..15 = stars, 0 = none. */
     fun setRating(id: Long, rating: Int) {

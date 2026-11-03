@@ -374,6 +374,10 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 .filter { com.powersound.player.data.TagEditor.canEdit(it) }
                 .mapNotNull { s -> com.powersound.player.data.ArabicFix.editsFor(s)?.let { s to it } }
             if (fixes.isEmpty()) backupMessage = "No broken Arabic names were found. 👍" else ui.arabicFixes = fixes
+        },
+        findDuplicates = {
+            val groups = com.powersound.player.data.Duplicates.find(vm.library.value.songs)
+            if (groups.isEmpty()) backupMessage = "No duplicate songs were found. 👍" else ui.duplicates = groups
         }
     )
 
@@ -771,6 +775,12 @@ private class AppUi {
     var batchEditFor: List<Song>? by mutableStateOf(null)
     /** Settings → Library → Scanner → Fix Arabic Names: what would change. */
     var arabicFixes: List<Pair<Song, com.powersound.player.data.TagEdits>>? by mutableStateOf(null)
+    /** Menu → Statistics. */
+    var showStats: Boolean by mutableStateOf(false)
+    /** Song menu → EQ Preset. */
+    var eqAssignFor: Song? by mutableStateOf(null)
+    /** Settings → Library → Find Duplicates: groups of the same song, best copy first. */
+    var duplicates: List<List<Song>>? by mutableStateOf(null)
     var settingsPage: SettingsPage? by mutableStateOf(null)
     var showChangelog: Boolean by mutableStateOf(false)
     var showHelp: Boolean by mutableStateOf(false)
@@ -795,6 +805,7 @@ private fun AppDialogs(
 ) {
     val deleteSong: (Song) -> Unit = { deleteSongs(listOf(it)) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showNowPlaying by showNowPlayingState
     var settingsOpen by settingsOpenState
     var showMenu by ui::showMenu
@@ -855,6 +866,7 @@ private fun AppDialogs(
             onSettings = { p -> settingsPage = p; settingsOpen = true },
             onChangelog = { showChangelog = true },
             onHelp = { showHelp = true },
+            onStats = { ui.showStats = true },
             sleepLabel = left?.let { "$it min left" }
         )
     }
@@ -979,7 +991,38 @@ private fun AppDialogs(
             dismissButton = { TextButton(onClick = { ui.confirmDeleteMany = null }) { Text("Cancel") } }
         )
     }
-    artFor?.let { id -> AlbumArtDialog(songId = id, onDismiss = { artFor = null }) }
+    artFor?.let { id ->
+        val s = vm.song(id)
+        // the picture shown (maybe downloaded) goes into the file itself, so every app shows it
+        fun saveCover(targets: List<Song>) {
+            scope.launch {
+                val bmp = com.powersound.player.data.ArtworkLoader.loadBitmap(context, id, 1000)
+                if (bmp == null) { backupMessage = "There is no picture to save."; return@launch }
+                val bytes = java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it) }.toByteArray()
+                saveTagsMany(targets.filter { com.powersound.player.data.TagEditor.canEdit(it) }.map { it to com.powersound.player.data.TagEdits(cover = bytes) })
+            }
+        }
+        val album = s?.let { song -> vm.library.value.albums.firstOrNull { g -> g.songs.any { it.id == song.id } }?.songs }
+        AlbumArtDialog(
+            songId = id,
+            onDismiss = { artFor = null },
+            onSaveToFile = if (s != null && com.powersound.player.data.TagEditor.canEdit(s)) ({ saveCover(listOf(s)) }) else null,
+            onSaveToAlbum = if (album != null && album.size > 1) ({ saveCover(album) }) else null
+        )
+    }
+    if (ui.showStats) {
+        com.powersound.player.ui.StatsScreen(songs = vm.library.value.songs, stats = stats, onDismiss = { ui.showStats = false })
+    }
+    ui.eqAssignFor?.let { s ->
+        com.powersound.player.ui.EqAssignDialog(song = s, albumKey = vm.albumKeyOf(s), onDismiss = { ui.eqAssignFor = null })
+    }
+    ui.duplicates?.let { groups ->
+        com.powersound.player.ui.DuplicatesDialog(
+            groups = groups,
+            onDelete = { list -> ui.duplicates = null; deleteSongs(list) },
+            onDismiss = { ui.duplicates = null }
+        )
+    }
     if (showAudioInfo) {
         AudioInfoDialog(
             song = vm.song(currentId),
@@ -1030,7 +1073,8 @@ private fun AppDialogs(
             onPlayNext = { vm.playNext(listOf(s)) },
             onAddToQueue = { vm.addToQueue(listOf(s)) },
             // opened from a song list: "Select" starts multi-select there
-            onSelect = ui.songMenuSelect
+            onSelect = ui.songMenuSelect,
+            onEqPreset = { ui.eqAssignFor = s }
         )
     }
 }

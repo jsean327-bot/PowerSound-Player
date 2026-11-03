@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
@@ -114,7 +115,9 @@ fun SongMenuDialog(
     stars: Int = 0,
     onStars: (Int) -> Unit = {},
     /** Opened from a song list: "Select" starts multi-select there. */
-    onSelect: (() -> Unit)? = null
+    onSelect: (() -> Unit)? = null,
+    /** EQ preset for this song / album / artist. */
+    onEqPreset: (() -> Unit)? = null
 ) {
     val ratingType = com.powersound.player.data.SettingsStore.value.ratingType
     Dialog(onDismissRequest = onDismiss) {
@@ -172,7 +175,8 @@ fun SongMenuDialog(
                 MenuRow(Icons.Rounded.Delete, "Delete", act(onDelete))
             }
             MenuRow(Icons.Rounded.PlaylistAdd, "Playlist", act(onPlaylist), Icons.Rounded.Bookmark, "Bookmark", act(onBookmark))
-            MenuRow(Icons.Rounded.Image, "Album Art", act(onAlbumArt))
+            if (onEqPreset != null) MenuRow(Icons.Rounded.Image, "Album Art", act(onAlbumArt), Icons.Rounded.Equalizer, "EQ Preset", act(onEqPreset))
+            else MenuRow(Icons.Rounded.Image, "Album Art", act(onAlbumArt))
             MenuRow(Icons.Rounded.Info, "Info/Tags", act(onInfo), Icons.Rounded.TextSnippet, "Lyrics", act(onLyrics))
             MenuRow(Icons.Rounded.Mic, "Artist", act(onArtist), Icons.Rounded.Album, "Album", act(onAlbum))
             MenuRow(Icons.Rounded.Folder, "Folder", act(onFolder), Icons.Rounded.Category, "Genre", act(onGenre))
@@ -430,18 +434,37 @@ fun AudioInfoDialog(song: Song?, audioInfo: String, dspSummary: String, onDismis
 }
 
 @Composable
-fun AlbumArtDialog(songId: Long, onDismiss: () -> Unit) {
+fun AlbumArtDialog(
+    songId: Long,
+    onDismiss: () -> Unit,
+    /** Writes the picture shown here into the song file / every file of its album (FLAC, MP3). */
+    onSaveToFile: (() -> Unit)? = null,
+    onSaveToAlbum: (() -> Unit)? = null
+) {
     Dialog(onDismissRequest = onDismiss) {
-        Artwork(
-            songId,
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clickable(onClick = onDismiss),
-            sizePx = 1400,
-            cornerDp = 18,
-            placeholder = { BarsPlaceholder() }
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Artwork(
+                songId,
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clickable(onClick = onDismiss),
+                sizePx = 1400,
+                cornerDp = 18,
+                placeholder = { BarsPlaceholder() }
+            )
+            if (onSaveToFile != null || onSaveToAlbum != null) {
+                Row(
+                    Modifier
+                        .padding(top = 10.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(CardBg)
+                ) {
+                    if (onSaveToFile != null) TextButton(onClick = { onSaveToFile(); onDismiss() }) { Text("Save in the file") }
+                    if (onSaveToAlbum != null) TextButton(onClick = { onSaveToAlbum(); onDismiss() }) { Text("Save for the album") }
+                }
+            }
+        }
     }
 }
 

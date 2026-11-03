@@ -234,7 +234,7 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.ALBUM_ART to "Prefer Downloaded Album Art", SettingsPage.ALBUM_ART to "Reset Negative Status", SettingsPage.ALBUM_ART to "Delete Cache",
     SettingsPage.ALBUM_ART to "Force Default Image", SettingsPage.ALBUM_ART to "Use 24-bit RGB", SettingsPage.ALBUM_ART to "Increase Resolution",
     SettingsPage.ALBUM_ART to "Aspect Ratio",
-    SettingsPage.LIBRARY to "Rescan", SettingsPage.LIBRARY to "Full Rescan", SettingsPage.LIBRARY to "Music Folders",
+    SettingsPage.LIBRARY to "Rescan", SettingsPage.LIBRARY to "Full Rescan", SettingsPage.LIBRARY to "Find Duplicates", SettingsPage.LIBRARY to "Music Folders",
     SettingsPage.LIBRARY to "All Files Access", SettingsPage.LIBRARY to "Ignore Short Tracks", SettingsPage.LIBRARY to "Ignore Video Tracks",
     SettingsPage.LIBRARY to "Store/Restore Per Track Progress", SettingsPage.LIBRARY to "-10/+10s Rewind Pro Buttons",
     SettingsPage.LIBRARY to "Track Duration For Per Track Progress and -10/+10s Buttons", SettingsPage.LIBRARY to "Count As Played",
@@ -1241,7 +1241,9 @@ class LibraryActions(
     /** how many songs have a loudness measurement, of all */
     val loudnessCount: () -> Pair<Int, Int> = { 0 to 0 },
     /** Scanner → Fix Arabic Names. */
-    val fixArabic: () -> Unit = {}
+    val fixArabic: () -> Unit = {},
+    /** Library → Find Duplicates. */
+    val findDuplicates: () -> Unit = {}
 )
 
 /** page == SettingsPage.LOOK */
@@ -2495,6 +2497,7 @@ private fun SettingsPage25(page: SettingsPage?, args: PageArgs) {
     var confirm by remember { mutableIntStateOf(0) }
     ActionRow("Rescan", lib.counts, onClick = args.onRescan)
     ActionRow("Full Rescan", "Read every file's tags again, clear the album art and lyrics caches and reload the library") { confirm = 1 }
+    ActionRow("Find Duplicates", "Songs you have more than once (e.g. an MP3 and a FLAC). The best copy is kept, you choose what to delete") { lib.findDuplicates() }
     ActionRow(
         "Music Folders",
         if (st.excludedFolders.isEmpty()) "Folders Selection — all ${allFolders.size} folders are included"

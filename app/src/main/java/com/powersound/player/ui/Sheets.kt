@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Folder
@@ -124,6 +125,7 @@ fun MenuSheet(
     onSettings: (SettingsPage?) -> Unit,
     onChangelog: () -> Unit,
     onHelp: () -> Unit,
+    onStats: () -> Unit,
     sleepLabel: String?
 ) {
     val context = LocalContext.current
@@ -165,6 +167,7 @@ fun MenuSheet(
             SheetItem(Icons.Rounded.Timer, if (sleepLabel != null) "Sleep timer ($sleepLabel)" else "Sleep timer") { onDismiss(); onSleep() }
             SheetItem(Icons.Rounded.Refresh, "Rescan library") { onDismiss(); onRescan() }
             SheetItem(Icons.Rounded.SystemUpdate, "Check for updates") { onDismiss(); onCheckUpdate() }
+            SheetItem(Icons.Rounded.BarChart, "Statistics") { onDismiss(); onStats() }
             SheetItem(Icons.Rounded.History, "Changelog") { onDismiss(); onChangelog() }
             SheetItem(Icons.Rounded.HelpOutline, "Help") { onDismiss(); onHelp() }
         }
