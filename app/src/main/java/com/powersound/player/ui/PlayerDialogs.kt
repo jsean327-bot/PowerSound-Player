@@ -235,6 +235,7 @@ fun SleepTimerDialog(
 ) {
     var minutes by remember { mutableIntStateOf(remainingMinutes ?: 0) }
     var finishSong by remember { mutableStateOf(false) }
+    var slowFade by remember { mutableStateOf(com.powersound.player.data.SettingsStore.value.sleepFade) }
     val max = 180
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -295,10 +296,33 @@ fun SleepTimerDialog(
                     )
                     Text("Play last song to end", color = Color.White, fontSize = 13.sp)
                 }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { slowFade = !slowFade },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = slowFade,
+                        onCheckedChange = { slowFade = it },
+                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                    )
+                    Column {
+                        Text("Fade out slowly", color = Color.White, fontSize = 13.sp)
+                        Text(
+                            if (finishSong) "Over the last 20 seconds of the song" else "Over the last 2 minutes",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = {
+                if (slowFade != com.powersound.player.data.SettingsStore.value.sleepFade) {
+                    com.powersound.player.data.SettingsStore.update { it.copy(sleepFade = slowFade) }
+                }
                 if (minutes > 0) onSet(minutes, finishSong) else onCancelTimer()
                 onDismiss()
             }) { Text("OK") }

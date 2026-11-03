@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">PowerSound Player</string>
     <string name="widget_desc">The song that is playing, with previous, play/pause and next</string>
+    <string name="widget_large_desc">Big player: song bar with time, shuffle, previous, play/pause, next and repeat</string>
 </resources>

@@ -1818,7 +1818,7 @@ private fun SettingsPage11(page: SettingsPage?, args: PageArgs) {
         "Perfect Bit Perfect disables all fading effects",
         "Crossfade is skipped when the song is the last one (repeat \"song and stop\", sleep timer)"
     )
-    SwitchRow("Fade Play/Pause/Stop", "Smooth volume fade instead of a hard stop", st.fadeOnPause) { v -> set { it.copy(fadeOnPause = v) } }
+    SwitchRow("Fade Play/Pause/Stop", "Smooth volume fade instead of a hard stop: app, notification, lock screen, widget and headset buttons", st.fadeOnPause) { v -> set { it.copy(fadeOnPause = v) } }
     SliderRow("Fade Length", "${st.fadeMs} ms", st.fadeMs.toFloat(), 100f..1500f, enabled = st.fadeOnPause) { v ->
         set { it.copy(fadeMs = ((v / 50).roundToInt() * 50)) }
     }

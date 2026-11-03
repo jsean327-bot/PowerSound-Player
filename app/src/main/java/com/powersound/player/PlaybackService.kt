@@ -59,6 +59,14 @@ object PlayerCommands {
     /** Set by the app when the current song must be the last one (repeat "song and stop", sleep timer). */
     @Volatile
     var stopAfterCurrent = false
+
+    /** Set right before a pause that must be immediate (the next song already started, "stop after this song"). */
+    @Volatile
+    var pauseNow = false
+
+    /** True while the sleep timer is lowering the volume: crossfades stay out of its way. */
+    @Volatile
+    var sleepFading = false
 }
 
 /**
@@ -199,9 +207,13 @@ class PlaybackService : MediaLibraryService() {
             override fun onEvents(player: Player, events: Player.Events) {
                 if (events.containsAny(
                         Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_PLAY_WHEN_READY_CHANGED,
-                        Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_TIMELINE_CHANGED
+                        Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_TIMELINE_CHANGED,
+                        Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED,
+                        Player.EVENT_REPEAT_MODE_CHANGED, Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED
                     )
                 ) refreshWidget()
+                // a seek: the large widget's bar and time jump with it
+                if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)) refreshWidget(force = true)
             }
         })
         instance = this
@@ -215,30 +227,102 @@ class PlaybackService : MediaLibraryService() {
     private var widgetArtId: Long? = null
     private var widgetShown: String? = null
 
-    /** Redraws the widget (title, artist, cover, play/pause). Cheap when nothing changed. */
+    /** Redraws the widgets (song, cover, play/pause, song bar, shuffle / repeat). Cheap when nothing changed. */
     fun refreshWidget(force: Boolean = false) {
-        if (!WidgetUpdater.hasWidgets(this)) return
+        if (!WidgetUpdater.hasWidgets(this)) { stopWidgetTicker(); return }
         val p = main ?: return
-        val item = p.currentMediaItem
-        val md = item?.mediaMetadata
-        val title = md?.title?.toString() ?: "PowerSound"
-        val artist = md?.artist?.toString() ?: if (item == null) "Tap play to listen" else ""
-        val id = item?.mediaId?.toLongOrNull()
-        val playing = p.playWhenReady
-        val state = "$title|$artist|$id|$playing"
-        if (!force && state == widgetShown) return
-        widgetShown = state
+        val state = widgetState(p)
+        val id = p.currentMediaItem?.mediaId?.toLongOrNull()
+        val key = "${state.title}|${state.artist}|$id|${state.playing}|${p.isPlaying}|${state.durationMs}|${state.repeat}|${state.shuffle}"
+        updateWidgetTicker(p)
+        if (!force && key == widgetShown) return
+        widgetShown = key
         // text and buttons at once; the cover follows as soon as it is loaded
-        WidgetUpdater.show(this, title, artist, widgetArt.takeIf { id != null && widgetArtId == id }, playing)
+        WidgetUpdater.show(this, state, widgetArt.takeIf { id != null && widgetArtId == id })
         if (id != null && widgetArtId != id) {
             widgetJob?.cancel()
             widgetJob = scope.launch {
                 val art = runCatching { com.powersound.player.data.ArtworkLoader.loadBitmap(this@PlaybackService, id, 256) }.getOrNull()
                 widgetArt = art
                 widgetArtId = id
-                if (art != null) WidgetUpdater.show(this@PlaybackService, title, artist, art, main?.playWhenReady == true)
+                val now = main ?: return@launch
+                if (art != null) WidgetUpdater.show(this@PlaybackService, widgetState(now), art)
             }
         }
+    }
+
+    private fun widgetState(p: Player): WidgetState {
+        val item = p.currentMediaItem
+        val md = item?.mediaMetadata
+        val modes = getSharedPreferences("powersound_player", MODE_PRIVATE)
+        val dur = p.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
+        return WidgetState(
+            title = md?.title?.toString() ?: "PowerSound",
+            artist = md?.artist?.toString() ?: if (item == null) "Tap play to listen" else "",
+            // the play button follows the press at once; the clock only runs while sound really plays
+            playing = p.playWhenReady,
+            positionMs = p.currentPosition,
+            durationMs = dur,
+            repeat = WidgetUpdater.repeatLevel(modes.getString("repeat", null)),
+            shuffle = (modes.getString("shuffle", null) ?: "OFF") != "OFF"
+        )
+    }
+
+    private var widgetTicker: kotlinx.coroutines.Job? = null
+
+    /** While music plays and a large widget is on the home screen, its bar moves once a second (screen on only). */
+    private fun updateWidgetTicker(p: Player) {
+        if (!p.isPlaying || !WidgetUpdater.hasLarge(this)) { stopWidgetTicker(); return }
+        if (widgetTicker?.isActive == true) return
+        val power = getSystemService(android.os.PowerManager::class.java)
+        widgetTicker = scope.launch {
+            while (true) {
+                delay(1000)
+                val q = main ?: break
+                if (!q.isPlaying) break
+                if (power?.isInteractive != false) {
+                    val dur = q.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
+                    WidgetUpdater.progress(this@PlaybackService, q.currentPosition, dur, true)
+                }
+            }
+        }
+    }
+
+    private fun stopWidgetTicker() {
+        widgetTicker?.cancel()
+        widgetTicker = null
+    }
+
+    /**
+     * Widget shuffle / repeat. Repeat goes off → repeat all → repeat the song → off; shuffle is on / off.
+     * With the app open it makes the change (so its screen and settings follow), else the service does.
+     */
+    private fun widgetMode(action: String, p: Player) {
+        val modes = getSharedPreferences("powersound_player", MODE_PRIVATE)
+        if (action == WidgetUpdater.ACTION_REPEAT) {
+            val next = when (modes.getString("repeat", null)) {
+                "LIST_REPEAT", "ADVANCE_REPEAT" -> "SONG_REPEAT"
+                "SONG_REPEAT" -> "LIST_STOP"
+                else -> "LIST_REPEAT"
+            }
+            if (PlayerCommands.hasListener) PlayerCommands.flow.tryEmit("repeat:$next")
+            else {
+                modes.edit().putString("repeat", next).commit()
+                p.repeatMode = when (next) {
+                    "SONG_REPEAT" -> Player.REPEAT_MODE_ONE
+                    "LIST_REPEAT" -> Player.REPEAT_MODE_ALL
+                    else -> Player.REPEAT_MODE_OFF
+                }
+            }
+        } else {
+            val next = if ((modes.getString("shuffle", null) ?: "OFF") == "OFF") "SONGS" else "OFF"
+            if (PlayerCommands.hasListener) PlayerCommands.flow.tryEmit("shuffle:$next")
+            else {
+                modes.edit().putString("shuffle", next).commit()
+                p.shuffleModeEnabled = next == "SONGS"
+            }
+        }
+        refreshWidget(force = true)
     }
 
     /**
@@ -258,13 +342,24 @@ class PlaybackService : MediaLibraryService() {
         val inForeground = p.playWhenReady &&
             (p.playbackState == Player.STATE_READY || p.playbackState == Player.STATE_BUFFERING)
         if (!inForeground) holdForeground()
-        if (p.mediaItemCount == 0 && !restoreLastQueue(p)) {
-            // nothing to play at all
-            releasePlaceholder()
-            if (session?.connectedControllers.isNullOrEmpty()) stopSelf()
-            return
+        val modeTap = action == WidgetUpdater.ACTION_REPEAT || action == WidgetUpdater.ACTION_SHUFFLE
+        if (modeTap) {
+            // shuffle / repeat change the mode only: nothing is restored or started
+            widgetMode(action, p)
+            if (p.mediaItemCount == 0) {
+                releasePlaceholder()
+                if (session?.connectedControllers.isNullOrEmpty()) stopSelf()
+                return
+            }
+        } else {
+            if (p.mediaItemCount == 0 && !restoreLastQueue(p)) {
+                // nothing to play at all
+                releasePlaceholder()
+                if (session?.connectedControllers.isNullOrEmpty()) stopSelf()
+                return
+            }
+            if (p.playbackState == Player.STATE_IDLE) p.prepare()
         }
-        if (p.playbackState == Player.STATE_IDLE) p.prepare()
         // the command runs first, while this service is in the foreground: when Media3's own player
         // notification arrives, it can stay there for as long as the music plays
         val sp = s.player
@@ -471,9 +566,61 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
+        private var pauseFade: kotlinx.coroutines.Job? = null
+        private var fadingOut = false
+
+        /**
+         * Settings → Crossfade, Fade, and Gapless → Fade Play/Pause: every pause (app, notification, lock screen,
+         * widget, headset button, sleep timer) lowers the volume smoothly first. Unplugging the headphones still
+         * stops at once (ExoPlayer handles that itself).
+         */
         override fun pause() {
             crossfader?.abort()
-            super.pause()
+            pauseFade?.cancel()
+            val st = SettingsStore.value
+            if (PlayerCommands.pauseNow || !st.fadeOnPause || st.fadeMs <= 0 || !p.isPlaying) {
+                PlayerCommands.pauseNow = false
+                fadingOut = false
+                p.pause()
+                p.volume = 1f
+                return
+            }
+            val from = p.volume
+            val steps = 20
+            fadingOut = true
+            pauseFade = scope.launch {
+                for (i in steps - 1 downTo 0) {
+                    // squared curve: sounds even to the ear, not "loud, loud, gone"
+                    val f = i / steps.toFloat()
+                    p.volume = from * f * f
+                    delay(st.fadeMs / steps.toLong())
+                }
+                p.pause()
+                p.volume = 1f
+                fadingOut = false
+            }
+        }
+
+        override fun play() {
+            val st = SettingsStore.value
+            val wasFadingOut = fadingOut
+            pauseFade?.cancel()
+            fadingOut = false
+            if (p.isPlaying && !wasFadingOut) { super.play(); return } // already playing: leave the volume alone
+            if (!st.fadeOnPause || st.fadeMs <= 0) { p.volume = 1f; super.play(); return }
+            // start silent (or from where a pause fade was), then rise
+            val from = if (wasFadingOut) p.volume else 0f
+            p.volume = from
+            super.play()
+            val steps = 20
+            pauseFade = scope.launch {
+                for (i in 1..steps) {
+                    delay(st.fadeMs / steps.toLong())
+                    val f = i / steps.toFloat()
+                    p.volume = from + (1f - from) * f * f
+                }
+                p.volume = 1f
+            }
         }
 
         /** Settings → Headset → Ignore Repeat/Shuffle: Bluetooth devices / other apps can't change them. */
@@ -742,7 +889,7 @@ class PlaybackService : MediaLibraryService() {
         main?.let { p ->
             val md = p.currentMediaItem?.mediaMetadata
             if (md != null && WidgetUpdater.hasWidgets(this)) {
-                WidgetUpdater.show(this, md.title?.toString() ?: "PowerSound", md.artist?.toString() ?: "", widgetArt, false)
+                WidgetUpdater.show(this, widgetState(p).copy(playing = false), widgetArt)
             }
         }
         deviceCallback?.let { audioManager.unregisterAudioDeviceCallback(it) }
@@ -968,7 +1115,7 @@ class PlaybackService : MediaLibraryService() {
                 player.repeatMode = (player.repeatMode + 1) % 3
             2 -> if (PlayerCommands.hasListener) PlayerCommands.flow.tryEmit("shuffle") else
                 player.shuffleModeEnabled = !player.shuffleModeEnabled
-            3 -> { player.pause(); player.stop() } // "Close": pause and remove the notification
+            3 -> { PlayerCommands.pauseNow = true; player.pause(); player.stop() } // "Close": pause and remove the notification
             4 -> id?.let { StatsStore.setRating(it, if (StatsStore.stats.value.rating(it) == 1) 0 else 1) }
             5 -> id?.let { StatsStore.setRating(it, if (StatsStore.stats.value.rating(it) == -1) 0 else -1) }
             6 -> id?.let {

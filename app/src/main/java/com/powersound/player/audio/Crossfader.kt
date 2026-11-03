@@ -87,7 +87,8 @@ class Crossfader(
                 delay(50)
                 if (!main.isPlaying || fading) continue
                 val st = SettingsStore.value
-                if (st.autoFade == 0 || st.perfectBitPerfect || st.silenceMs > 0 || com.powersound.player.PlayerCommands.stopAfterCurrent) continue
+                if (st.autoFade == 0 || st.perfectBitPerfect || st.silenceMs > 0 || com.powersound.player.PlayerCommands.stopAfterCurrent ||
+                    com.powersound.player.PlayerCommands.sleepFading) continue
                 val dur = main.duration
                 val pos = main.currentPosition
                 if (dur == C.TIME_UNSET || dur <= 0) continue
@@ -180,7 +181,7 @@ class Crossfader(
      */
     fun manualChange(jump: () -> Unit): Boolean {
         val st = SettingsStore.value
-        if (st.manualFade == 0 || st.perfectBitPerfect || !main.isPlaying) return false
+        if (st.manualFade == 0 || st.perfectBitPerfect || !main.isPlaying || com.powersound.player.PlayerCommands.sleepFading) return false
         val item = main.currentMediaItem ?: return false
         if (item.mediaId.toLongOrNull() == null) return false
         abort()

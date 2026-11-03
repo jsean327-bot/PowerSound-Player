@@ -192,6 +192,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             val c = controller ?: return
             // "current song and stop", or the sleep timer waiting for the song to finish
             if (_player.value.repeat == RepeatMode.SONG_STOP || stopAtSongEnd) {
+                PlayerCommands.pauseNow = true // the next song already began: stop at once, no fade
                 c.pause()
                 if (stopAtSongEnd) {
                     stopAtSongEnd = false
@@ -239,6 +240,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     "nextCat" -> changeCategory(+1)
                     "repeat" -> cycleRepeat()
                     "shuffle" -> toggleShuffle()
+                    // from the large widget: an exact mode
+                    else -> when {
+                        cmd.startsWith("repeat:") ->
+                            runCatching { RepeatMode.valueOf(cmd.substringAfter(':')) }.getOrNull()?.let { setRepeatMode(it) }
+                        cmd.startsWith("shuffle:") ->
+                            runCatching { ShuffleMode.valueOf(cmd.substringAfter(':')) }.getOrNull()?.let { setShuffleMode(it) }
+                    }
                 }
             }
         }
@@ -900,38 +908,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun togglePlay() {
         val c = controller ?: return
-        val st = com.powersound.player.data.SettingsStore.value
-        fadeJob?.cancel()
         if (c.isPlaying) {
             rememberPosition(c)
-            if (st.fadeOnPause && st.fadeMs > 0) {
-                // Settings → Audio: fade out, then pause
-                fadeJob = viewModelScope.launch {
-                    val steps = 12
-                    for (i in steps - 1 downTo 0) {
-                        c.volume = i / steps.toFloat()
-                        delay(st.fadeMs / steps.toLong())
-                    }
-                    c.pause()
-                    c.volume = 1f
-                }
-            } else c.pause()
+            c.pause() // the playback service fades out first (Settings → Audio → Fade Play/Pause)
         } else {
             if (c.playbackState == Player.STATE_IDLE) c.prepare()
-            if (st.fadeOnPause && st.fadeMs > 0) {
-                c.volume = 0f
-                c.play()
-                fadeJob = viewModelScope.launch {
-                    val steps = 12
-                    for (i in 1..steps) {
-                        delay(st.fadeMs / steps.toLong())
-                        c.volume = i / steps.toFloat()
-                    }
-                }
-            } else {
-                c.volume = 1f
-                c.play()
-            }
+            c.play() // …and fades back in
         }
     }
 
@@ -1039,6 +1021,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         _player.value = _player.value.copy(shuffleMode = mode)
         modePrefs.edit().putString("shuffle", mode.name).apply()
         applyModes()
+        PlaybackService.instance?.refreshWidget()
     }
 
     /** Cycles the 6 end-of-list modes and returns the new one (for the toast). */
@@ -1052,6 +1035,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         _player.value = _player.value.copy(repeat = mode)
         modePrefs.edit().putString("repeat", mode.name).apply()
         applyModes()
+        PlaybackService.instance?.refreshWidget()
     }
 
     private fun applyModes() {
@@ -1098,21 +1082,74 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         sleepJob?.cancel()
         sleepJob = null
         stopAtSongEnd = false
+        endSleepFade()
         _player.value = _player.value.copy(sleepEndsAt = null)
     }
 
+    private var sleepFading: Boolean
+        get() = PlayerCommands.sleepFading
+        set(v) { PlayerCommands.sleepFading = v }
+
+    /** Puts the volume back after the sleep timer lowered it (timer cancelled, or the music has stopped). */
+    private fun endSleepFade() {
+        fadeJob?.cancel()
+        if (sleepFading) {
+            sleepFading = false
+            controller?.volume = 1f
+        }
+    }
+
+    /** Fade over the last [windowMs] milliseconds, then pause. A squared curve sounds even to the ear. */
+    private suspend fun sleepFadeOut(windowMs: Long) {
+        val c = controller ?: return
+        val steps = (windowMs / 250L).coerceIn(8L, 600L).toInt()
+        sleepFading = true
+        for (i in 1..steps) {
+            delay(windowMs / steps)
+            val f = 1f - i / steps.toFloat()
+            if (c.isPlaying) c.volume = f * f
+        }
+    }
+
+    /**
+     * Sleep timer. With "Fade out slowly" (on by default) the music gets quieter over the last 2 minutes
+     * (a third of the time for short timers) instead of stopping all at once. With "Play last song to end" the
+     * last 20 seconds of that song fade instead.
+     */
     private fun startSleep(ms: Long, finishSong: Boolean = false) {
         sleepJob?.cancel()
         stopAtSongEnd = false
+        endSleepFade()
+        val fade = com.powersound.player.data.SettingsStore.value.sleepFade
         _player.value = _player.value.copy(sleepEndsAt = System.currentTimeMillis() + ms)
         sleepJob = viewModelScope.launch {
-            delay(ms)
+            val window = if (fade && !finishSong) minOf(120_000L, ms / 3) else 0L
+            delay(ms - window)
+            if (window > 0) sleepFadeOut(window)
             if (finishSong && controller?.isPlaying == true) {
                 // let the current song play to its end, then stop
                 stopAtSongEnd = true
+                if (fade) {
+                    fadeJob = viewModelScope.launch {
+                        val c = controller ?: return@launch
+                        // wait for the last 20 seconds of the song, then fade with what is left
+                        while (stopAtSongEnd) {
+                            val left = durationOf(c) - c.currentPosition
+                            if (left in 1L..20_000L) {
+                                sleepFading = true
+                                if (c.isPlaying) c.volume = (left / 20_000f).let { it * it }
+                            }
+                            delay(200)
+                        }
+                        endSleepFade()
+                    }
+                }
             } else {
                 controller?.pause()
                 _player.value = _player.value.copy(sleepEndsAt = null)
+                // the pause has its own short fade; then the volume is normal for next time
+                delay(com.powersound.player.data.SettingsStore.value.fadeMs + 300L)
+                endSleepFade()
             }
         }
     }
@@ -1401,6 +1438,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        endSleepFade() // never leave the music quiet because the app closed mid-fade
         runCatching { getApplication<Application>().contentResolver.unregisterContentObserver(mediaObserver) }
         controller?.removeListener(listener)
         controllerFuture?.let { MediaController.releaseFuture(it) }

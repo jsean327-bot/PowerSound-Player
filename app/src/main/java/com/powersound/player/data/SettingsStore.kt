@@ -82,6 +82,8 @@ data class AppSettings(
     val replayGainNoTagDb: Double = 0.0, // gain for files without ReplayGain tags
     val fadeOnPause: Boolean = true,
     val fadeMs: Int = 350,
+    /** Sleep timer: lower the volume slowly over the last minutes instead of stopping at once. */
+    val sleepFade: Boolean = true,
     // ---- Audio → Crossfade, Fade, and Gapless ----
     val autoFade: Int = 0,                   // 0 no fading, 1 non-gapless tracks, 2 all songs, 3 shuffled songs
     val crossfadeSec: Float = 5f,
@@ -337,7 +339,7 @@ object SettingsStore {
     private fun toJson(s: AppSettings) = JSONObject().apply {
         put("accent", s.accent); put("keepScreenOn", s.keepScreenOn)
         put("rgMode", s.replayGain); put("rgSrc", s.rgSource); put("rgPre", s.replayGainPreamp); put("rgNoTag", s.replayGainNoTagDb)
-        put("fade", s.fadeOnPause); put("fadeMs", s.fadeMs)
+        put("fade", s.fadeOnPause); put("fadeMs", s.fadeMs); put("sleepFade", s.sleepFade)
         put("vizOpacity", s.vizFadedOpacity.toDouble()); put("vizSec", s.vizPresetSeconds)
         put("bg", s.bgEnabled); put("bgBlur", s.bgBlur); put("bgInt", s.bgIntensity.toDouble()); put("bgSat", s.bgSaturation.toDouble())
         put("artHq", s.artHighQuality)
@@ -428,6 +430,7 @@ object SettingsStore {
             replayGainNoTagDb = o.optDouble("rgNoTag", d.replayGainNoTagDb),
             fadeOnPause = o.optBoolean("fade", d.fadeOnPause),
             fadeMs = o.optInt("fadeMs", d.fadeMs),
+            sleepFade = o.optBoolean("sleepFade", d.sleepFade),
             vizFadedOpacity = o.optDouble("vizOpacity", d.vizFadedOpacity.toDouble()).toFloat(),
             vizPresetSeconds = o.optInt("vizSec", d.vizPresetSeconds),
             bgEnabled = o.optBoolean("bg", d.bgEnabled),
