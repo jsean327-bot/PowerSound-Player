@@ -1282,6 +1282,8 @@ private fun ScreenContent(
     val bookmarks by com.powersound.player.data.LibraryStores.bookmarks.collectAsStateWithLifecycle()
     var nameDialog by remember { mutableStateOf<Pair<String, (String) -> Unit>?>(null) }
     // a song's menu inside a playlist: (playlist id, song, start multi-select or null)
+    // album / folder page → ⋮ → Choose cover
+    var coverPickFor by remember { mutableStateOf<com.powersound.player.data.Group?>(null) }
     var playlistSongMenu by remember { mutableStateOf<Triple<Long, Song, (() -> Unit)?>?>(null) }
 
     when (screen) {
@@ -1420,7 +1422,11 @@ private fun ScreenContent(
                         vm.pop()
                         Unit
                     }
-                ) else listOf("Add all to a playlist" to { nameDialog = "New playlist" to { n: String -> com.powersound.player.data.LibraryStores.createPlaylist(n, group.songs.map { it.id }); Unit } }),
+                ) + listOf("Choose cover" to { coverPickFor = group })
+                else listOf(
+                    "Add all to a playlist" to { nameDialog = "New playlist" to { n: String -> com.powersound.player.data.LibraryStores.createPlaylist(n, group.songs.map { it.id }); Unit } },
+                    "Choose cover" to { coverPickFor = group }
+                ),
                 listKind = when (group.key.substringBefore(':')) {
                     "album" -> "album"; "folder" -> "folder"; "albumartist" -> "albumartist"; else -> ""
                 },
@@ -1461,6 +1467,7 @@ private fun ScreenContent(
         }
     }
 
+    coverPickFor?.let { g -> com.powersound.player.ui.CoverPickerDialog(group = g, onDismiss = { coverPickFor = null }) }
     nameDialog?.let { (title, save) ->
         SaveNameDialog(title, onSave = save, onDismiss = { nameDialog = null })
     }

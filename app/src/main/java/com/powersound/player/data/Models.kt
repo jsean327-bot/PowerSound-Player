@@ -47,7 +47,9 @@ data class Group(
     val subtitle: String,
     val songs: List<Song>
 ) {
-    val coverId: Long? get() = songs.firstOrNull()?.id
+    /** The song whose cover shows for the group: the one chosen with ⋮ → Choose Cover, else the first song. */
+    val coverId: Long?
+        get() = SettingsStore.value.groupCovers[key]?.takeIf { id -> songs.any { it.id == id } } ?: songs.firstOrNull()?.id
     val totalMs: Long get() = songs.sumOf { it.durationMs }
 }
 

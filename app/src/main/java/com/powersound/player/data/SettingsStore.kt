@@ -113,6 +113,8 @@ data class AppSettings(
     val outEqPreset: Map<String, String> = emptyMap(),
     /** Song menu → EQ Preset: "song:<id>", "album:<album key>" or "artist:<name>" → preset name. */
     val eqAssign: Map<String, String> = emptyMap(),
+    /** Album / folder page → ⋮ → Choose Cover: group key → the song whose cover stands for the group. */
+    val groupCovers: Map<String, Long> = emptyMap(),
     val outNoEq: Set<String> = emptySet(),
     val outNoDuck: Set<String> = emptySet(),
     val outDelayMs: Map<String, Int> = mapOf("bt" to 300),
@@ -392,6 +394,7 @@ object SettingsStore {
         put("resType", s.resamplerType); put("resCut", s.resamplerCutoff.toDouble()); put("dither", s.dither)
         put("outEq", JSONObject().apply { s.outEqPreset.forEach { (k, v) -> put(k, v) } })
         put("eqAssign", JSONObject().apply { s.eqAssign.forEach { (k, v) -> put(k, v) } })
+        put("groupCovers", JSONObject().apply { s.groupCovers.forEach { (k, v) -> put(k, v) } })
         put("outNoEq", JSONArray().apply { s.outNoEq.forEach { put(it) } })
         put("outNoDuck", JSONArray().apply { s.outNoDuck.forEach { put(it) } })
         put("outDelay", JSONObject().apply { s.outDelayMs.forEach { (k, v) -> put(k, v) } })
@@ -588,6 +591,7 @@ object SettingsStore {
             dither = o.optInt("dither", d.dither),
             outEqPreset = o.optJSONObject("outEq")?.let { j -> j.keys().asSequence().associateWith { j.optString(it) } } ?: d.outEqPreset,
             eqAssign = o.optJSONObject("eqAssign")?.let { j -> j.keys().asSequence().associateWith { j.optString(it) } } ?: d.eqAssign,
+            groupCovers = o.optJSONObject("groupCovers")?.let { j -> j.keys().asSequence().associateWith { j.optLong(it) } } ?: d.groupCovers,
             outNoEq = strings("outNoEq"),
             outNoDuck = strings("outNoDuck"),
             outDelayMs = o.optJSONObject("outDelay")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: d.outDelayMs,
