@@ -1058,6 +1058,11 @@ fun ChangelogDialog(onDismiss: () -> Unit) {
 fun HelpDialog(onDismiss: () -> Unit) {
     val tips = listOf(
         "Library" to "Swipe a page in any direction to go back. Pinch to zoom. ⋮ for sorting and zoom. Long press a song for its menu.",
+        "Select songs" to "Long press a song → Select (or ⋮ → Select songs), tap more songs, then play, queue, add to a playlist or delete them together.",
+        "Queue" to "Drag a song by its ≡ handle to move it.",
+        "Tags" to "Song menu → Info/Tags → Edit: change the title, artist, album, cover and more (FLAC and MP3).",
+        "Widget" to "Long press your home screen → Widgets → PowerSound.",
+        "Open with" to "In a file manager or WhatsApp, open a music file with PowerSound to play it.",
         "Player" to "Swipe the cover to change songs (further = change album/folder). Swipe down or tap the cover for the song's list. Swipe up for lyrics. Long press the cover for the track menu.",
         "Seeking" to "Long press the progress area, move your finger, let go. Long press the elapsed time to go back to 0:00.",
         "Categories" to "Long press ⏮ ⏭ for the previous / next album or folder.",

@@ -6,7 +6,16 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.rounded.AddToQueue
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.foundation.clickable
@@ -315,6 +324,18 @@ fun FilterField(value: String, onChange: (String) -> Unit, onClose: () -> Unit) 
 
 // ================================================================= song lists
 
+/** What a song list can do with several selected songs (multi-select). */
+data class ListActions(
+    val playNext: (List<Song>) -> Unit,
+    val addToQueue: (List<Song>) -> Unit,
+    val addToPlaylist: (List<Song>) -> Unit,
+    /** Deletes the files; in a playlist it only takes the songs out of the playlist ([deleteRemoves]). */
+    val delete: (List<Song>) -> Unit,
+    val deleteRemoves: Boolean = false,
+    /** Long press: the song menu, with a "Select" item that starts multi-select in this list. */
+    val menuWithSelect: (Song, () -> Unit) -> Unit
+)
+
 /**
  * A list of songs with any header on top (category header or album-art header).
  * Has filter, A–Z scroller (optional) and the floating action pills.
@@ -334,6 +355,8 @@ fun SongListScreen(
     rowExtra: ((Song) -> String?)? = null,
     /** "album", "folder", "albumartist" or "" (for the Settings → Library → Lists labels). */
     listKind: String = "",
+    /** Multi-select (null: the list has none). */
+    actions: ListActions? = null,
     header: @Composable (pills: @Composable () -> Unit) -> Unit
 ) {
     val state = rememberLazyListState()
@@ -365,6 +388,15 @@ fun SongListScreen(
     val headerItems = if (query != null) 2 else 1
     val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
 
+    // ---- multi-select: the ids of the selected songs (null = not selecting) ----
+    var selected by remember { mutableStateOf<Set<Long>?>(null) }
+    val selecting = selected != null && actions != null
+    fun toggle(id: Long) {
+        val s = selected ?: return
+        selected = if (id in s) s - id else s + id
+    }
+    androidx.activity.compose.BackHandler(enabled = selecting) { selected = null }
+
     val pills: @Composable () -> Unit = {
         Box {
             ActionPills(
@@ -377,6 +409,9 @@ fun SongListScreen(
             )
             Box(Modifier.align(Alignment.TopEnd)) {
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    if (actions != null && shown.isNotEmpty()) {
+                        DropdownMenuItem(text = { Text("Select songs") }, onClick = { menu = false; selected = emptySet() })
+                    }
                     DropdownMenuItem(text = { Text("Add all to queue") }, onClick = { menu = false; onAddToQueue(shown) })
                     extraMenu.forEach { (label, action) ->
                         DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() })
@@ -424,11 +459,18 @@ fun SongListScreen(
                 SongRow(
                     song = s,
                     isCurrent = s.id == currentId,
-                    onClick = { onPlay(shown, i) },
-                    onLongClick = { onSongMenu(s) },
+                    onClick = { if (selecting) toggle(s.id) else onPlay(shown, i) },
+                    onLongClick = {
+                        when {
+                            selecting -> toggle(s.id)
+                            actions != null -> actions.menuWithSelect(s) { selected = setOf(s.id) }
+                            else -> onSongMenu(s)
+                        }
+                    },
                     zoom = zoom,
                     extra = rowExtra?.invoke(s),
-                    listKind = listKind
+                    listKind = listKind,
+                    checked = if (selecting) selected?.contains(s.id) == true else null
                 )
             }
         }
@@ -445,7 +487,120 @@ fun SongListScreen(
             )
         }
 
-        BottomPills(st.bottomButtons, scrolled || !st.headerButtons, bottomInset) { pills() }
+        val sel = selected
+        if (selecting && sel != null && actions != null) {
+            // the chosen songs in list order
+            val chosen = shown.filter { it.id in sel }
+            fun done(f: (List<Song>) -> Unit) { if (chosen.isNotEmpty()) { f(chosen); selected = null } }
+            SelectionBar(
+                count = chosen.size,
+                allSelected = shown.isNotEmpty() && shown.all { it.id in sel },
+                deleteRemoves = actions.deleteRemoves,
+                bottomInset = bottomInset,
+                onAll = { selected = if (shown.all { it.id in sel }) emptySet() else shown.map { it.id }.toSet() },
+                onClose = { selected = null },
+                onPlay = { done { onPlay(it, 0) } },
+                onPlayNext = { done(actions.playNext) },
+                onQueue = { done(actions.addToQueue) },
+                onPlaylist = { done(actions.addToPlaylist) },
+                onDelete = { done(actions.delete) }
+            )
+        } else {
+            BottomPills(st.bottomButtons, scrolled || !st.headerButtons, bottomInset) { pills() }
+        }
+    }
+}
+
+/** Multi-select bar at the bottom of a song list: what to do with the selected songs. */
+@Composable
+private fun SelectionBar(
+    count: Int,
+    allSelected: Boolean,
+    deleteRemoves: Boolean,
+    bottomInset: Dp,
+    onAll: () -> Unit,
+    onClose: () -> Unit,
+    onPlay: () -> Unit,
+    onPlayNext: () -> Unit,
+    onQueue: () -> Unit,
+    onPlaylist: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 10.dp, end = 10.dp, bottom = bottomInset + 6.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(Color(0xFF1E1E27).copy(alpha = 0.97f))
+                .border(1.dp, PillBorder, RoundedCornerShape(22.dp))
+                .padding(horizontal = 6.dp, vertical = 6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SelIcon(Icons.Rounded.Close, "Done", true, onClose)
+                Text(
+                    if (count == 1) "1 song selected" else "$count songs selected",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    if (allSelected) "None" else "All",
+                    color = primary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable(onClick = onAll)
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                val on = count > 0
+                SelAction(Icons.Rounded.PlayArrow, "Play", on, onPlay)
+                SelAction(Icons.Rounded.PlaylistPlay, "Play next", on, onPlayNext)
+                SelAction(Icons.Rounded.AddToQueue, "Queue", on, onQueue)
+                SelAction(Icons.Rounded.PlaylistAdd, "Playlist", on, onPlaylist)
+                SelAction(
+                    if (deleteRemoves) Icons.Rounded.RemoveCircleOutline else Icons.Rounded.Delete,
+                    if (deleteRemoves) "Remove" else "Delete",
+                    on,
+                    onDelete
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelIcon(icon: ImageVector, text: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = text, tint = Color.White)
+    }
+}
+
+@Composable
+private fun SelAction(icon: ImageVector, text: String, enabled: Boolean, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .alpha(if (enabled) 1f else 0.4f),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = text, tint = Color.White, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(text, color = Color.White.copy(alpha = 0.85f), fontSize = 11.sp, maxLines = 1)
     }
 }
 

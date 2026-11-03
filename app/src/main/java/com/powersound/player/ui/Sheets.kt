@@ -1,8 +1,25 @@
 package com.powersound.player.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -161,9 +178,41 @@ fun QueueSheet(
     currentIndex: Int,
     onPlayIndex: (Int) -> Unit,
     onRemove: (Int) -> Unit,
+    onMove: (from: Int, to: Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (currentIndex - 2).coerceAtLeast(0))
+    val scope = rememberCoroutineScope()
+    // ---- drag to reorder (the ≡ handle): the row follows the finger, the others make room ----
+    var dragFrom by remember { mutableStateOf<Int?>(null) }
+    var dragTo by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var rowSize by remember { mutableFloatStateOf(0f) }
+    // the player sent the new order (or something else changed the queue): start clean
+    LaunchedEffect(queue) {
+        dragFrom = null
+        dragTo = null
+        dragOffset = 0f
+    }
+    fun landing(): Int? {
+        val from = dragFrom ?: return null
+        val rows = state.layoutInfo.visibleItemsInfo
+        val me = rows.firstOrNull { it.key == from } ?: return dragTo
+        val center = me.offset + dragOffset + me.size / 2f
+        val over = rows.firstOrNull { center >= it.offset && center < it.offset + it.size }
+        return (over?.key as? Int) ?: dragTo
+    }
+    fun endDrag() {
+        val f = dragFrom
+        val t = dragTo
+        if (f != null && t != null && f != t) onMove(f, t)
+        else {
+            dragFrom = null
+            dragTo = null
+            dragOffset = 0f
+        }
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SheetBg) {
         Text(
             "Queue • ${queue.size}",
@@ -178,16 +227,88 @@ fun QueueSheet(
         LazyColumn(state = state, modifier = Modifier.heightIn(max = 520.dp)) {
             items(queue, key = { it.index }) { e ->
                 val current = e.index == currentIndex
+                val from = dragFrom
+                val to = dragTo
+                val dragging = e.index == from
+                val shift = when {
+                    from == null || to == null || dragging -> 0f
+                    from < to && e.index in (from + 1)..to -> -rowSize
+                    from > to && e.index in to until from -> rowSize
+                    else -> 0f
+                }
+                // rows glide while dragging; when the new order arrives they jump into place at once
+                val moved by animateFloatAsState(shift, if (from != null) tween(120) else snap(), label = "queueShift")
                 Row(
                     Modifier
+                        .zIndex(if (dragging) 1f else 0f)
+                        .graphicsLayer {
+                            translationY = if (dragging) dragOffset else moved
+                            if (dragging) {
+                                scaleX = 1.02f
+                                scaleY = 1.02f
+                            }
+                        }
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (current) Color.White.copy(alpha = 0.10f) else Color.Transparent)
-                        .clickable { onPlayIndex(e.index) }
+                        .background(
+                            when {
+                                dragging -> Color(0xFF2C2C3A)
+                                current -> Color.White.copy(alpha = 0.10f)
+                                else -> Color.Transparent
+                            }
+                        )
+                        .clickable(enabled = from == null) { onPlayIndex(e.index) }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Icon(
+                        Icons.Rounded.DragHandle,
+                        contentDescription = "Drag to move",
+                        tint = Color.White.copy(alpha = if (dragging) 1f else 0.55f),
+                        modifier = Modifier
+                            .size(36.dp)
+                            .pointerInput(e.index) {
+                                detectDragGestures(
+                                    onDragStart = {
+                                        rowSize = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == e.index }?.size?.toFloat() ?: 0f
+                                        dragFrom = e.index
+                                        dragTo = e.index
+                                        dragOffset = 0f
+                                    },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        dragOffset += amount.y
+                                        dragTo = landing()
+                                        // near the top or bottom edge the list scrolls along (while the row is still on screen)
+                                        val info = state.layoutInfo
+                                        val me = info.visibleItemsInfo.firstOrNull { it.key == e.index }
+                                        if (me != null) {
+                                            val top = me.offset + dragOffset
+                                            val bottom = top + me.size
+                                            val edge = me.size * 0.6f
+                                            val step = when {
+                                                bottom > info.viewportEndOffset - edge && me.offset > 0 -> 18f
+                                                top < info.viewportStartOffset + edge && me.offset + me.size < info.viewportEndOffset -> -18f
+                                                else -> 0f
+                                            }
+                                            if (step != 0f) scope.launch {
+                                                val done = state.scrollBy(step)
+                                                dragOffset += done
+                                                dragTo = landing()
+                                            }
+                                        }
+                                    },
+                                    onDragEnd = { endDrag() },
+                                    onDragCancel = {
+                                        dragFrom = null
+                                        dragTo = null
+                                        dragOffset = 0f
+                                    }
+                                )
+                            }
+                    )
+                    Spacer(Modifier.width(4.dp))
                     Artwork(e.songId, Modifier.size(44.dp), sizePx = 144, cornerDp = 8)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {

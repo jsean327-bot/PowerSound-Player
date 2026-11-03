@@ -63,6 +63,13 @@ object PlayerCommands {
 @OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
 
+    companion object {
+        /** The running service (the home-screen widget talks to it). */
+        @Volatile
+        var instance: PlaybackService? = null
+            private set
+    }
+
     private var session: MediaSession? = null
     private var main: ExoPlayer? = null
     private var crossfader: Crossfader? = null
@@ -178,6 +185,184 @@ class PlaybackService : MediaSessionService() {
         registerDeviceCallback(player)
         registerVolumeObserver(player)
         registerScreenReceiver(player)
+
+        // the home-screen widget follows the song and the play state
+        player.addListener(object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (events.containsAny(
+                        Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_PLAY_WHEN_READY_CHANGED,
+                        Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_TIMELINE_CHANGED
+                    )
+                ) refreshWidget()
+            }
+        })
+        instance = this
+        refreshWidget(force = true)
+    }
+
+    // ---------------------------------------------------------------- home-screen widget
+
+    private var widgetJob: kotlinx.coroutines.Job? = null
+    private var widgetArt: android.graphics.Bitmap? = null
+    private var widgetArtId: Long? = null
+    private var widgetShown: String? = null
+
+    /** Redraws the widget (title, artist, cover, play/pause). Cheap when nothing changed. */
+    fun refreshWidget(force: Boolean = false) {
+        if (!WidgetUpdater.hasWidgets(this)) return
+        val p = main ?: return
+        val item = p.currentMediaItem
+        val md = item?.mediaMetadata
+        val title = md?.title?.toString() ?: "PowerSound"
+        val artist = md?.artist?.toString() ?: if (item == null) "Tap play to listen" else ""
+        val id = item?.mediaId?.toLongOrNull()
+        val playing = p.playWhenReady
+        val state = "$title|$artist|$id|$playing"
+        if (!force && state == widgetShown) return
+        widgetShown = state
+        // text and buttons at once; the cover follows as soon as it is loaded
+        WidgetUpdater.show(this, title, artist, widgetArt.takeIf { id != null && widgetArtId == id }, playing)
+        if (id != null && widgetArtId != id) {
+            widgetJob?.cancel()
+            widgetJob = scope.launch {
+                val art = runCatching { com.powersound.player.data.ArtworkLoader.loadBitmap(this@PlaybackService, id, 256) }.getOrNull()
+                widgetArt = art
+                widgetArtId = id
+                if (art != null) WidgetUpdater.show(this@PlaybackService, title, artist, art, main?.playWhenReady == true)
+            }
+        }
+    }
+
+    /**
+     * Widget buttons. A tap can start this service while the app is closed: Android then wants it in the
+     * foreground within seconds, so a short "PowerSound" notification is shown until Media3's own player
+     * notification (same id) takes its place. When the queue is empty, the last one is brought back.
+     */
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        if (action != null && action.startsWith(WidgetUpdater.ACTION_PREFIX)) widgetCommand(action)
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    private fun widgetCommand(action: String) {
+        val s = session ?: return
+        val p = main ?: return
+        val inForeground = p.playWhenReady &&
+            (p.playbackState == Player.STATE_READY || p.playbackState == Player.STATE_BUFFERING)
+        if (!inForeground) holdForeground()
+        if (p.mediaItemCount == 0 && !restoreLastQueue(p)) {
+            // nothing to play at all
+            releasePlaceholder()
+            if (session?.connectedControllers.isNullOrEmpty()) stopSelf()
+            return
+        }
+        if (p.playbackState == Player.STATE_IDLE) p.prepare()
+        // the command runs first, while this service is in the foreground: when Media3's own player
+        // notification arrives, it can stay there for as long as the music plays
+        val sp = s.player
+        when (action) {
+            WidgetUpdater.ACTION_PLAY_PAUSE -> if (sp.playWhenReady) sp.pause() else sp.play()
+            WidgetUpdater.ACTION_NEXT -> sp.seekToNext()
+            WidgetUpdater.ACTION_PREV -> sp.seekToPrevious()
+        }
+        // Media3 shows its player notification once its controller is connected to the session
+        addSession(s)
+        refreshWidget(force = true)
+        if (placeholderShown) {
+            scope.launch {
+                delay(400)
+                placeholderShown = false
+                // make sure the player notification replaced the short one (playing: in the foreground, paused: just shown)
+                if (s.connectedControllers.any { s.isMediaNotificationController(it) }) {
+                    val playing = sp.playWhenReady &&
+                        (sp.playbackState == Player.STATE_READY || sp.playbackState == Player.STATE_BUFFERING)
+                    runCatching { onUpdateNotification(s, playing) }
+                }
+            }
+        }
+    }
+
+    private var placeholderShown = false
+
+    private fun holdForeground() {
+        if (android.os.Build.VERSION.SDK_INT < 26) return
+        runCatching {
+            val nm = getSystemService(android.app.NotificationManager::class.java)
+            // the same channel and id as Media3's player notification, so it simply replaces this one
+            if (nm.getNotificationChannel("default_channel_id") == null) {
+                nm.createNotificationChannel(
+                    android.app.NotificationChannel("default_channel_id", "Now playing", android.app.NotificationManager.IMPORTANCE_LOW)
+                )
+            }
+            val title = main?.currentMediaItem?.mediaMetadata?.title?.toString() ?: "PowerSound"
+            val n = androidx.core.app.NotificationCompat.Builder(this, "default_channel_id")
+                .setSmallIcon(R.drawable.ic_w_note)
+                .setContentTitle(title)
+                .setContentText("PowerSound")
+                .setOngoing(true)
+                .setSilent(true)
+                .build()
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                startForeground(1001, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(1001, n)
+            }
+            placeholderShown = true
+        }
+    }
+
+    private fun releasePlaceholder() {
+        if (!placeholderShown) return
+        placeholderShown = false
+        runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE)
+            else @Suppress("DEPRECATION") stopForeground(true)
+        }
+    }
+
+    /** The queue the app saved last time (song ids, current song, position). */
+    private fun restoreLastQueue(p: ExoPlayer): Boolean {
+        val prefs = getSharedPreferences("powersound_player", MODE_PRIVATE)
+        val ids = prefs.getString("queueIds", null)?.split(',')?.mapNotNull { it.toLongOrNull() } ?: return false
+        if (ids.isEmpty()) return false
+        val meta = HashMap<Long, Array<String?>>()
+        for (chunk in ids.distinct().chunked(500)) {
+            runCatching {
+                contentResolver.query(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM),
+                    "${MediaStore.Audio.Media._ID} IN (${chunk.joinToString(",")})", null, null
+                )?.use { c ->
+                    while (c.moveToNext()) meta[c.getLong(0)] = arrayOf(c.getString(1), c.getString(2), c.getString(3))
+                }
+            }
+        }
+        val known = ids.filter { it in meta }
+        if (known.isEmpty()) return false
+        val items = known.map { id ->
+            val m = meta[id]
+            val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+            fun clean(s: String?) = s?.trim()?.takeUnless { it.isEmpty() || it == "<unknown>" }
+            MediaItem.Builder()
+                .setMediaId(id.toString())
+                .setUri(uri)
+                .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(clean(m?.get(0)) ?: "Unknown")
+                        .setArtist(clean(m?.get(1)) ?: "Unknown artist")
+                        .setAlbumTitle(clean(m?.get(2)) ?: "")
+                        .setArtworkUri(android.net.Uri.parse("$ART_SCHEME:$id"))
+                        .build()
+                )
+                .build()
+        }
+        val currentId = ids.getOrNull(prefs.getInt("queueIndex", 0))
+        val index = known.indexOf(currentId).coerceAtLeast(0)
+        val pos = if (known.getOrNull(index) == currentId) prefs.getLong("queuePos", 0L) else 0L
+        p.setMediaItems(items, index, pos)
+        p.prepare()
+        return true
     }
 
     /**
@@ -537,6 +722,15 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        instance = null
+        widgetJob?.cancel()
+        // the widget keeps the song, with the play button ready to start again
+        main?.let { p ->
+            val md = p.currentMediaItem?.mediaMetadata
+            if (md != null && WidgetUpdater.hasWidgets(this)) {
+                WidgetUpdater.show(this, md.title?.toString() ?: "PowerSound", md.artist?.toString() ?: "", widgetArt, false)
+            }
+        }
         deviceCallback?.let { audioManager.unregisterAudioDeviceCallback(it) }
         deviceCallback = null
         volumeObserver?.let { contentResolver.unregisterContentObserver(it) }

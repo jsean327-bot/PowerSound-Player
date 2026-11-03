@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Category
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Image
@@ -111,7 +112,9 @@ fun SongMenuDialog(
     onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
     stars: Int = 0,
-    onStars: (Int) -> Unit = {}
+    onStars: (Int) -> Unit = {},
+    /** Opened from a song list: "Select" starts multi-select there. */
+    onSelect: (() -> Unit)? = null
 ) {
     val ratingType = com.powersound.player.data.SettingsStore.value.ratingType
     Dialog(onDismissRequest = onDismiss) {
@@ -160,7 +163,14 @@ fun SongMenuDialog(
                 MenuRow(Icons.Rounded.PlaylistPlay, "Play next", act(onPlayNext), Icons.Rounded.Add, "Add to queue", act(onAddToQueue))
             }
             // Settings → Library → Lists → Delete Action
-            if (com.powersound.player.data.SettingsStore.value.deleteAction) MenuRow(Icons.Rounded.Delete, "Delete", act(onDelete))
+            val canDelete = com.powersound.player.data.SettingsStore.value.deleteAction
+            if (onSelect != null && canDelete) {
+                MenuRow(Icons.Rounded.CheckCircle, "Select", act(onSelect), Icons.Rounded.Delete, "Delete", act(onDelete))
+            } else if (onSelect != null) {
+                MenuRow(Icons.Rounded.CheckCircle, "Select", act(onSelect))
+            } else if (canDelete) {
+                MenuRow(Icons.Rounded.Delete, "Delete", act(onDelete))
+            }
             MenuRow(Icons.Rounded.PlaylistAdd, "Playlist", act(onPlaylist), Icons.Rounded.Bookmark, "Bookmark", act(onBookmark))
             MenuRow(Icons.Rounded.Image, "Album Art", act(onAlbumArt))
             MenuRow(Icons.Rounded.Info, "Info/Tags", act(onInfo), Icons.Rounded.TextSnippet, "Lyrics", act(onLyrics))
@@ -301,7 +311,7 @@ fun SleepTimerDialog(
 // ================================================================= info dialogs
 
 @Composable
-fun InfoTagsDialog(song: Song, audioInfo: String, onDismiss: () -> Unit) {
+fun InfoTagsDialog(song: Song, audioInfo: String, onDismiss: () -> Unit, onEdit: (() -> Unit)? = null) {
     val rows = listOf(
         "Title" to song.title,
         "Artist" to song.artist,
@@ -332,7 +342,11 @@ fun InfoTagsDialog(song: Song, audioInfo: String, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = {
+            // Info/Tags → Edit (the tag editor)
+            if (onEdit != null) TextButton(onClick = onEdit) { Text("Edit") }
+        }
     )
 }
 

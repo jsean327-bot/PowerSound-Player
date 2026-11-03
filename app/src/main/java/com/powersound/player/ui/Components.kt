@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Category
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Folder
@@ -438,7 +439,9 @@ fun SongRow(
     zoom: Int = 1,
     extra: String? = null,
     /** "album", "folder" or "albumartist": the list the row is shown in (Settings → Library → Lists). */
-    listKind: String = ""
+    listKind: String = "",
+    /** Multi-select: true / false shows a check mark on the cover; null = not selecting. */
+    checked: Boolean? = null
 ) {
     val artDp = when (zoom) { 0 -> 42; 2 -> 78; else -> 56 }
     val titleSp = when (zoom) { 0 -> 13; 2 -> 17; else -> 15 }
@@ -464,7 +467,13 @@ fun SongRow(
             .fillMaxWidth()
             .padding(horizontal = 6.dp, vertical = 2.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(if (isCurrent) Color.White.copy(alpha = 0.10f) else Color.Transparent)
+            .background(
+                when {
+                    checked == true -> colors.primary.copy(alpha = 0.22f)
+                    isCurrent -> Color.White.copy(alpha = 0.10f)
+                    else -> Color.Transparent
+                }
+            )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -480,7 +489,37 @@ fun SongRow(
             )
             Spacer(Modifier.width(4.dp))
         }
-        Artwork(songId = song.id, modifier = Modifier.size(artDp.dp), sizePx = if (zoom == 2) 240 else 168, cornerDp = 10)
+        Box(contentAlignment = Alignment.Center) {
+            Artwork(songId = song.id, modifier = Modifier.size(artDp.dp), sizePx = if (zoom == 2) 240 else 168, cornerDp = 10)
+            if (checked != null) {
+                // multi-select: a check mark on a dimmed cover, or an empty ring
+                Box(
+                    Modifier
+                        .size(artDp.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.Black.copy(alpha = if (checked) 0.45f else 0.25f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (checked) {
+                        Icon(
+                            Icons.Rounded.CheckCircle,
+                            contentDescription = "Selected",
+                            tint = colors.primary,
+                            modifier = Modifier
+                                .size((artDp * 0.55f).dp)
+                                .clip(CircleShape)
+                                .background(Color.White)
+                        )
+                    } else {
+                        Box(
+                            Modifier
+                                .size((artDp * 0.45f).dp)
+                                .border(2.dp, Color.White.copy(alpha = 0.85f), CircleShape)
+                        )
+                    }
+                }
+            }
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(

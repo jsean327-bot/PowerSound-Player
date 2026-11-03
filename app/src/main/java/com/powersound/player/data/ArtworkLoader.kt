@@ -75,11 +75,15 @@ object ArtworkLoader {
     fun cached(songId: Long, sizePx: Int): ImageBitmap? =
         cache.get(key(songId, sizePx))?.asImageBitmap()
 
-    suspend fun load(context: Context, songId: Long, sizePx: Int): ImageBitmap? {
+    suspend fun load(context: Context, songId: Long, sizePx: Int): ImageBitmap? =
+        loadBitmap(context, songId, sizePx)?.asImageBitmap()
+
+    /** The same picture as [load] as an Android bitmap (the home-screen widget uses it). Don't recycle it. */
+    suspend fun loadBitmap(context: Context, songId: Long, sizePx: Int): Bitmap? {
         appContext = context.applicationContext
         if (SettingsStore.value.artForceDefault) return null
         val key = key(songId, sizePx)
-        cache.get(key)?.let { return it.asImageBitmap() }
+        cache.get(key)?.let { return it }
         if (missing.contains(key)) return null
 
         var bitmap = gate.withPermit {
@@ -87,7 +91,7 @@ object ArtworkLoader {
         }
         if (bitmap == null) bitmap = download(context, songId, sizePx)
         if (bitmap != null) cache.put(key, bitmap) else missing.add(key)
-        return bitmap?.asImageBitmap()
+        return bitmap
     }
 
     /** Image of an artist / album artist / composer, or null (then the album art is used). */

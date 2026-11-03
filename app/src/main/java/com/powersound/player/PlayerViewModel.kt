@@ -320,34 +320,161 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val current = _library.value
         if (current.loading || (current.loaded && !force)) return
         _library.value = current.copy(loading = true)
-        viewModelScope.launch {
-            val raw = MusicRepository.loadSongs(getApplication())
-            allFolders = raw.map { it.folder }.distinct().sortedBy { it.lowercase() }
-            val st = com.powersound.player.data.SettingsStore.value
-            val songs = raw.filter { s ->
-                s.durationMs >= st.minDurationSec * 1000L &&
-                    !(st.ignoreVideo && s.mimeType.startsWith("video/")) &&
-                    st.excludedFolders.none { ex -> s.folder == ex || s.folder.startsWith("$ex/") }
-            }
-            songById = songs.associateBy { it.id }
-            val byId = songById
-            com.powersound.player.data.ArtworkLoader.songInfo = { byId[it] }
-            _library.value = LibraryState(
-                loading = false,
-                loaded = true,
-                songs = songs,
-                folders = MusicRepository.folders(songs),
-                albums = MusicRepository.albums(songs),
-                artists = MusicRepository.artists(songs),
-                albumArtists = MusicRepository.albumArtists(songs),
-                genres = MusicRepository.genres(songs),
-                years = MusicRepository.years(songs),
-                composers = MusicRepository.composers(songs)
-            )
-            infoForId = null
-            refresh(true)
-            tryRestoreQueue()
+        viewModelScope.launch { buildLibrary() }
+    }
+
+    /** Reads the library from Android and rebuilds every list (waits until done). */
+    private suspend fun buildLibrary() {
+        val raw = MusicRepository.loadSongs(getApplication())
+        allFolders = raw.map { it.folder }.distinct().sortedBy { it.lowercase() }
+        val st = com.powersound.player.data.SettingsStore.value
+        val songs = raw.filter { s ->
+            s.durationMs >= st.minDurationSec * 1000L &&
+                !(st.ignoreVideo && s.mimeType.startsWith("video/")) &&
+                st.excludedFolders.none { ex -> s.folder == ex || s.folder.startsWith("$ex/") }
         }
+        songById = songs.associateBy { it.id }
+        val byId = songById
+        com.powersound.player.data.ArtworkLoader.songInfo = { byId[it] }
+        _library.value = LibraryState(
+            loading = false,
+            loaded = true,
+            songs = songs,
+            folders = MusicRepository.folders(songs),
+            albums = MusicRepository.albums(songs),
+            artists = MusicRepository.artists(songs),
+            albumArtists = MusicRepository.albumArtists(songs),
+            genres = MusicRepository.genres(songs),
+            years = MusicRepository.years(songs),
+            composers = MusicRepository.composers(songs)
+        )
+        infoForId = null
+        refresh(true)
+        tryRestoreQueue()
+    }
+
+    // ---- Info/Tags → Edit ----
+
+    /**
+     * Writes new tags into [song]'s file (after Android allowed it), reloads the library and updates the song
+     * wherever it is in the queue. [onDone] gets null when it worked, else the reason it didn't.
+     */
+    fun saveTags(song: Song, edits: com.powersound.player.data.TagEdits, onDone: (String?) -> Unit) {
+        viewModelScope.launch {
+            val c = controller
+            val key = song.id.toString()
+            val isCurrent = c != null && c.currentMediaItem?.mediaId == key
+            val wasPlaying = isCurrent && c?.playWhenReady == true
+            val pos = c?.currentPosition ?: 0L
+            // the playing song pauses while its file is written
+            if (wasPlaying) c?.pause()
+            val error = com.powersound.player.data.TagEditor.save(getApplication(), song, edits)
+            if (error == null) {
+                if (edits.changesPictures) com.powersound.player.data.ArtworkLoader.clear()
+                buildLibrary()
+                val fresh = songById[song.id]
+                if (c != null && fresh != null) {
+                    for (i in 0 until c.mediaItemCount) {
+                        if (c.getMediaItemAt(i).mediaId == key) c.replaceMediaItem(i, fresh.toMediaItem())
+                    }
+                    if (isCurrent) {
+                        // the file changed under the player: open it again at the same place
+                        val index = c.currentMediaItemIndex
+                        c.stop()
+                        c.prepare()
+                        c.seekTo(index, pos)
+                    }
+                }
+            }
+            if (wasPlaying) c?.play()
+            onDone(error)
+        }
+    }
+
+    // ---- "Open with PowerSound" (a file from a file manager, WhatsApp …) ----
+
+    /**
+     * Plays a file another app asked PowerSound to open. A song of the library plays inside its folder;
+     * anything else plays on its own.
+     */
+    fun playExternal(uri: android.net.Uri, onPlaying: () -> Unit) {
+        viewModelScope.launch {
+            restored = true // the last queue must not replace the file that was opened
+            // right after the app starts, the connection to the player may still be on its way
+            kotlinx.coroutines.withTimeoutOrNull(5000) { while (controller == null) delay(50) }
+            val song = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { findSong(uri) }
+            if (song != null) {
+                val folder = _library.value.folders.firstOrNull { it.key == "folder:${song.folder}" }
+                val list = folder?.songs ?: listOf(song)
+                play(list, list.indexOfFirst { it.id == song.id }.coerceAtLeast(0), sourceKey = folder?.key)
+            } else {
+                val c = controller ?: return@launch
+                val name = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { displayName(uri) } ?: "Audio file"
+                val item = MediaItem.Builder()
+                    .setMediaId("file:$uri")
+                    .setUri(uri)
+                    .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
+                    .setMediaMetadata(MediaMetadata.Builder().setTitle(name.substringBeforeLast('.')).setArtist("").build())
+                    .build()
+                c.setMediaItem(item)
+                c.prepare()
+                c.play()
+                _player.value = _player.value.copy(sourceKey = null)
+            }
+            onPlaying()
+        }
+    }
+
+    private fun displayName(uri: android.net.Uri): String? = runCatching {
+        if (uri.scheme == "file") return@runCatching uri.lastPathSegment
+        getApplication<Application>().contentResolver
+            .query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null }
+    }.getOrNull()
+
+    /** The library song behind a file address, when there is one. */
+    private fun findSong(uri: android.net.Uri): Song? {
+        val songs = _library.value.songs
+        // content://media/external/audio/media/123
+        if (uri.scheme == "content" && uri.authority == "media") {
+            uri.lastPathSegment?.toLongOrNull()?.let { id -> songById[id]?.let { return it } }
+        }
+        if (uri.scheme == "file") {
+            val path = uri.path ?: return null
+            return songs.firstOrNull { it.path == path }
+        }
+        // a file manager's address: try the path it may give, then the name and size of the file
+        val resolver = getApplication<Application>().contentResolver
+        @Suppress("DEPRECATION")
+        val path = runCatching {
+            resolver.query(uri, arrayOf(android.provider.MediaStore.MediaColumns.DATA), null, null, null)
+                ?.use { if (it.moveToFirst()) it.getString(0) else null }
+        }.getOrNull()
+        if (!path.isNullOrBlank()) songs.firstOrNull { it.path == path }?.let { return it }
+        // Files app: content://com.android.externalstorage.documents/document/primary:Music/x.flac
+        runCatching {
+            if (android.provider.DocumentsContract.isDocumentUri(getApplication(), uri)) {
+                val doc = android.provider.DocumentsContract.getDocumentId(uri)
+                if (doc.startsWith("primary:")) {
+                    val p = "/storage/emulated/0/" + doc.removePrefix("primary:")
+                    songs.firstOrNull { it.path == p }?.let { return it }
+                }
+            }
+        }
+        var name: String? = null
+        var size = -1L
+        runCatching {
+            resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME, android.provider.OpenableColumns.SIZE), null, null, null)
+                ?.use { c ->
+                    if (c.moveToFirst()) {
+                        name = c.getString(0)
+                        if (!c.isNull(1)) size = c.getLong(1)
+                    }
+                }
+        }
+        val n = name ?: return null
+        val matches = songs.filter { it.path.substringAfterLast('/') == n && (size < 0 || it.size == size) }
+        return matches.singleOrNull()
     }
 
     // ---- last queue (restored when the app starts; Settings → Audio Focus → Resume On Start / Reopen) ----
@@ -377,6 +504,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val c = controller ?: return
         if (!_library.value.loaded) return
         restored = true
+        // a file was opened from another app: it plays instead of the last queue
+        if (MainActivity.openedUri.value != null) return
         if (c.mediaItemCount > 0) return // the service is still playing from before
         val ids = modePrefs.getString("queueIds", null)?.split(',')?.mapNotNull { it.toLongOrNull() } ?: return
         val songs = ids.mapNotNull { songById[it] }
@@ -617,16 +746,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             ?.let { openGroup(it, "Genres") }
     }
 
-    /** After a song file was deleted: drop it from the queue and rescan. */
-    fun onSongDeleted(songId: Long) {
+    /** After song files were deleted: drop them from the queue and rescan. */
+    fun onSongsDeleted(songIds: Collection<Long>) {
+        if (songIds.isEmpty()) return
+        val keys = songIds.map { it.toString() }.toSet()
         val c = controller
         if (c != null) {
             for (i in c.mediaItemCount - 1 downTo 0) {
-                if (c.getMediaItemAt(i).mediaId == songId.toString()) c.removeMediaItem(i)
+                if (c.getMediaItemAt(i).mediaId in keys) c.removeMediaItem(i)
             }
         }
         // Settings → Library → Playlists → Remove Playlist Entries On Track Deletion
-        if (com.powersound.player.data.SettingsStore.value.playlistRemoveDeleted) LibraryStores.removeSongEverywhere(songId)
+        if (com.powersound.player.data.SettingsStore.value.playlistRemoveDeleted) songIds.forEach { LibraryStores.removeSongEverywhere(it) }
         loadLibrary(force = true)
     }
 
@@ -676,6 +807,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun removeFromQueue(index: Int) {
         val c = controller ?: return
         if (index in 0 until c.mediaItemCount) c.removeMediaItem(index)
+    }
+
+    /** Queue → drag a song to another place. */
+    fun moveInQueue(from: Int, to: Int) {
+        val c = controller ?: return
+        val n = c.mediaItemCount
+        if (from == to || from !in 0 until n || to !in 0 until n) return
+        c.moveMediaItem(from, to)
     }
 
     fun togglePlay() {
