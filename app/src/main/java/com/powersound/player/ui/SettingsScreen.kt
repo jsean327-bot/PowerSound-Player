@@ -194,7 +194,7 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.LYRICS to "Lyrics Swipe Up", SettingsPage.LYRICS to "Lyrics Item In The Track Menu", SettingsPage.LYRICS to "Keep Screen On (lyrics)",
     SettingsPage.LYRICS to "Lyrics Time Offset", SettingsPage.LYRICS to "Lyrics Size", SettingsPage.LYRICS to "Preferred Lyrics App",
     SettingsPage.LYRICS to "Custom URL", SettingsPage.LYRICS to "Rescan Lyrics Tags", SettingsPage.LYRICS to "Scan LRC Files",
-    SettingsPage.LYRICS to "Always Use UTF-8",
+    SettingsPage.LYRICS to "Always Use UTF-8", SettingsPage.LYRICS to "Download Lyrics",
     SettingsPage.NOTIFICATIONS to "Navigate to the List", SettingsPage.NOTIFICATIONS to "Keep Notification",
     SettingsPage.NOTIFICATIONS to "Remove Notification on Disconnection", SettingsPage.NOTIF_BUTTONS to "Notification buttons",
     SettingsPage.AUDIO to "Audio Info",
@@ -1063,6 +1063,8 @@ fun HelpDialog(onDismiss: () -> Unit) {
         "Tags" to "Song menu → Info/Tags → Edit: change the title, artist, album, cover and more (FLAC and MP3).",
         "Widget" to "Long press your home screen → Widgets → PowerSound.",
         "Open with" to "In a file manager or WhatsApp, open a music file with PowerSound to play it.",
+        "Lyrics" to "Songs without lyrics get them from the internet when you open the lyrics (Settings → Lyrics → Download Lyrics).",
+        "Car" to "With Android Auto, PowerSound shows its folders, albums, artists and playlists on the car screen.",
         "Player" to "Swipe the cover to change songs (further = change album/folder). Swipe down or tap the cover for the song's list. Swipe up for lyrics. Long press the cover for the track menu.",
         "Seeking" to "Long press the progress area, move your finger, let go. Long press the elapsed time to go back to 0:00.",
         "Categories" to "Long press ⏮ ⏭ for the previous / next album or folder.",
@@ -1544,12 +1546,19 @@ private fun SettingsPage4(page: SettingsPage?, args: PageArgs) {
     SwitchRow("Always Use UTF-8", "If disabled, .lrc files that are not UTF-8 are read as Arabic (Windows-1256)", st.lyricsUtf8) { v ->
         set { it.copy(lyricsUtf8 = v) }; LyricsReader.clearCache()
     }
+    SectionLabel("Internet")
+    SwitchRow(
+        "Download Lyrics",
+        "When a track has no lyrics, look them up on LRCLIB (free, often with timing). The artist, title, album and length are sent; found lyrics are saved on the phone",
+        st.lyricsOnline
+    ) { v -> set { it.copy(lyricsOnline = v) } }
     RestoreRow {
         set {
             it.copy(
                 lyricsSwipeUp = d.lyricsSwipeUp, lyricsButton = d.lyricsButton, lyricsMenuItem = d.lyricsMenuItem,
                 lyricsKeepScreenOn = d.lyricsKeepScreenOn, lyricsOffsetMs = d.lyricsOffsetMs, lyricsSize = d.lyricsSize,
-                lyricsApp = d.lyricsApp, lyricsCustomUrl = d.lyricsCustomUrl, scanLrc = d.scanLrc, lyricsUtf8 = d.lyricsUtf8
+                lyricsApp = d.lyricsApp, lyricsCustomUrl = d.lyricsCustomUrl, scanLrc = d.scanLrc, lyricsUtf8 = d.lyricsUtf8,
+                lyricsOnline = d.lyricsOnline
             )
         }
     }
@@ -3031,6 +3040,7 @@ private const val PRIVACY_TEXT = """PowerSound Player has no account, no ads and
 
 • Your music, playlists, ratings, play counts, equalizer presets and settings stay on your phone.
 • Album art: when Download Album Art / Artist Images is on, the artist, album or track name is sent to the iTunes Search API or the Deezer API to find an image. Turn these off in Settings → Album Art.
+• Lyrics: when Download Lyrics is on and a track has no lyrics, its artist, title, album and length are sent to LRCLIB (lrclib.net). Turn it off in Settings → Lyrics.
 • Updates: PowerSound asks GitHub for the latest version (no personal data is sent).
 • Scrobbling and Metachanged Intent send the playing track only to apps on your phone, and only when you turn them on.
 • Error log: crash details are saved on the phone only. They leave the phone only if you share them yourself."""

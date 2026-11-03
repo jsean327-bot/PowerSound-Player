@@ -24,11 +24,16 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.session.CommandButton
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.LibraryParams
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.SettableFuture
 import com.google.common.util.concurrent.ListenableFuture
 import com.powersound.player.audio.AudioEngine
 import com.powersound.player.audio.BUILT_IN_PRESETS
@@ -61,7 +66,7 @@ object PlayerCommands {
  * controls automatically from this session.
  */
 @OptIn(UnstableApi::class)
-class PlaybackService : MediaSessionService() {
+class PlaybackService : MediaLibraryService() {
 
     companion object {
         /** The running service (the home-screen widget talks to it). */
@@ -70,7 +75,8 @@ class PlaybackService : MediaSessionService() {
             private set
     }
 
-    private var session: MediaSession? = null
+    private var session: MediaLibrarySession? = null
+    private lateinit var car: CarLibrary
     private var main: ExoPlayer? = null
     private var crossfader: Crossfader? = null
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
@@ -90,6 +96,7 @@ class PlaybackService : MediaSessionService() {
         AudioEngine.init(this)
         SettingsStore.init(this)
         StatsStore.init(this)
+        com.powersound.player.data.LibraryStores.init(this)
         com.powersound.player.data.CrashLog.install(this)
         audioManager = getSystemService(AudioManager::class.java)
         AudioEngine.deviceRate = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 48000
@@ -125,8 +132,9 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        session = MediaSession.Builder(this, SessionPlayer(player))
-            .setCallback(SessionCallback())
+        // a library session: Android Auto (and similar) can browse the music too
+        car = CarLibrary(this)
+        session = MediaLibrarySession.Builder(this, SessionPlayer(player), SessionCallback())
             .setBitmapLoader(LockArtLoader(this, scope))
             .setSessionActivity(sessionActivity)
             .build()
@@ -320,11 +328,19 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    /** The queue the app saved last time (song ids, current song, position). */
+    /** Puts the queue the app saved last time back into the player. */
     private fun restoreLastQueue(p: ExoPlayer): Boolean {
+        val (items, index, pos) = lastQueue() ?: return false
+        p.setMediaItems(items, index, pos)
+        p.prepare()
+        return true
+    }
+
+    /** The queue the app saved last time (songs, current song, position), or null. */
+    private fun lastQueue(): Triple<List<MediaItem>, Int, Long>? {
         val prefs = getSharedPreferences("powersound_player", MODE_PRIVATE)
-        val ids = prefs.getString("queueIds", null)?.split(',')?.mapNotNull { it.toLongOrNull() } ?: return false
-        if (ids.isEmpty()) return false
+        val ids = prefs.getString("queueIds", null)?.split(',')?.mapNotNull { it.toLongOrNull() } ?: return null
+        if (ids.isEmpty()) return null
         val meta = HashMap<Long, Array<String?>>()
         for (chunk in ids.distinct().chunked(500)) {
             runCatching {
@@ -338,7 +354,7 @@ class PlaybackService : MediaSessionService() {
             }
         }
         val known = ids.filter { it in meta }
-        if (known.isEmpty()) return false
+        if (known.isEmpty()) return null
         val items = known.map { id ->
             val m = meta[id]
             val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
@@ -360,9 +376,7 @@ class PlaybackService : MediaSessionService() {
         val currentId = ids.getOrNull(prefs.getInt("queueIndex", 0))
         val index = known.indexOf(currentId).coerceAtLeast(0)
         val pos = if (known.getOrNull(index) == currentId) prefs.getLong("queuePos", 0L) else 0L
-        p.setMediaItems(items, index, pos)
-        p.prepare()
-        return true
+        return Triple(items, index, pos)
     }
 
     /**
@@ -705,7 +719,7 @@ class PlaybackService : MediaSessionService() {
 
     // ---------------------------------------------------------------- lifecycle
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = session?.player
@@ -970,7 +984,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     /** Restores the playable URI of each item sent from the app's controller. */
-    private inner class SessionCallback : MediaSession.Callback {
+    private inner class SessionCallback : MediaLibrarySession.Callback {
 
         override fun onConnect(mediaSession: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val base = super.onConnect(mediaSession, controller)
@@ -996,6 +1010,89 @@ class PlaybackService : MediaSessionService() {
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
+        // ---- browsing (Android Auto) ----
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<MediaItem>> = Futures.immediateFuture(LibraryResult.ofItem(car.root(), params))
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            val result = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+            scope.launch {
+                val all = runCatching { car.children(parentId) }.getOrDefault(emptyList())
+                val from = (page.toLong() * pageSize).coerceAtMost(all.size.toLong()).toInt()
+                val to = (from.toLong() + pageSize).coerceAtMost(all.size.toLong()).toInt()
+                result.set(LibraryResult.ofItemList(all.subList(from, to), params))
+            }
+            return result
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val result = SettableFuture.create<LibraryResult<MediaItem>>()
+            scope.launch {
+                val item = runCatching { car.item(mediaId) }.getOrNull()
+                result.set(if (item != null) LibraryResult.ofItem(item, null) else LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE))
+            }
+            return result
+        }
+
+        /** A song picked in the car plays with the rest of its list. */
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val one = mediaItems.singleOrNull()
+            if (one == null || !one.mediaId.startsWith("s:")) {
+                return withStart(onAddMediaItems(mediaSession, controller, mediaItems), startIndex, startPositionMs)
+            }
+            val result = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
+            scope.launch {
+                val list = runCatching { car.playlistFor(one.mediaId) }.getOrNull()
+                if (list != null) {
+                    result.set(MediaSession.MediaItemsWithStartPosition(list.first, list.second, C.TIME_UNSET))
+                } else {
+                    result.setFuture(withStart(onAddMediaItems(mediaSession, controller, mediaItems), startIndex, startPositionMs))
+                }
+            }
+            return result
+        }
+
+        private fun withStart(
+            items: ListenableFuture<MutableList<MediaItem>>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = Futures.transform(
+            items,
+            { list -> MediaSession.MediaItemsWithStartPosition(list ?: emptyList(), startIndex, startPositionMs) },
+            com.google.common.util.concurrent.MoreExecutors.directExecutor()
+        )
+
+        /** "Play" with nothing queued (the car, Bluetooth, the system media controls): the last queue. */
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val last = lastQueue()
+                ?: return Futures.immediateFailedFuture(UnsupportedOperationException("Nothing played yet"))
+            return Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(last.first, last.second, last.third))
+        }
+
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -1004,13 +1101,16 @@ class PlaybackService : MediaSessionService() {
             val resolved = mediaItems.map { item ->
                 val uri = item.requestMetadata.mediaUri
                     ?: item.localConfiguration?.uri
-                    ?: item.mediaId.toLongOrNull()?.let {
+                    ?: car.songIdOf(item.mediaId)?.let {
                         ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, it)
                     }
                 // the lock screen / notification art is loaded by LockArtLoader from this address
-                val art = item.mediaId.toLongOrNull()?.let { android.net.Uri.parse("$ART_SCHEME:$it") }
+                val songId = car.songIdOf(item.mediaId)
+                val art = songId?.let { android.net.Uri.parse("$ART_SCHEME:$it") }
                 val md = if (art != null) item.mediaMetadata.buildUpon().setArtworkUri(art).build() else item.mediaMetadata
-                if (uri != null) item.buildUpon().setUri(uri).setMediaMetadata(md).build() else item
+                // a song picked in the car keeps a plain id, like the app's own queue items
+                val id = if (item.mediaId.startsWith("s:") && songId != null) songId.toString() else item.mediaId
+                if (uri != null) item.buildUpon().setMediaId(id).setUri(uri).setMediaMetadata(md).build() else item
             }.toMutableList()
             return Futures.immediateFuture(resolved)
         }

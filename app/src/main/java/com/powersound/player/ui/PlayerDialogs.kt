@@ -452,7 +452,12 @@ fun AlbumArtDialog(songId: Long, onDismiss: () -> Unit) {
 fun LyricsSheet(song: Song, position: StateFlow<PlaybackPos>, onSeek: (Long) -> Unit, onSearch: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
-    val lyrics by produceState<Lyrics?>(null, song.id) { value = LyricsReader.read(context, song.id, song.path) ?: Lyrics(emptyList()) }
+    // the file's own lyrics, an .lrc file, saved ones, then (Settings → Lyrics → Download Lyrics) the internet
+    val lyrics by produceState<Lyrics?>(null, song.id) {
+        value = LyricsReader.read(context, song.id, song.path)
+            ?: com.powersound.player.data.OnlineLyrics.fetch(context, song)
+            ?: Lyrics(emptyList())
+    }
     val pos by position.collectAsState()
     // Settings → Lyrics → Keep Screen On
     val view = androidx.compose.ui.platform.LocalView.current
@@ -483,7 +488,8 @@ fun LyricsSheet(song: Song, position: StateFlow<PlaybackPos>, onSeek: (Long) -> 
             l == null -> Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             l.lines.isEmpty() -> Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "No lyrics found for this track.\nLyrics inside FLAC (LYRICS tag) / MP3 (USLT) files, or an .lrc file with the same name, are shown here.",
+                    "No lyrics found for this track.\nLyrics inside FLAC (LYRICS tag) / MP3 (USLT) files, an .lrc file with the same name, " +
+                        (if (st.lyricsOnline) "or lyrics found on the internet are shown here." else "are shown here. Turn on Settings → Lyrics → Download Lyrics to look on the internet."),
                     color = Color.White.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center
                 )

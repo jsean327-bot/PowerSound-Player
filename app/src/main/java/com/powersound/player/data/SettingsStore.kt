@@ -66,6 +66,8 @@ data class AppSettings(
     val lyricsCustomUrl: String = DEFAULT_LYRICS_URL,
     val scanLrc: Boolean = true,
     val lyricsUtf8: Boolean = true,
+    /** Settings → Lyrics → Download Lyrics: find lyrics on the internet (LRCLIB) when the file has none. */
+    val lyricsOnline: Boolean = true,
     // ---- Look and Feel → Notifications ----
     val notifButtons: List<Int> = DEFAULT_NOTIF_BUTTONS,
     val notifNavigateToList: Boolean = false,
@@ -362,7 +364,7 @@ object SettingsStore {
         put("prevResets", s.prevResets); put("proRewind", s.proRewindLong); put("navFolders", s.navigateToFolders)
         put("lyricsSwipe", s.lyricsSwipeUp); put("lyricsMenu", s.lyricsMenuItem); put("lyricsScreen", s.lyricsKeepScreenOn)
         put("lyricsOffset", s.lyricsOffsetMs); put("lyricsSize", s.lyricsSize); put("lyricsApp", s.lyricsApp)
-        put("lyricsUrl", s.lyricsCustomUrl); put("scanLrc", s.scanLrc); put("utf8", s.lyricsUtf8)
+        put("lyricsUrl", s.lyricsCustomUrl); put("scanLrc", s.scanLrc); put("utf8", s.lyricsUtf8); put("lyrOnline", s.lyricsOnline)
         put("notifButtons", JSONArray().apply { s.notifButtons.forEach { put(it) } })
         put("notifNav", s.notifNavigateToList); put("keepNotif", s.keepNotification); put("notifDisc", s.removeNotifOnDisconnect)
         put("ignVideo", s.ignoreVideo); put("countPct", s.countPlayedPct); put("staticNav", s.staticNavbar); put("navSeek", s.navbarSeekbar)
@@ -511,6 +513,7 @@ object SettingsStore {
             lyricsCustomUrl = o.optString("lyricsUrl", d.lyricsCustomUrl),
             scanLrc = o.optBoolean("scanLrc", d.scanLrc),
             lyricsUtf8 = o.optBoolean("utf8", d.lyricsUtf8),
+            lyricsOnline = o.optBoolean("lyrOnline", d.lyricsOnline),
             notifButtons = o.optJSONArray("notifButtons")?.let { a -> (0 until a.length()).map { a.optInt(it) } }?.takeIf { it.size == 6 } ?: d.notifButtons,
             notifNavigateToList = o.optBoolean("notifNav", d.notifNavigateToList),
             keepNotification = o.optBoolean("keepNotif", d.keepNotification),

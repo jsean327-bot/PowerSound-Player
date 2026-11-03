@@ -225,6 +225,8 @@ object LyricsReader {
     /** Settings → Lyrics → Rescan Lyrics Tags. */
     fun clearCache() = cache.clear()
 
+    fun forget(songId: Long) { cache.remove(songId) }
+
     suspend fun read(context: Context, songId: Long): Lyrics? = read(context, songId, "")
 
     /**
@@ -234,7 +236,8 @@ object LyricsReader {
     suspend fun read(context: Context, songId: Long, path: String): Lyrics? {
         cache[songId]?.let { return it.takeIf { l -> l.lines.isNotEmpty() } }
         val fromTag = TagReader.lyricsText(TagReader.read(context, songId))?.takeIf { it.isNotBlank() }?.let { parse(it) }
-        val result = fromTag ?: if (SettingsStore.value.scanLrc && path.isNotBlank()) readLrcFile(path) else null
+        val result = fromTag ?: (if (SettingsStore.value.scanLrc && path.isNotBlank()) readLrcFile(path) else null)
+            ?: OnlineLyrics.saved(context, songId)
         cache[songId] = result ?: EMPTY
         return result
     }
@@ -299,5 +302,84 @@ object LyricsReader {
         }
         val lines = if (out.any { it.timeMs != null }) out.filter { it.timeMs != null }.sortedBy { it.timeMs } else out
         return Lyrics(lines.dropWhile { it.text.isEmpty() && it.timeMs == null })
+    }
+}
+
+/**
+ * Settings → Lyrics → Download Lyrics: lyrics from LRCLIB (lrclib.net, free, no account) for tracks without
+ * their own. Synced (LRC) lyrics are preferred. What is found is saved on the phone, so each track is looked up once.
+ */
+object OnlineLyrics {
+
+    private val tried: MutableSet<Long> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+
+    private fun file(context: Context, songId: Long) = java.io.File(java.io.File(context.filesDir, "lyrics"), "$songId.lrc")
+
+    /** Lyrics downloaded before, or null. */
+    suspend fun saved(context: Context, songId: Long): Lyrics? = withContext(Dispatchers.IO) {
+        runCatching { file(context, songId).takeIf { it.exists() }?.readText()?.let { LyricsReader.parse(it) } }.getOrNull()
+            ?.takeIf { it.lines.isNotEmpty() }
+    }
+
+    /** Looks the song up (once per app start); null when nothing was found or downloading is off. */
+    suspend fun fetch(context: Context, song: Song): Lyrics? = withContext(Dispatchers.IO) {
+        if (!SettingsStore.value.lyricsOnline || song.title.isBlank() || !tried.add(song.id)) return@withContext null
+        val text = runCatching { lookup(song) }.getOrNull()?.takeIf { it.isNotBlank() } ?: return@withContext null
+        runCatching {
+            val f = file(context, song.id)
+            f.parentFile?.mkdirs()
+            f.writeText(text)
+        }
+        LyricsReader.forget(song.id)
+        LyricsReader.parse(text).takeIf { it.lines.isNotEmpty() }
+    }
+
+    private fun lookup(song: Song): String? {
+        val artist = song.artist.takeUnless { it.startsWith("Unknown") } ?: ""
+        val album = song.album.takeUnless { it.startsWith("Unknown") } ?: ""
+        val seconds = song.durationMs / 1000
+        fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
+        // 1) exact match: title + artist + album + length
+        if (artist.isNotEmpty()) {
+            val url = "https://lrclib.net/api/get?track_name=${enc(song.title)}&artist_name=${enc(artist)}" +
+                (if (album.isNotEmpty()) "&album_name=${enc(album)}" else "") + "&duration=$seconds"
+            http(url)?.let { body -> pick(org.json.JSONObject(body))?.let { return it } }
+        }
+        // 2) search; take the closest length, synced first
+        val q = if (artist.isNotEmpty()) "track_name=${enc(song.title)}&artist_name=${enc(artist)}" else "q=${enc(song.title)}"
+        val body = http("https://lrclib.net/api/search?$q") ?: return null
+        val arr = org.json.JSONArray(body)
+        var best: String? = null
+        var bestScore = Double.MAX_VALUE
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val text = pick(o) ?: continue
+            val diff = kotlin.math.abs(o.optDouble("duration", seconds.toDouble()) - seconds)
+            if (seconds > 0 && diff > 4) continue
+            val score = diff + (if (o.optString("syncedLyrics").isNullOrBlank() || o.isNull("syncedLyrics")) 10.0 else 0.0)
+            if (score < bestScore) { bestScore = score; best = text }
+        }
+        return best
+    }
+
+    private fun pick(o: org.json.JSONObject): String? {
+        if (o.optBoolean("instrumental", false)) return null
+        val synced = if (o.isNull("syncedLyrics")) "" else o.optString("syncedLyrics")
+        val plain = if (o.isNull("plainLyrics")) "" else o.optString("plainLyrics")
+        return synced.ifBlank { plain }.ifBlank { null }
+    }
+
+    private fun http(url: String): String? {
+        val c = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+        return try {
+            c.connectTimeout = 8000
+            c.readTimeout = 10000
+            c.setRequestProperty("User-Agent", "PowerSound Player (Android music player)")
+            if (c.responseCode != 200) null else c.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+        } catch (_: Exception) {
+            null
+        } finally {
+            c.disconnect()
+        }
     }
 }
