@@ -198,3 +198,100 @@ fun TagEditorDialog(song: Song, saving: Boolean, onSave: (TagEdits) -> Unit, onD
         }
     }
 }
+
+/**
+ * Multi-select → Tags: the same artist, album, album artist, genre, year or cover for every selected song.
+ * A field everyone already shares shows its value; empty fields (and "keep") leave each song as it is.
+ */
+@Composable
+fun BatchTagDialog(songs: List<Song>, saving: Boolean, onSave: (TagEdits) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val editable = remember(songs) { songs.count { TagEditor.canEdit(it) } }
+    val labels = listOf("Artist", "Album", "Album artist", "Genre", "Year")
+    // a value shared by every song, else empty (= keep each song's own)
+    val start = remember(songs) {
+        fun common(f: (Song) -> String) = songs.map(f).distinct().singleOrNull() ?: ""
+        listOf(
+            common { it.artist.takeUnless { a -> a == "Unknown artist" } ?: "" },
+            common { it.album.takeUnless { a -> a == "Unknown album" } ?: "" },
+            common { if (it.hasAlbumArtist) it.albumArtist else "" },
+            common { it.genre },
+            common { if (it.year > 0) it.year.toString() else "" }
+        )
+    }
+    val values = remember(songs) { mutableStateListOf<String>().apply { addAll(start) } }
+    var newCover by remember(songs) { mutableStateOf<ByteArray?>(null) }
+    var removeCover by remember(songs) { mutableStateOf(false) }
+    val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) scope.launch {
+            val bytes = TagEditor.coverFrom(context, uri)
+            if (bytes != null) { newCover = bytes; removeCover = false }
+            else Toast.makeText(context, "This picture can't be used", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val preview = remember(newCover) { newCover?.let { b -> BitmapFactory.decodeByteArray(b, 0, b.size)?.asImageBitmap() } }
+    fun field(i: Int): String? = values[i].trim().takeIf { it.isNotEmpty() && it != start[i].trim() }
+    val changed = newCover != null || removeCover || labels.indices.any { field(it) != null }
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier
+                .fillMaxWidth(0.94f)
+                .clip(RoundedCornerShape(22.dp))
+                .background(EditorBg)
+                .padding(18.dp)
+        ) {
+            Text("Edit tags of ${songs.size} songs", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(
+                if (editable == songs.size) "Fill in only what should be the same for all of them"
+                else "${songs.size - editable} of them can't be edited (only FLAC and MP3 can)",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 12.sp
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
+                    val p = preview
+                    when {
+                        p != null -> Image(p, contentDescription = "New cover", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        removeCover -> Text("No cover", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                        else -> Text("Keep", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    TextButton(enabled = !saving, onClick = { pickCover.launch("image/*") }) { Text("Same cover for all") }
+                    TextButton(enabled = !saving, onClick = { removeCover = true; newCover = null }) { Text("Remove covers") }
+                }
+            }
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                labels.forEachIndexed { i, label ->
+                    OutlinedTextField(
+                        value = values[i],
+                        onValueChange = { v -> values[i] = if (i == 4) v.filter { it.isDigit() }.take(4) else v.take(250) },
+                        label = { Text(label) },
+                        placeholder = { Text("Keep") },
+                        singleLine = true,
+                        enabled = !saving,
+                        keyboardOptions = if (i == 4) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                if (saving) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") }
+                TextButton(enabled = !saving && changed && editable > 0, onClick = {
+                    onSave(
+                        TagEdits(
+                            artist = field(0), album = field(1), albumArtist = field(2), genre = field(3), year = field(4),
+                            cover = newCover, removeCover = removeCover
+                        )
+                    )
+                }) { Text("Save") }
+            }
+        }
+    }
+}

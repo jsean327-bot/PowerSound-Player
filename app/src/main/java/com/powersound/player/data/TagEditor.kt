@@ -36,7 +36,7 @@ object TagEditor {
     }
 
     /** Returns null when the tags were saved, else a short message saying why not. */
-    suspend fun save(context: Context, song: Song, edits: TagEdits): String? = withContext(Dispatchers.IO) {
+    suspend fun save(context: Context, song: Song, edits: TagEdits, rescan: Boolean = true): String? = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "tagedit").apply { mkdirs() }
         val original = File(dir, "original")
         val edited = File(dir, "edited")
@@ -52,7 +52,7 @@ object TagEditor {
                 runCatching { writeBack(context, song.uri, original) }
                 throw e
             }
-            rescan(context, song)
+            if (rescan) rescan(context, listOf(song))
             null
         } catch (e: TagWriter.Unsupported) {
             e.message
@@ -71,13 +71,18 @@ object TagEditor {
         out.use { o -> file.inputStream().use { it.copyTo(o, 1 shl 16) } }
     }
 
-    /** Asks Android to read the file's tags again (waits up to 10 s). */
-    private suspend fun rescan(context: Context, song: Song) {
-        if (song.path.isBlank()) return
-        withTimeoutOrNull(10_000) {
+    /** Asks Android to read the files' tags again (waits until done, at most 10 s + 1 s per file). */
+    suspend fun rescan(context: Context, songs: List<Song>) {
+        val paths = songs.map { it.path }.filter { it.isNotBlank() }.distinct()
+        if (paths.isEmpty()) return
+        withTimeoutOrNull(10_000L + 1000L * paths.size) {
             suspendCancellableCoroutine<Unit> { cont ->
-                MediaScannerConnection.scanFile(context, arrayOf(song.path), null) { _, _ ->
-                    if (cont.isActive) cont.resumeWith(Result.success(Unit))
+                var left = paths.size
+                MediaScannerConnection.scanFile(context, paths.toTypedArray(), null) { _, _ ->
+                    synchronized(this@TagEditor) {
+                        left--
+                        if (left == 0 && cont.isActive) cont.resumeWith(Result.success(Unit))
+                    }
                 }
             }
         }

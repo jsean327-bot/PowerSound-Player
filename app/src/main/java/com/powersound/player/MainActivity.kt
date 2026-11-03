@@ -41,6 +41,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -73,6 +76,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -358,7 +362,19 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             }
         },
         exportPlaylists = { exportPlLauncher.launch(null) },
-        importM3u = { m3uLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "application/x-mpegurl", "*/*")) }
+        importM3u = { m3uLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "application/x-mpegurl", "*/*")) },
+        scanLoudness = { vm.scanLoudness() },
+        stopLoudness = { vm.stopLoudnessScan() },
+        loudnessCount = {
+            val songs = vm.library.value.songs
+            (songs.size - com.powersound.player.data.LoudnessStore.missing(songs).size) to songs.size
+        },
+        fixArabic = {
+            val fixes = vm.library.value.songs
+                .filter { com.powersound.player.data.TagEditor.canEdit(it) }
+                .mapNotNull { s -> com.powersound.player.data.ArabicFix.editsFor(s)?.let { s to it } }
+            if (fixes.isEmpty()) backupMessage = "No broken Arabic names were found. 👍" else ui.arabicFixes = fixes
+        }
     )
 
     // Settings → Look and Feel: always keep the screen on in the app
@@ -444,47 +460,56 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     }
     fun deleteSong(song: Song) = deleteSongs(listOf(song))
 
-    // Info/Tags → Edit → Save: Android asks the user before PowerSound may change a music file
-    var pendingTags by remember { mutableStateOf<Pair<Song, com.powersound.player.data.TagEdits>?>(null) }
+    // Writing tags (Info/Tags → Edit, multi-select → Tags, Fix Arabic Names): Android asks the user first
+    var pendingTags by remember { mutableStateOf<List<Pair<Song, com.powersound.player.data.TagEdits>>>(emptyList()) }
     fun runTagSave() {
-        val (s, edits) = pendingTags ?: return
+        val items = pendingTags
+        if (items.isEmpty()) return
         ui.tagSaving = true
-        vm.saveTags(s, edits) { error ->
+        if (items.size > 1) ui.tagProgress = 0 to items.size
+        vm.saveTagsBatch(items, { done, total -> if (total > 1) ui.tagProgress = done to total }) { saved, errors ->
             ui.tagSaving = false
-            pendingTags = null
-            if (error == null) {
+            ui.tagProgress = null
+            pendingTags = emptyList()
+            if (errors.isEmpty()) {
                 ui.tagEditFor = null
-                android.widget.Toast.makeText(context, "Tags saved", android.widget.Toast.LENGTH_SHORT).show()
+                ui.batchEditFor = null
+                android.widget.Toast.makeText(context, if (saved == 1) "Tags saved" else "Tags saved in $saved songs", android.widget.Toast.LENGTH_SHORT).show()
             } else {
-                backupMessage = error
+                ui.batchEditFor = null
+                backupMessage = (if (saved > 0) "Saved in $saved songs. Not saved:\n" else "") + errors.take(8).joinToString("\n") +
+                    (if (errors.size > 8) "\n… and ${errors.size - 8} more" else "")
             }
         }
     }
     val tagWriteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) runTagSave() else pendingTags = null
+        if (result.resultCode == Activity.RESULT_OK) runTagSave() else pendingTags = emptyList()
     }
-    fun saveTags(song: Song, edits: com.powersound.player.data.TagEdits) {
-        pendingTags = song to edits
+    fun saveTagsMany(items: List<Pair<Song, com.powersound.player.data.TagEdits>>) {
+        if (items.isEmpty()) return
+        pendingTags = items
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
-                val pi = MediaStore.createWriteRequest(context.contentResolver, listOf(song.uri))
+                // one question from Android for all the files
+                val pi = MediaStore.createWriteRequest(context.contentResolver, items.map { it.first.uri })
                 tagWriteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
                 return
             }
-            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q && items.size == 1) {
                 // Android 10 says no with an exception that carries its own question
-                context.contentResolver.openFileDescriptor(song.uri, "rw")?.close()
+                context.contentResolver.openFileDescriptor(items[0].first.uri, "rw")?.close()
             }
             runTagSave()
         } catch (e: SecurityException) {
             val rse = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) e as? RecoverableSecurityException else null
             if (rse != null) tagWriteLauncher.launch(IntentSenderRequest.Builder(rse.userAction.actionIntent.intentSender).build())
-            else { pendingTags = null; backupMessage = "Android didn't allow PowerSound to change this file" }
+            else { pendingTags = emptyList(); backupMessage = "Android didn't allow PowerSound to change this file" }
         } catch (e: Exception) {
-            pendingTags = null
+            pendingTags = emptyList()
             backupMessage = e.message ?: "Saving failed"
         }
     }
+    fun saveTags(song: Song, edits: com.powersound.player.data.TagEdits) = saveTagsMany(listOf(song to edits))
 
     // "Open with PowerSound" from a file manager or another app
     val opened by MainActivity.openedUri.collectAsStateWithLifecycle()
@@ -512,6 +537,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         playNext = { vm.playNext(it) },
         addToQueue = { vm.addToQueue(it) },
         addToPlaylist = { songs -> playlistFor = songs.map { it.id } },
+        editTags = { songs -> ui.batchEditFor = songs },
         delete = { songs -> if (appSettings.confirmDelete) ui.confirmDeleteMany = songs else deleteSongs(songs) },
         menuWithSelect = { s, select -> songMenuInfo = null; ui.songMenuSelect = select; songMenu = s }
     )
@@ -712,6 +738,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     AppDialogs(
         ui, vm, player, stats, update, currentId, appSettings, showNowPlayingState, settingsOpenState,
         saveTags = { s, edits -> saveTags(s, edits) },
+        saveTagsMany = { saveTagsMany(it) },
         deleteSongs = { deleteSongs(it) }
     )
 }
@@ -738,6 +765,12 @@ private class AppUi {
     var tagSaving: Boolean by mutableStateOf(false)
     /** The song menu's "Select" item: starts multi-select in the list the menu was opened from. */
     var songMenuSelect: (() -> Unit)? by mutableStateOf(null)
+    /** Saving tags in many files: (done, total). */
+    var tagProgress: Pair<Int, Int>? by mutableStateOf(null)
+    /** Multi-select → Tags. */
+    var batchEditFor: List<Song>? by mutableStateOf(null)
+    /** Settings → Library → Scanner → Fix Arabic Names: what would change. */
+    var arabicFixes: List<Pair<Song, com.powersound.player.data.TagEdits>>? by mutableStateOf(null)
     var settingsPage: SettingsPage? by mutableStateOf(null)
     var showChangelog: Boolean by mutableStateOf(false)
     var showHelp: Boolean by mutableStateOf(false)
@@ -757,6 +790,7 @@ private fun AppDialogs(
     showNowPlayingState: androidx.compose.runtime.MutableState<Boolean>,
     settingsOpenState: androidx.compose.runtime.MutableState<Boolean>,
     saveTags: (Song, com.powersound.player.data.TagEdits) -> Unit,
+    saveTagsMany: (List<Pair<Song, com.powersound.player.data.TagEdits>>) -> Unit,
     deleteSongs: (List<Song>) -> Unit
 ) {
     val deleteSong: (Song) -> Unit = { deleteSongs(listOf(it)) }
@@ -881,6 +915,58 @@ private fun AppDialogs(
             saving = ui.tagSaving,
             onSave = { edits -> saveTags(s, edits) },
             onDismiss = { if (!ui.tagSaving) ui.tagEditFor = null }
+        )
+    }
+    ui.batchEditFor?.let { songs ->
+        com.powersound.player.ui.BatchTagDialog(
+            songs = songs,
+            saving = ui.tagSaving,
+            onSave = { edits ->
+                val editable = songs.filter { com.powersound.player.data.TagEditor.canEdit(it) }
+                saveTagsMany(editable.map { it to edits })
+            },
+            onDismiss = { if (!ui.tagSaving) ui.batchEditFor = null }
+        )
+    }
+    ui.arabicFixes?.let { fixes ->
+        AlertDialog(
+            onDismissRequest = { ui.arabicFixes = null },
+            containerColor = Color(0xFF1B1B22),
+            title = { Text("Fix ${fixes.size} songs?", color = Color.White) },
+            text = {
+                androidx.compose.foundation.layout.Column(
+                    Modifier.heightIn(max = 380.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())
+                ) {
+                    Text("These names will be written correctly into the files:", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                    fixes.take(60).forEach { (s, e) ->
+                        Text(s.title, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                        Text(
+                            listOfNotNull(e.title ?: s.title, e.artist, e.album).joinToString(" • "),
+                            color = Color.White, fontSize = 14.sp
+                        )
+                    }
+                    if (fixes.size > 60) Text("… and ${fixes.size - 60} more", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                }
+            },
+            confirmButton = { TextButton(onClick = { ui.arabicFixes = null; saveTagsMany(fixes) }) { Text("Fix all") } },
+            dismissButton = { TextButton(onClick = { ui.arabicFixes = null }) { Text("Cancel") } }
+        )
+    }
+    ui.tagProgress?.let { (done, total) ->
+        AlertDialog(
+            onDismissRequest = {},
+            containerColor = Color(0xFF1B1B22),
+            title = { Text("Saving tags", color = Color.White) },
+            text = {
+                androidx.compose.foundation.layout.Column {
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = { if (total > 0) done / total.toFloat() else 0f },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text("$done of $total", color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(top = 8.dp))
+                }
+            },
+            confirmButton = {}
         )
     }
     ui.confirmDeleteMany?.let { list ->

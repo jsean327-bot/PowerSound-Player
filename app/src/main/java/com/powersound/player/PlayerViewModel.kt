@@ -227,6 +227,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         AudioEngine.init(app)
         StatsStore.init(app)
         LibraryStores.init(app)
+        com.powersound.player.data.LoudnessStore.init(app)
         com.powersound.player.data.SettingsStore.init(app)
         com.powersound.player.data.CrashLog.install(app)
         com.powersound.player.ui.HintStore.init(app)
@@ -353,31 +354,78 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         tryRestoreQueue()
     }
 
+    // ---- Replay Gain → Scan Loudness ----
+
+    private var loudnessJob: Job? = null
+
+    /** Measures every song without a measurement (keeps going while the app is open; stop with [stopLoudnessScan]). */
+    fun scanLoudness() {
+        if (loudnessJob?.isActive == true) return
+        val songs = _library.value.songs
+        loudnessJob = viewModelScope.launch {
+            com.powersound.player.data.LoudnessStore.scan(getApplication(), songs)
+            // the playing song gets its new gain
+            gainForId = null
+            applySongSettings(_player.value.nowPlaying?.songId)
+        }
+    }
+
+    fun stopLoudnessScan() {
+        loudnessJob?.cancel()
+        loudnessJob = null
+    }
+
     // ---- Info/Tags → Edit ----
 
     /**
      * Writes new tags into [song]'s file (after Android allowed it), reloads the library and updates the song
      * wherever it is in the queue. [onDone] gets null when it worked, else the reason it didn't.
      */
-    fun saveTags(song: Song, edits: com.powersound.player.data.TagEdits, onDone: (String?) -> Unit) {
+    fun saveTags(song: Song, edits: com.powersound.player.data.TagEdits, onDone: (String?) -> Unit) =
+        saveTagsBatch(listOf(song to edits), { _, _ -> }) { _, errors -> onDone(errors.firstOrNull()) }
+
+    /**
+     * Writes tags into several files (multi-select → Tags, Fix Arabic Names). [onProgress] gets (done, total);
+     * [onDone] gets how many were saved and the reasons of the ones that weren't.
+     */
+    fun saveTagsBatch(
+        items: List<Pair<Song, com.powersound.player.data.TagEdits>>,
+        onProgress: (Int, Int) -> Unit,
+        onDone: (saved: Int, errors: List<String>) -> Unit
+    ) {
         viewModelScope.launch {
             val c = controller
-            val key = song.id.toString()
-            val isCurrent = c != null && c.currentMediaItem?.mediaId == key
+            val keys = items.map { it.first.id.toString() }.toSet()
+            val isCurrent = c != null && c.currentMediaItem?.mediaId in keys
             val wasPlaying = isCurrent && c?.playWhenReady == true
             val pos = c?.currentPosition ?: 0L
             // the playing song pauses while its file is written
             if (wasPlaying) c?.pause()
-            val error = com.powersound.player.data.TagEditor.save(getApplication(), song, edits)
-            if (error == null) {
-                if (edits.changesPictures) com.powersound.player.data.ArtworkLoader.clear()
+            val errors = ArrayList<String>()
+            val saved = ArrayList<Song>()
+            var pictures = false
+            items.forEachIndexed { i, (song, edits) ->
+                onProgress(i, items.size)
+                val error = com.powersound.player.data.TagEditor.save(getApplication(), song, edits, rescan = false)
+                if (error == null) {
+                    saved.add(song)
+                    if (edits.changesPictures) pictures = true
+                } else {
+                    errors.add(if (items.size > 1) "${song.title}: $error" else error)
+                }
+            }
+            onProgress(items.size, items.size)
+            if (saved.isNotEmpty()) {
+                com.powersound.player.data.TagEditor.rescan(getApplication(), saved)
+                if (pictures) com.powersound.player.data.ArtworkLoader.clear()
                 buildLibrary()
-                val fresh = songById[song.id]
-                if (c != null && fresh != null) {
+                if (c != null) {
+                    val savedKeys = saved.map { it.id.toString() }.toSet()
                     for (i in 0 until c.mediaItemCount) {
-                        if (c.getMediaItemAt(i).mediaId == key) c.replaceMediaItem(i, fresh.toMediaItem())
+                        val id = c.getMediaItemAt(i).mediaId
+                        if (id in savedKeys) songById[id.toLong()]?.let { c.replaceMediaItem(i, it.toMediaItem()) }
                     }
-                    if (isCurrent) {
+                    if (isCurrent && c.currentMediaItem?.mediaId in savedKeys) {
                         // the file changed under the player: open it again at the same place
                         val index = c.currentMediaItemIndex
                         c.stop()
@@ -387,7 +435,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             if (wasPlaying) c?.play()
-            onDone(error)
+            onDone(saved.size, errors)
         }
     }
 
@@ -870,11 +918,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 // Settings → Audio → Replay Gain: source album / track, optional clipping prevention by the peak tag
                 val album = st.rgSource == 0
-                val db = if (album) rg.albumDb ?: rg.trackDb else rg.trackDb ?: rg.albumDb
-                val peak = if (album) rg.albumPeak ?: rg.trackPeak else rg.trackPeak ?: rg.albumPeak
-                var gain = if (db != null) db + st.replayGainPreamp else st.replayGainNoTagDb
-                if (st.replayGain == 2 && db != null && peak != null && peak > 0.0) {
-                    val maxGain = -20.0 * kotlin.math.log10(peak)
+                var db = if (album) rg.albumDb ?: rg.trackDb else rg.trackDb ?: rg.albumDb
+                var peak = if (album) rg.albumPeak ?: rg.trackPeak else rg.trackPeak ?: rg.albumPeak
+                // no Replay Gain tags: the loudness PowerSound measured itself (Replay Gain → Scan Loudness)
+                if (db == null) {
+                    val s = song(songId)
+                    if (s != null) {
+                        val albumSongs = _library.value.albums.firstOrNull { g -> g.songs.any { it.id == songId } }?.songs
+                        com.powersound.player.data.LoudnessStore.gainDb(s, albumSongs, album)?.let { (g, p) -> db = g; peak = p }
+                    }
+                }
+                val gain0 = db
+                var gain = if (gain0 != null) gain0 + st.replayGainPreamp else st.replayGainNoTagDb
+                val pk = peak
+                if (st.replayGain == 2 && db != null && pk != null && pk > 0.0) {
+                    val maxGain = -20.0 * kotlin.math.log10(pk)
                     if (gain > maxGain) gain = maxGain
                 }
                 AudioEngine.setReplayGain(gain)

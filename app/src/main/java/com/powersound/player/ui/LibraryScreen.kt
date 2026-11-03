@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.rounded.AddToQueue
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.PlaylistPlay
@@ -332,6 +333,8 @@ data class ListActions(
     /** Deletes the files; in a playlist it only takes the songs out of the playlist ([deleteRemoves]). */
     val delete: (List<Song>) -> Unit,
     val deleteRemoves: Boolean = false,
+    /** Multi-select → Tags: edit the tags of all the selected songs at once. */
+    val editTags: ((List<Song>) -> Unit)? = null,
     /** Long press: the song menu, with a "Select" item that starts multi-select in this list. */
     val menuWithSelect: (Song, () -> Unit) -> Unit
 )
@@ -503,6 +506,7 @@ fun SongListScreen(
                 onPlayNext = { done(actions.playNext) },
                 onQueue = { done(actions.addToQueue) },
                 onPlaylist = { done(actions.addToPlaylist) },
+                onTags = actions.editTags?.let { edit -> { done(edit) } },
                 onDelete = { done(actions.delete) }
             )
         } else {
@@ -524,6 +528,7 @@ private fun SelectionBar(
     onPlayNext: () -> Unit,
     onQueue: () -> Unit,
     onPlaylist: () -> Unit,
+    onTags: (() -> Unit)?,
     onDelete: () -> Unit
 ) {
     val primary = MaterialTheme.colorScheme.primary
@@ -564,6 +569,7 @@ private fun SelectionBar(
                 SelAction(Icons.Rounded.PlaylistPlay, "Play next", on, onPlayNext)
                 SelAction(Icons.Rounded.AddToQueue, "Queue", on, onQueue)
                 SelAction(Icons.Rounded.PlaylistAdd, "Playlist", on, onPlaylist)
+                if (onTags != null) SelAction(Icons.Rounded.Edit, "Tags", on, onTags)
                 SelAction(
                     if (deleteRemoves) Icons.Rounded.RemoveCircleOutline else Icons.Rounded.Delete,
                     if (deleteRemoves) "Remove" else "Delete",

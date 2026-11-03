@@ -257,7 +257,7 @@ private val SEARCH_INDEX: List<Pair<SettingsPage, String>> = listOf(
     SettingsPage.LIB_SCANNER to "Auto-scan", SettingsPage.LIB_SCANNER to "Rescan Immediately",
     SettingsPage.LIB_SCANNER to "Symbols to Split Multiple Artists", SettingsPage.LIB_SCANNER to "Symbols to Split Multiple Composers",
     SettingsPage.LIB_SCANNER to "Symbols to Split Multiple Genres", SettingsPage.LIB_SCANNER to "Unsplit Artists",
-    SettingsPage.LIB_SCANNER to "Tag Encoding", SettingsPage.LIB_SCANNER to "Always Use UTF-8 for .m3u",
+    SettingsPage.LIB_SCANNER to "Tag Encoding", SettingsPage.LIB_SCANNER to "Fix Arabic Names", SettingsPage.REPLAY_GAIN to "Scan Loudness", SettingsPage.LIB_SCANNER to "Always Use UTF-8 for .m3u",
     SettingsPage.HEADSET to "Resume On Wired Headset", SettingsPage.HEADSET to "Resume On Bluetooth",
     SettingsPage.HEADSET to "Pause On Headset Disconnect", SettingsPage.HEADSET to "Pause On USB DAC connection",
     SettingsPage.HEADSET to "Respond To Buttons", SettingsPage.HEADSET to "Wired Headset", SettingsPage.HEADSET to "Bluetooth",
@@ -1060,7 +1060,8 @@ fun HelpDialog(onDismiss: () -> Unit) {
         "Library" to "Swipe a page in any direction to go back. Pinch to zoom. ⋮ for sorting and zoom. Long press a song for its menu.",
         "Select songs" to "Long press a song → Select (or ⋮ → Select songs), tap more songs, then play, queue, add to a playlist or delete them together.",
         "Queue" to "Drag a song by its ≡ handle to move it.",
-        "Tags" to "Song menu → Info/Tags → Edit: change the title, artist, album, cover and more (FLAC and MP3).",
+        "Tags" to "Song menu → Info/Tags → Edit: change the title, artist, album, cover and more (FLAC and MP3). For many songs at once: select them → Tags. Broken Arabic names: Settings → Library → Scanner → Fix Arabic Names.",
+        "Same loudness" to "Settings → Audio → Replay Gain: turn it on, then Scan Loudness, so every song plays at the same level.",
         "Widget" to "Long press your home screen → Widgets → PowerSound.",
         "Open with" to "In a file manager or WhatsApp, open a music file with PowerSound to play it.",
         "Lyrics" to "Songs without lyrics get them from the internet when you open the lyrics (Settings → Lyrics → Download Lyrics).",
@@ -1233,7 +1234,14 @@ class LibraryActions(
     val resetStats: () -> Unit,
     val importSystemPlaylists: () -> Unit,
     val exportPlaylists: () -> Unit,
-    val importM3u: () -> Unit
+    val importM3u: () -> Unit,
+    /** Replay Gain → Scan Loudness. */
+    val scanLoudness: () -> Unit = {},
+    val stopLoudness: () -> Unit = {},
+    /** how many songs have a loudness measurement, of all */
+    val loudnessCount: () -> Pair<Int, Int> = { 0 to 0 },
+    /** Scanner → Fix Arabic Names. */
+    val fixArabic: () -> Unit = {}
 )
 
 /** page == SettingsPage.LOOK */
@@ -1866,6 +1874,22 @@ private fun SettingsPage12(page: SettingsPage?, args: PageArgs) {
         onReset = { set { it.copy(replayGainNoTagDb = 0.0) } }
     )
     Hint("Reads REPLAYGAIN_ALBUM/TRACK_GAIN and _PEAK tags from FLAC and MP3 files. Drag a knob up/down, double-tap to reset.")
+
+    // ---- songs without Replay Gain tags: PowerSound measures them itself ----
+    SectionLabel("Loudness Scan")
+    val scan by com.powersound.player.data.LoudnessStore.progress.collectAsState()
+    val (measured, total) = remember(scan) { args.lib.loudnessCount() }
+    val p = scan
+    if (p == null) {
+        ActionRow(
+            "Scan Loudness",
+            if (measured >= total && total > 0) "All $total songs are measured. New songs: tap again"
+            else "Measure how loud each song is, so songs without Replay Gain tags play at the same level too ($measured of $total measured)"
+        ) { args.lib.scanLoudness() }
+    } else {
+        ActionRow("Scanning… ${p.first} of ${p.second}", "Keep PowerSound open. Tap to stop (what is measured stays)") { args.lib.stopLoudness() }
+    }
+    if (st.replayGain == 0) Hint("Turn on Replay Gain above so the measured loudness is used")
     RestoreRow {
         set { it.copy(replayGain = d.replayGain, rgSource = d.rgSource, replayGainPreamp = d.replayGainPreamp, replayGainNoTagDb = d.replayGainNoTagDb) }
     }
@@ -2770,6 +2794,10 @@ private fun SettingsPage34(page: SettingsPage?, args: PageArgs) {
         subtitlePrefix = "For old tags that are not Unicode: "
     ) { v -> set { it.copy(tagEncoding = v) } }
     SwitchRow("Always Use UTF-8 for .m3u", "If disabled, .m3u files are read with the Tag Encoding above (.m3u8 is always UTF-8)", st.m3uUtf8) { v -> set { it.copy(m3uUtf8 = v) } }
+    ActionRow(
+        "Fix Arabic Names",
+        "Find songs whose Arabic title, artist or album shows as strange letters (like ÇáíÓÇ) and write them correctly into the files"
+    ) { args.lib.fixArabic() }
     RestoreRow {
         set {
             it.copy(
