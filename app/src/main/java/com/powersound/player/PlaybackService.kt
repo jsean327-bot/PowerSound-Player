@@ -142,7 +142,9 @@ class PlaybackService : MediaLibraryService() {
 
         // a library session: Android Auto (and similar) can browse the music too
         car = CarLibrary(this)
-        session = MediaLibrarySession.Builder(this, SessionPlayer(player), SessionCallback())
+        val local = SessionPlayer(player)
+        localPlayer = local
+        session = MediaLibrarySession.Builder(this, local, SessionCallback())
             .setBitmapLoader(LockArtLoader(this, scope))
             .setSessionActivity(sessionActivity)
             .build()
@@ -203,21 +205,302 @@ class PlaybackService : MediaLibraryService() {
         registerScreenReceiver(player)
 
         // the home-screen widget follows the song and the play state
-        player.addListener(object : Player.Listener {
+        player.addListener(widgetListener)
+        instance = this
+        setupCast()
+        refreshWidget(force = true)
+    }
+
+    private val widgetListener = object : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (events.containsAny(
+                    Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_PLAY_WHEN_READY_CHANGED,
+                    Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_TIMELINE_CHANGED,
+                    Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED,
+                    Player.EVENT_REPEAT_MODE_CHANGED, Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED
+                )
+            ) refreshWidget()
+            // a seek: the large widget's bar and time jump with it
+            if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)) refreshWidget(force = true)
+        }
+    }
+
+    // ---------------------------------------------------------------- Chromecast
+
+    private var localPlayer: Player? = null
+    private var castContext: com.google.android.gms.cast.framework.CastContext? = null
+    private var castPlayer: androidx.media3.cast.CastPlayer? = null
+    private var remote: com.powersound.player.cast.RemotePlayer? = null
+    private var castServer: com.powersound.player.cast.MediaServer? = null
+    private var castTicker: kotlinx.coroutines.Job? = null
+    private var castLastId: String? = null
+    private var castLastPos = 0L
+    /** Where the song now on the Chromecast sits in the phone's (whole) list. */
+    private var castMainIndex = 0
+    private var castVolumeListener: com.google.android.gms.cast.Cast.Listener? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
+    private var castWake: android.os.PowerManager.WakeLock? = null
+
+    /** True while the music plays on a Chromecast. */
+    val isCasting: Boolean get() = remote != null && session?.player === remote
+
+    /**
+     * Chromecast support. The phone keeps the whole list (in [main], not playing); the Chromecast gets the
+     * current song and the next ones in play order, a few at a time, and fetches each file from the phone
+     * ([com.powersound.player.cast.MediaServer]). Effects and EQ are not heard there: the Chromecast plays
+     * the original file itself.
+     */
+    private fun setupCast() {
+        val ctx = com.powersound.player.cast.CastControl.context(this) ?: return // no Google Play services
+        castContext = ctx
+        val server = com.powersound.player.cast.MediaServer(
+            openSong = { id -> openSongFile(id) },
+            cover = { id -> coverJpeg(id) }
+        )
+        castServer = server
+        val cp = runCatching {
+            androidx.media3.cast.CastPlayer(ctx, com.powersound.player.cast.CastItems(this, server))
+        }.getOrNull() ?: return
+        castPlayer = cp
+        remote = com.powersound.player.cast.RemotePlayer(
+            cp, ctx,
+            onNewList = { items, index, pos -> castNewList(items, index, pos) },
+            shuffleNow = { main?.shuffleModeEnabled == true },
+            onShuffle = { on -> castShuffle(on) },
+            onRepeat = { mode -> main?.repeatMode = mode }
+        )
+        cp.addListener(widgetListener)
+        cp.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (isCasting) castFollow()
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isCasting) holdCastLocks(isPlaying)
+            }
+
             override fun onEvents(player: Player, events: Player.Events) {
-                if (events.containsAny(
-                        Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_PLAY_WHEN_READY_CHANGED,
-                        Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_TIMELINE_CHANGED,
-                        Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED,
-                        Player.EVENT_REPEAT_MODE_CHANGED, Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED
-                    )
-                ) refreshWidget()
-                // a seek: the large widget's bar and time jump with it
-                if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)) refreshWidget(force = true)
+                rememberCast()
             }
         })
-        instance = this
+        cp.setSessionAvailabilityListener(object : androidx.media3.cast.SessionAvailabilityListener {
+            // posted: the Cast player is still setting itself up when it calls these
+            override fun onCastSessionAvailable() {
+                scope.launch { startCasting() }
+            }
+
+            override fun onCastSessionUnavailable() {
+                scope.launch { stopCasting() }
+            }
+        })
+        if (cp.isCastSessionAvailable) scope.launch { startCasting() }
+    }
+
+    private fun startCasting() {
+        val s = session ?: return
+        val p = main ?: return
+        val r = remote ?: return
+        if (s.player === r) return
+        val cs = castContext?.sessionManager?.currentCastSession ?: return
+        castServer?.start()
+        val play = p.playWhenReady
+        crossfader?.abort()
+        p.pause()
+        p.volume = 1f
+        p.stop() // keeps the list; the phone's audio is free
+        abandonFocus()
+        s.setPlayer(r)
+        loadCastWindow(play)
+        com.powersound.player.cast.CastControl.setDevice(cs.castDevice?.friendlyName ?: "Chromecast")
+        val vl = object : com.google.android.gms.cast.Cast.Listener() {
+            override fun onVolumeChanged() {
+                r.notifyVolume()
+            }
+        }
+        runCatching { cs.addCastListener(vl) }
+        castVolumeListener = vl
+        castTicker?.cancel()
+        castTicker = scope.launch {
+            while (true) {
+                delay(1000)
+                rememberCast()
+            }
+        }
         refreshWidget(force = true)
+    }
+
+    /** The Chromecast was disconnected (from the app, Google Home, or the Wi-Fi dropped): back to the phone, paused. */
+    private fun stopCasting() {
+        castTicker?.cancel()
+        castTicker = null
+        holdCastLocks(false)
+        com.powersound.player.cast.CastControl.setDevice(null)
+        castVolumeListener?.let { vl -> runCatching { castContext?.sessionManager?.currentCastSession?.removeCastListener(vl) } }
+        castVolumeListener = null
+        castServer?.stop()
+        val s = session ?: return
+        val p = main ?: return
+        val local = localPlayer ?: return
+        if (s.player === local) return
+        val at = castLastId?.let { findInMain(it, castMainIndex) } ?: -1
+        s.setPlayer(local)
+        if (p.mediaItemCount > 0) {
+            if (at >= 0) p.seekTo(at, castLastPos) else p.seekTo(p.currentMediaItemIndex.coerceAtLeast(0), 0L)
+            p.playWhenReady = false
+            p.prepare()
+        }
+        refreshWidget(force = true)
+    }
+
+    private fun rememberCast() {
+        val cp = castPlayer ?: return
+        if (!isCasting) return
+        val item = cp.currentMediaItem ?: return
+        castLastId = item.mediaId
+        castLastPos = cp.currentPosition
+    }
+
+    /** A new list from the app while casting: the phone keeps it all, the Chromecast gets the first part. */
+    private fun castNewList(items: List<MediaItem>, index: Int, pos: Long) {
+        val p = main ?: return
+        if (items.isEmpty()) {
+            p.clearMediaItems()
+            castPlayer?.clearMediaItems()
+            return
+        }
+        p.setMediaItems(items, index.coerceIn(0, items.size - 1), pos)
+        loadCastWindow(castPlayer?.playWhenReady ?: true)
+    }
+
+    /** Up to 10 songs before and 40 after the current one, in play order (shuffle included). */
+    private fun loadCastWindow(play: Boolean) {
+        val p = main ?: return
+        val cp = castPlayer ?: return
+        if (p.mediaItemCount == 0) return
+        val cur = p.currentMediaItemIndex.coerceAtLeast(0)
+        val before = playOrder(p, cur, 10, forward = false).reversed()
+        val after = playOrder(p, cur, 40, forward = true)
+        val order = before + cur + after
+        castMainIndex = cur
+        cp.repeatMode = p.repeatMode
+        cp.setMediaItems(order.map { p.getMediaItemAt(it) }, before.size, p.currentPosition.coerceAtLeast(0L))
+        cp.playWhenReady = play
+    }
+
+    /** The Chromecast moved to another song: the phone's list follows, and more songs are sent before they run out. */
+    private fun castFollow() {
+        val cp = castPlayer ?: return
+        val p = main ?: return
+        val id = cp.currentMediaItem?.mediaId ?: return
+        val at = findInMain(id, castMainIndex)
+        if (at >= 0) {
+            castMainIndex = at
+            if (at != p.currentMediaItemIndex) p.seekTo(at, 0L)
+        }
+        val n = cp.mediaItemCount
+        val cur = cp.currentMediaItemIndex
+        if (n - cur <= 5) {
+            val lastAt = findInMain(cp.getMediaItemAt(n - 1).mediaId, castMainIndex + (n - 1 - cur))
+            if (lastAt >= 0) {
+                val more = playOrder(p, lastAt, 30, forward = true)
+                if (more.isNotEmpty()) cp.addMediaItems(more.map { p.getMediaItemAt(it) })
+            }
+        }
+    }
+
+    /** Shuffle switched while casting: the songs after the current one are sent again in the new order. */
+    private fun castShuffle(on: Boolean) {
+        val p = main ?: return
+        val cp = castPlayer ?: return
+        p.shuffleModeEnabled = on
+        val n = cp.mediaItemCount
+        val cur = cp.currentMediaItemIndex
+        if (n == 0 || cur < 0) return
+        if (n > cur + 1) cp.removeMediaItems(cur + 1, n)
+        val more = playOrder(p, castMainIndex, 40, forward = true)
+        if (more.isNotEmpty()) cp.addMediaItems(more.map { p.getMediaItemAt(it) })
+    }
+
+    private fun playOrder(p: Player, from: Int, count: Int, forward: Boolean): List<Int> {
+        val tl = p.currentTimeline
+        if (tl.isEmpty) return emptyList()
+        // "repeat all" carries on from the start, but never past the song we began with
+        val rep = if (p.repeatMode == Player.REPEAT_MODE_ALL) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+        val out = ArrayList<Int>()
+        var i = from
+        repeat(count) {
+            i = if (forward) tl.getNextWindowIndex(i, rep, p.shuffleModeEnabled)
+            else tl.getPreviousWindowIndex(i, rep, p.shuffleModeEnabled)
+            if (i == C.INDEX_UNSET || i == from) return out
+            out.add(i)
+        }
+        return out
+    }
+
+    /** Index of the song [id] in the phone's list, the one nearest to [near]; -1 when it isn't there. */
+    private fun findInMain(id: String, near: Int): Int {
+        val p = main ?: return -1
+        val n = p.mediaItemCount
+        if (n == 0) return -1
+        val start = near.coerceIn(0, n - 1)
+        for (d in 0 until n) {
+            val a = start + d
+            val b = start - d
+            if (a < n && p.getMediaItemAt(a).mediaId == id) return a
+            if (d > 0 && b >= 0 && p.getMediaItemAt(b).mediaId == id) return b
+            if (a >= n && b < 0) break
+        }
+        return -1
+    }
+
+    /** A song file for the Chromecast (runs on the web server's thread). */
+    private fun openSongFile(id: Long): com.powersound.player.cast.ServedFile? = runCatching {
+        val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+        val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return null
+        val stream = java.io.FileInputStream(pfd.fileDescriptor)
+        val size = pfd.statSize.takeIf { it > 0 } ?: stream.channel.size()
+        val type = contentResolver.getType(uri)?.lowercase()
+        val mime = when {
+            type == null || type.contains("flac") -> "audio/flac"
+            type == "audio/x-wav" || type == "audio/wave" -> "audio/wav"
+            else -> type
+        }
+        com.powersound.player.cast.ServedFile(stream.channel, size, mime) {
+            stream.close()
+            pfd.close()
+        }
+    }.getOrNull()
+
+    /** The cover the Chromecast shows (runs on the web server's thread). */
+    private fun coverJpeg(id: Long): ByteArray? = runCatching {
+        val bmp = kotlinx.coroutines.runBlocking {
+            com.powersound.player.data.ArtworkLoader.loadBitmap(this@PlaybackService, id, 720)
+        } ?: return null
+        val out = java.io.ByteArrayOutputStream()
+        bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+        out.toByteArray()
+    }.getOrNull()
+
+    /** While the Chromecast plays, the phone keeps its Wi-Fi awake so the songs keep flowing with the screen off. */
+    @Suppress("DEPRECATION")
+    private fun holdCastLocks(on: Boolean) {
+        if (on) {
+            if (wifiLock == null) wifiLock = runCatching {
+                (applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager)
+                    .createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "PowerSound:cast")
+                    .apply { setReferenceCounted(false); acquire() }
+            }.getOrNull()
+            if (castWake == null) castWake = runCatching {
+                getSystemService(android.os.PowerManager::class.java)
+                    .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "PowerSound:cast")
+                    .apply { setReferenceCounted(false); acquire(6 * 60 * 60 * 1000L) }
+            }.getOrNull()
+        } else {
+            wifiLock?.let { runCatching { it.release() } }
+            wifiLock = null
+            castWake?.let { runCatching { it.release() } }
+            castWake = null
+        }
     }
 
     // ---------------------------------------------------------------- home-screen widget
@@ -230,7 +513,7 @@ class PlaybackService : MediaLibraryService() {
     /** Redraws the widgets (song, cover, play/pause, song bar, shuffle / repeat). Cheap when nothing changed. */
     fun refreshWidget(force: Boolean = false) {
         if (!WidgetUpdater.hasWidgets(this)) { stopWidgetTicker(); return }
-        val p = main ?: return
+        val p: Player = session?.player ?: main ?: return
         val state = widgetState(p)
         val id = p.currentMediaItem?.mediaId?.toLongOrNull()
         val key = "${state.title}|${state.artist}|$id|${state.playing}|${p.isPlaying}|${state.durationMs}|${state.repeat}|${state.shuffle}"
@@ -245,7 +528,7 @@ class PlaybackService : MediaLibraryService() {
                 val art = runCatching { com.powersound.player.data.ArtworkLoader.loadBitmap(this@PlaybackService, id, 256) }.getOrNull()
                 widgetArt = art
                 widgetArtId = id
-                val now = main ?: return@launch
+                val now: Player = session?.player ?: main ?: return@launch
                 if (art != null) WidgetUpdater.show(this@PlaybackService, widgetState(now), art)
             }
         }
@@ -278,7 +561,7 @@ class PlaybackService : MediaLibraryService() {
         widgetTicker = scope.launch {
             while (true) {
                 delay(1000)
-                val q = main ?: break
+                val q: Player = session?.player ?: main ?: break
                 if (!q.isPlaying) break
                 if (power?.isInteractive != false) {
                     val dur = q.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
@@ -339,8 +622,9 @@ class PlaybackService : MediaLibraryService() {
     private fun widgetCommand(action: String) {
         val s = session ?: return
         val p = main ?: return
-        val inForeground = p.playWhenReady &&
-            (p.playbackState == Player.STATE_READY || p.playbackState == Player.STATE_BUFFERING)
+        val active = s.player
+        val inForeground = active.playWhenReady &&
+            (active.playbackState == Player.STATE_READY || active.playbackState == Player.STATE_BUFFERING)
         if (!inForeground) holdForeground()
         val modeTap = action == WidgetUpdater.ACTION_REPEAT || action == WidgetUpdater.ACTION_SHUFFLE
         if (modeTap) {
@@ -358,7 +642,7 @@ class PlaybackService : MediaLibraryService() {
                 if (session?.connectedControllers.isNullOrEmpty()) stopSelf()
                 return
             }
-            if (p.playbackState == Player.STATE_IDLE) p.prepare()
+            if (!isCasting && p.playbackState == Player.STATE_IDLE) p.prepare()
         }
         // the command runs first, while this service is in the foreground: when Media3's own player
         // notification arrives, it can stay there for as long as the music plays
@@ -797,7 +1081,7 @@ class PlaybackService : MediaLibraryService() {
                         it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
                         it.type == AudioDeviceInfo.TYPE_USB_HEADSET
                 }
-                if (((bt && st.resumeOnBluetooth) || (wired && st.resumeOnWired)) &&
+                if (((bt && st.resumeOnBluetooth) || (wired && st.resumeOnWired)) && !isCasting &&
                     !player.isPlaying && player.mediaItemCount > 0
                 ) {
                     // give the phone a moment to route audio to the new device
@@ -825,7 +1109,7 @@ class PlaybackService : MediaLibraryService() {
     private fun registerVolumeObserver(player: ExoPlayer) {
         val obs = object : android.database.ContentObserver(android.os.Handler(mainLooper)) {
             override fun onChange(selfChange: Boolean) {
-                if (!SettingsStore.value.pauseOnVolumeZero) return
+                if (!SettingsStore.value.pauseOnVolumeZero || isCasting) return
                 val vol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                 if (vol == 0 && player.isPlaying) {
                     pausedByVolume = true
@@ -906,10 +1190,16 @@ class PlaybackService : MediaLibraryService() {
         crossfader?.release()
         crossfader = null
         scope.cancel()
-        session?.run {
-            player.release()
-            release()
+        castTicker?.cancel()
+        holdCastLocks(false)
+        castServer?.stop()
+        com.powersound.player.cast.CastControl.setDevice(null)
+        runCatching {
+            castPlayer?.setSessionAvailabilityListener(null)
+            castPlayer?.release()
         }
+        localPlayer?.release()
+        session?.release()
         session = null
         main = null
         super.onDestroy()

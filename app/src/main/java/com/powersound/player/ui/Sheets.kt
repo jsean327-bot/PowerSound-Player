@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -126,7 +127,9 @@ fun MenuSheet(
     onChangelog: () -> Unit,
     onHelp: () -> Unit,
     onStats: () -> Unit,
-    sleepLabel: String?
+    sleepLabel: String?,
+    onCast: () -> Unit = {},
+    castDevice: String? = null
 ) {
     val context = LocalContext.current
     val version = runCatching {
@@ -165,6 +168,7 @@ fun MenuSheet(
             Spacer(Modifier.height(6.dp))
             SheetItem(Icons.Rounded.Equalizer, "Equalizer") { onDismiss(); onEqualizer() }
             SheetItem(Icons.Rounded.Timer, if (sleepLabel != null) "Sleep timer ($sleepLabel)" else "Sleep timer") { onDismiss(); onSleep() }
+            SheetItem(Icons.Rounded.Cast, if (castDevice != null) "Cast (playing on $castDevice)" else "Cast to Chromecast") { onDismiss(); onCast() }
             SheetItem(Icons.Rounded.Refresh, "Rescan library") { onDismiss(); onRescan() }
             SheetItem(Icons.Rounded.SystemUpdate, "Check for updates") { onDismiss(); onCheckUpdate() }
             SheetItem(Icons.Rounded.BarChart, "Statistics") { onDismiss(); onStats() }

@@ -577,6 +577,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             delay(1500)
             val c = controller ?: return@launch
             if (c.mediaItemCount == 0) return@launch
+            // casting: the Chromecast holds only part of the list; the phone's whole list stays saved
+            if (c.deviceInfo.playbackType == androidx.media3.common.DeviceInfo.PLAYBACK_TYPE_REMOTE) return@launch
             val ids = (0 until minOf(c.mediaItemCount, 3000)).mapNotNull { c.getMediaItemAt(it).mediaId.toLongOrNull() }
             if (ids.size != c.mediaItemCount) return@launch // streams are not restored
             modePrefs.edit()

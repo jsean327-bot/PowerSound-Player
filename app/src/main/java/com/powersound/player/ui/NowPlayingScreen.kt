@@ -81,6 +81,8 @@ import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.ThumbDown
 import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.CastConnected
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -154,7 +156,8 @@ val PLAYER_BUTTONS = listOf(
     PlayerButton("bookmark", "Add bookmark", Icons.Rounded.BookmarkBorder),
     PlayerButton("playlist", "Add to playlist", Icons.Rounded.PlaylistAdd),
     PlayerButton("counter", "Track counter", Icons.Rounded.FormatListNumbered),
-    PlayerButton("like", "Like", Icons.Outlined.ThumbUp)
+    PlayerButton("like", "Like", Icons.Outlined.ThumbUp),
+    PlayerButton("cast", "Cast (Chromecast)", Icons.Rounded.Cast)
 )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -196,8 +199,10 @@ fun NowPlayingScreen(
     onAudioInfo: () -> Unit,
     onEqualizer: () -> Unit,
     onBookmark: () -> Unit,
-    onAddToPlaylist: () -> Unit
+    onAddToPlaylist: () -> Unit,
+    onCast: () -> Unit = {}
 ) {
+    val castDevice by com.powersound.player.cast.CastControl.device.collectAsState()
     val np = state.nowPlaying
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -651,6 +656,10 @@ fun NowPlayingScreen(
                         onLongClick = { choosePreset = true }
                     )
                     "sleep" -> SmallPill(Icons.Rounded.Timer, state.sleepEndsAt != null, st.buttonsBg, onClick = onSleep)
+                    "cast" -> SmallPill(
+                        if (castDevice != null) Icons.Rounded.CastConnected else Icons.Rounded.Cast,
+                        castDevice != null, st.buttonsBg, onClick = onCast
+                    )
                     "repeat" -> SmallPill(
                         repeatIcon(state.repeat), state.repeat != RepeatMode.LIST_STOP, st.buttonsBg,
                         onClick = { showToast(onRepeat().label) },

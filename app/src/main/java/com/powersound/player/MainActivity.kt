@@ -716,7 +716,8 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 onAudioInfo = { showAudioInfo = true },
                 onEqualizer = { showNowPlaying = false; vm.tab = Tab.EQ },
                 onBookmark = { np?.songId?.let { vm.addBookmark(it) } },
-                onAddToPlaylist = { np?.songId?.let { playlistFor = listOf(it) } }
+                onAddToPlaylist = { np?.songId?.let { playlistFor = listOf(it) } },
+                onCast = { ui.showCast = true }
             )
         }
     }
@@ -777,6 +778,7 @@ private class AppUi {
     var arabicFixes: List<Pair<Song, com.powersound.player.data.TagEdits>>? by mutableStateOf(null)
     /** Menu → Statistics. */
     var showStats: Boolean by mutableStateOf(false)
+    var showCast: Boolean by mutableStateOf(false)
     /** Song menu → EQ Preset. */
     var eqAssignFor: Song? by mutableStateOf(null)
     /** Settings → Library → Find Duplicates: groups of the same song, best copy first. */
@@ -867,6 +869,8 @@ private fun AppDialogs(
             onChangelog = { showChangelog = true },
             onHelp = { showHelp = true },
             onStats = { ui.showStats = true },
+            onCast = { ui.showCast = true },
+            castDevice = com.powersound.player.cast.CastControl.device.value,
             sleepLabel = left?.let { "$it min left" }
         )
     }
@@ -1009,6 +1013,9 @@ private fun AppDialogs(
             onSaveToFile = if (s != null && com.powersound.player.data.TagEditor.canEdit(s)) ({ saveCover(listOf(s)) }) else null,
             onSaveToAlbum = if (album != null && album.size > 1) ({ saveCover(album) }) else null
         )
+    }
+    if (ui.showCast) {
+        com.powersound.player.ui.CastDialog(onDismiss = { ui.showCast = false })
     }
     if (ui.showStats) {
         com.powersound.player.ui.StatsScreen(songs = vm.library.value.songs, stats = stats, onDismiss = { ui.showStats = false })

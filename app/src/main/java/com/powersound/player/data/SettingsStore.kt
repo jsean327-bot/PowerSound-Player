@@ -276,7 +276,7 @@ fun AppSettings.eqLayout(): Triple<Int, Double, Double> = when {
     else -> Triple(eqBandCount, 31.0, 16000.0)
 }
 
-val DEFAULT_PLAYER_BUTTONS = listOf("viz", "sleep", "repeat", "shuffle")
+val DEFAULT_PLAYER_BUTTONS = listOf("viz", "sleep", "repeat", "shuffle", "cast")
 val DEFAULT_NOTIF_BUTTONS = listOf(2, 3, 1, 7, 8, 0) // shuffle, close | repeat, -10, +10, none
 /** Settings → Notifications → Buttons. Index stored in [AppSettings.notifButtons]. */
 val NOTIF_ACTIONS = listOf("None", "Repeat", "Shuffle", "Close", "Like", "Unlike", "Rating", "-10", "+10", "Prev. category", "Next category")
@@ -365,6 +365,7 @@ object SettingsStore {
         put("statusNoBg", s.statusBarNoBg); put("navbar", s.navbarStyle); put("navOffset", s.offsetNavbar); put("sysNavNoBg", s.androidNavNoBg)
         put("artAnim", s.artAnimation); put("marquee", s.marquee); put("marqueeAll", s.marqueeEverywhere)
         put("playerButtons", JSONArray().apply { s.playerButtons.forEach { put(it) } })
+        put("castBtn", true)
         put("noGap", s.preferNoGap); put("noEditLp", s.noEditLongPress); put("ratingType", s.ratingType); put("menuBtn", s.menuButton)
         put("menuLp", s.menuLongPress); put("lyricsBtn", s.lyricsButton); put("line2", s.line2Press); put("line2Lp", s.line2LongPress)
         put("prevResets", s.prevResets); put("proRewind", s.proRewindLong); put("navFolders", s.navigateToFolders)
@@ -501,7 +502,9 @@ object SettingsStore {
             artAnimation = o.optBoolean("artAnim", d.artAnimation),
             marquee = o.optBoolean("marquee", d.marquee),
             marqueeEverywhere = o.optBoolean("marqueeAll", d.marqueeEverywhere),
-            playerButtons = o.optJSONArray("playerButtons")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: d.playerButtons,
+            playerButtons = (o.optJSONArray("playerButtons")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: d.playerButtons)
+                // the Cast button arrives once in the player screen for everyone; removing it afterwards is kept
+                .let { if (!o.has("castBtn") && "cast" !in it) it + "cast" else it },
             preferNoGap = o.optBoolean("noGap", d.preferNoGap),
             noEditLongPress = o.optBoolean("noEditLp", d.noEditLongPress),
             ratingType = o.optInt("ratingType", d.ratingType),

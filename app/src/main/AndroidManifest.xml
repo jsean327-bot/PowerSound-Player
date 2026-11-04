@@ -148,6 +148,11 @@
             </intent-filter>
         </service>
 
+        <!-- Chromecast: the Cast settings (Google's default receiver, no extra notification) -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.powersound.player.cast.PowerSoundCastOptions" />
+
         <!-- Android Auto: PowerSound is a music app -->
         <meta-data
             android:name="com.google.android.gms.car.application"
