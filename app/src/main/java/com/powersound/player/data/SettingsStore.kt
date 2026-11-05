@@ -739,6 +739,46 @@ object CrashLog {
         Thread.setDefaultUncaughtExceptionHandler(Handler(app, previous))
     }
 
+    @Volatile
+    private var watching = false
+
+    /**
+     * "Not responding" watch: when the screen thread is stuck for 4 seconds, what it is doing is saved in the
+     * error log (Settings → Misc → View error log), so the cause can be found and fixed.
+     */
+    fun watchMainThread(context: Context) {
+        if (watching) return
+        watching = true
+        val app = context.applicationContext
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        Thread({
+            var reported = false
+            while (true) {
+                val answeredFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+                val ping = Runnable { answeredFlag.set(true) }
+                main.post(ping)
+                try {
+                    Thread.sleep(4000)
+                } catch (_: InterruptedException) {
+                    return@Thread
+                }
+                val answered = answeredFlag.get()
+                if (!answered && !reported) {
+                    reported = true
+                    runCatching {
+                        if (SettingsStore.value.keepCrashLog) {
+                            val stack = android.os.Looper.getMainLooper().thread.stackTrace.joinToString("\n") { "    at $it" }
+                            java.io.File(app.filesDir, FILE).writeText(
+                                "PowerSound NOT RESPONDING • ${java.util.Date()}\nThe screen thread was stuck here:\n\n$stack"
+                            )
+                        }
+                    }
+                } else if (answered) reported = false
+                main.removeCallbacks(ping)
+            }
+        }, "PowerSound-watchdog").apply { isDaemon = true }.start()
+    }
+
     private class Handler(val app: Context, val previous: Thread.UncaughtExceptionHandler?) : Thread.UncaughtExceptionHandler {
         override fun uncaughtException(t: Thread, e: Throwable) {
             try {

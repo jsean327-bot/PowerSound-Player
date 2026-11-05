@@ -167,6 +167,7 @@ class VideoActivity : ComponentActivity() {
         VideoPrefsStore.init(this)
         // opened from a file manager / another app: crashes are saved too (Settings → Misc → View error log)
         com.powersound.player.data.CrashLog.install(this)
+        com.powersound.player.data.CrashLog.watchMainThread(this)
         val req = VideoRequest.from(this, intent)
         if (req == null) {
             finish()
@@ -187,11 +188,9 @@ class VideoActivity : ComponentActivity() {
         audioSessionId = runCatching { Util.generateAudioSessionIdV21(this) }.getOrDefault(C.AUDIO_SESSION_ID_UNSET)
 
         val p = buildPlayer()
-        p.setMediaItems(req.items, req.startIndex, req.startPositionMs)
-        p.prepare()
-        p.playWhenReady = true
         playerState.value = p
         attachEffects()
+        startRequest(req)
 
         lifecycleScope.launch {
             var tick = 0
@@ -218,6 +217,27 @@ class VideoActivity : ComponentActivity() {
     }
 
     // ---------------------------------------------------------------- the player
+
+    /** Plays a request; library folders first get their subtitle files (read in the background). */
+    private fun startRequest(req: VideoRequest) {
+        val p = playerOrNull() ?: return
+        if (req.paths.isEmpty()) {
+            p.setMediaItems(req.items, req.startIndex, req.startPositionMs)
+            p.prepare()
+            p.play()
+            return
+        }
+        lifecycleScope.launch {
+            val items = withContext(Dispatchers.IO) {
+                runCatching { VideoRequest.withSidecars(req.items, req.paths) }.getOrDefault(req.items)
+            }
+            val q = playerOrNull() ?: return@launch
+            if (request !== req) return@launch
+            q.setMediaItems(items, req.startIndex, req.startPositionMs)
+            q.prepare()
+            q.play()
+        }
+    }
 
     private val listener = object : Player.Listener {
         override fun onVideoSizeChanged(videoSize: VideoSize) = followVideoShape(videoSize)
@@ -1120,9 +1140,7 @@ class VideoActivity : ComponentActivity() {
         abA.value = null
         abB.value = null
         if (rotation.intValue == 0) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        p.setMediaItems(req.items, req.startIndex, req.startPositionMs)
-        p.prepare()
-        p.play()
+        startRequest(req)
     }
 }
 
@@ -1135,7 +1153,9 @@ class VideoRequest(
     val startIndex: Int,
     val startPositionMs: Long,
     val headers: Map<String, String>,
-    val returnResult: Boolean
+    val returnResult: Boolean,
+    /** Library videos: their file paths (to find subtitle files next to them). */
+    val paths: List<String?> = emptyList()
 ) {
     companion object {
 
@@ -1156,11 +1176,11 @@ class VideoRequest(
                     .setUri(uri)
                     .setMediaId(id.toString())
                     .setMediaMetadata(MediaMetadata.Builder().setTitle(titles?.getOrNull(i) ?: "Video").build())
-                    .setSubtitleConfigurations(paths?.getOrNull(i)?.takeIf { it.isNotBlank() }?.let { sidecarSubtitles(it) }.orEmpty())
                     .build()
             }
             val start = VideoStore.position(context, keys[index])
-            return VideoRequest(items, keys, index, start, emptyMap(), returnResult = false)
+            // subtitle files next to the videos are looked for later, off the screen thread
+            return VideoRequest(items, keys, index, start, emptyMap(), returnResult = false, paths = paths?.toList().orEmpty())
         }
 
         @Suppress("DEPRECATION")
@@ -1252,6 +1272,33 @@ class VideoRequest(
         }
 
         /** "Episode 1.srt" / ".ass" / ".vtt" next to "Episode 1.mkv" (needs All Files Access to be read). */
+        /**
+         * Adds "Episode 1.srt" (or .ass / .vtt) found next to each video. Each folder is read only once, so a
+         * folder of hundreds of episodes stays quick. Runs in the background.
+         */
+        fun withSidecars(items: List<MediaItem>, paths: List<String?>): List<MediaItem> {
+            val folders = HashMap<String, List<File>>()
+            return items.mapIndexed { i, item ->
+                val path = paths.getOrNull(i)?.takeIf { it.isNotBlank() } ?: return@mapIndexed item
+                val f = File(path)
+                val dir = f.parent ?: return@mapIndexed item
+                val subFiles = folders.getOrPut(dir) {
+                    runCatching {
+                        File(dir).listFiles { x -> x.name.substringAfterLast('.').lowercase() in setOf("srt", "ass", "ssa", "vtt") }?.toList()
+                    }.getOrNull().orEmpty()
+                }
+                if (subFiles.isEmpty()) return@mapIndexed item
+                val base = f.name.substringBeforeLast('.')
+                val found = subFiles.filter { it.name.startsWith(base) && runCatching { it.canRead() }.getOrDefault(false) }
+                if (found.isEmpty()) item
+                else item.buildUpon().setSubtitleConfigurations(
+                    found.sortedBy { it.name.length }.mapIndexed { k, s ->
+                        subtitle(Uri.fromFile(s), s.name.removePrefix(base).trim('.', ' ', '_', '-').ifBlank { s.name }, selected = k == 0)
+                    }
+                ).build()
+            }
+        }
+
         fun sidecarSubtitles(videoPath: String): List<MediaItem.SubtitleConfiguration> {
             val f = File(videoPath)
             val dir = f.parentFile ?: return emptyList()
