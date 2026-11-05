@@ -87,6 +87,17 @@ data class AppSettings(
     /** Video player: subtitle size (1 = normal) and the small window when Home is pressed. */
     val videoSubSize: Float = 1f,
     val videoAutoPip: Boolean = true,
+    /** Video decoder: 0 HW, 1 HW+, 2 SW; software decoding for the sound only. */
+    val videoDecoder: Int = 0,
+    val videoSwAudio: Boolean = false,
+    /** Video ⋮ → Background Play: the sound goes on when you leave the video. */
+    val videoBackground: Boolean = false,
+    /** Video ⋮ → Customise Items: which tools show, in this order. */
+    val videoTools: List<String> = DEFAULT_VIDEO_TOOLS,
+    /** Video equalizer: on/off, band levels (millibels, comma separated) and bass boost (0…1000). */
+    val videoEqOn: Boolean = false,
+    val videoEqBands: String = "",
+    val videoBass: Int = 0,
     // ---- Audio → Crossfade, Fade, and Gapless ----
     val autoFade: Int = 0,                   // 0 no fading, 1 non-gapless tracks, 2 all songs, 3 shuffled songs
     val crossfadeSec: Float = 5f,
@@ -279,6 +290,11 @@ fun AppSettings.eqLayout(): Triple<Int, Double, Double> = when {
     else -> Triple(eqBandCount, 31.0, 16000.0)
 }
 
+/** The video player's ⋮ tools, in MX Player's order. */
+val DEFAULT_VIDEO_TOOLS = listOf(
+    "night", "shuffle", "loop", "mute", "sleep", "ab", "eq", "speed", "screenshot", "background", "rotation"
+)
+
 val DEFAULT_PLAYER_BUTTONS = listOf("viz", "sleep", "repeat", "shuffle", "cast")
 val DEFAULT_NOTIF_BUTTONS = listOf(2, 3, 1, 7, 8, 0) // shuffle, close | repeat, -10, +10, none
 /** Settings → Notifications → Buttons. Index stored in [AppSettings.notifButtons]. */
@@ -344,6 +360,9 @@ object SettingsStore {
         put("rgMode", s.replayGain); put("rgSrc", s.rgSource); put("rgPre", s.replayGainPreamp); put("rgNoTag", s.replayGainNoTagDb)
         put("fade", s.fadeOnPause); put("fadeMs", s.fadeMs); put("sleepFade", s.sleepFade)
         put("videoSubSize", s.videoSubSize.toDouble()); put("videoAutoPip", s.videoAutoPip)
+        put("videoDecoder", s.videoDecoder); put("videoSwAudio", s.videoSwAudio); put("videoBackground", s.videoBackground)
+        put("videoTools", JSONArray().apply { s.videoTools.forEach { put(it) } })
+        put("videoEqOn", s.videoEqOn); put("videoEqBands", s.videoEqBands); put("videoBass", s.videoBass)
         put("vizOpacity", s.vizFadedOpacity.toDouble()); put("vizSec", s.vizPresetSeconds)
         put("bg", s.bgEnabled); put("bgBlur", s.bgBlur); put("bgInt", s.bgIntensity.toDouble()); put("bgSat", s.bgSaturation.toDouble())
         put("artHq", s.artHighQuality)
@@ -438,6 +457,14 @@ object SettingsStore {
             sleepFade = o.optBoolean("sleepFade", d.sleepFade),
             videoSubSize = o.optDouble("videoSubSize", d.videoSubSize.toDouble()).toFloat().coerceIn(0.5f, 2f),
             videoAutoPip = o.optBoolean("videoAutoPip", d.videoAutoPip),
+            videoDecoder = o.optInt("videoDecoder", d.videoDecoder).coerceIn(0, 2),
+            videoSwAudio = o.optBoolean("videoSwAudio", d.videoSwAudio),
+            videoBackground = o.optBoolean("videoBackground", d.videoBackground),
+            videoTools = o.optJSONArray("videoTools")?.let { a -> (0 until a.length()).map { a.optString(it) } }
+                ?.filter { it in DEFAULT_VIDEO_TOOLS } ?: d.videoTools,
+            videoEqOn = o.optBoolean("videoEqOn", d.videoEqOn),
+            videoEqBands = o.optString("videoEqBands", d.videoEqBands),
+            videoBass = o.optInt("videoBass", d.videoBass),
             vizFadedOpacity = o.optDouble("vizOpacity", d.vizFadedOpacity.toDouble()).toFloat(),
             vizPresetSeconds = o.optInt("vizSec", d.vizPresetSeconds),
             bgEnabled = o.optBoolean("bg", d.bgEnabled),

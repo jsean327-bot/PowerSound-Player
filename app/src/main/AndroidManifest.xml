@@ -84,6 +84,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Video ⋮ → Background Play: the video's sound goes on with a notification -->
+        <service
+            android:name=".video.VideoBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <!-- Launcher icons (Settings → Look and Feel → Icon). Exactly one of these is enabled. -->
         <activity-alias
             android:name=".IconDefault"

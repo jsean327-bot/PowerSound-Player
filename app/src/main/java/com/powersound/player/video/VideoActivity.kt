@@ -6,22 +6,32 @@ import android.app.PictureInPictureParams
 import android.app.RemoteAction
 import android.content.BroadcastReceiver
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.drawable.Icon
+import android.media.audiofx.BassBoost
+import android.media.audiofx.Equalizer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Parcelable
 import android.provider.MediaStore
 import android.util.Rational
+import android.view.PixelCopy
+import android.view.SurfaceView
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -35,19 +45,52 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.ui.PlayerView
+import com.google.android.gms.cast.MediaInfo
+import com.google.android.gms.cast.MediaLoadRequestData
+import com.google.android.gms.cast.MediaSeekOptions
+import com.google.android.gms.cast.framework.CastSession
+import com.google.android.gms.cast.framework.SessionManagerListener
 import com.powersound.player.PlaybackService
 import com.powersound.player.R
+import com.powersound.player.cast.CastControl
+import com.powersound.player.cast.MediaServer
+import com.powersound.player.cast.ServedFile
+import com.powersound.player.data.SettingsStore
 import com.powersound.player.ui.PowerSoundTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+
+/** Video decoders: hardware, hardware with fallback (and faster codec feeding), software. */
+val DECODERS = listOf("HW", "HW+", "SW")
+val DECODER_NAMES = listOf(
+    "HW decoder" to "The phone's video chip: smooth, saves battery",
+    "HW+ decoder" to "Hardware, and when it fails on a file, software takes over",
+    "SW decoder" to "Software: plays odd files the chip refuses, uses more battery"
+)
+
+/** Rotation choices (⋮ → Screen Rotation). */
+val ROTATIONS = listOf("By the video", "Auto (turn with the phone)", "Landscape", "Portrait")
 
 /**
  * The video player: videos from Library → Videos, and "Open with" / "External player" from other apps
@@ -76,88 +119,140 @@ class VideoActivity : ComponentActivity() {
         }
     }
 
-    lateinit var player: ExoPlayer
-        private set
+    /** The player (it is rebuilt when the decoder changes, so the screen follows this). */
+    val playerState = mutableStateOf<ExoPlayer?>(null)
+    val player: ExoPlayer get() = playerState.value!!
+    fun playerOrNull(): ExoPlayer? = playerState.value
+
     private var request: VideoRequest? = null
+    private var keys: MutableList<String> = ArrayList()
     private var ended = false
+    private var headers: Map<String, String> = emptyMap()
+    private var audioSessionId = C.AUDIO_SESSION_ID_UNSET
 
-    /** True while the video is in its small floating window. */
+    /** The picture view (for screenshots). */
+    var playerView: PlayerView? = null
+
+    // ---- what the screen shows
     val inPip = mutableStateOf(false)
-
-    /** A playback problem to show on screen. */
     val error = mutableStateOf<String?>(null)
+    val night = mutableStateOf(false)
+    val muted = mutableStateOf(false)
+    val stereoMode = mutableIntStateOf(0)
+    val audioDelayMs = mutableIntStateOf(0)
+    val abA = mutableStateOf<Long?>(null)
+    val abB = mutableStateOf<Long?>(null)
+    /** Sleep timer: the time it stops (ms), -1 = at the end of this video, null = off. */
+    val sleepAt = mutableStateOf<Long?>(null)
+    val rotation = mutableIntStateOf(0)
+    val castingTo = mutableStateOf<String?>(null)
+    val castPosition = mutableLongStateOf(0L)
+    val castDuration = mutableLongStateOf(0L)
+    val castPlaying = mutableStateOf(false)
 
-    /** Rotation chosen with the rotate button: null = follow the video's shape. */
-    var userOrientation: Int? = null
+    private val stereo = StereoModeProcessor()
+    var equalizer: Equalizer? = null
+        private set
+    var bassBoost: BassBoost? = null
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // opened straight from another app: the settings may not be loaded yet
-        com.powersound.player.data.SettingsStore.init(this)
+        SettingsStore.init(this)
         val req = VideoRequest.from(this, intent)
         if (req == null) {
             finish()
             return
         }
         request = req
+        keys = req.keys.toMutableList()
+        headers = req.headers
         goFullScreen()
         // the music stops while a video plays (unless it is playing on a Chromecast)
         PlaybackService.instance?.pauseForVideo()
+        audioSessionId = runCatching { Util.generateAudioSessionIdV21(this) }.getOrDefault(C.AUDIO_SESSION_ID_UNSET)
 
-        player = buildPlayer(req.headers)
-        player.addListener(object : Player.Listener {
-            override fun onVideoSizeChanged(videoSize: VideoSize) = followVideoShape(videoSize)
+        val p = buildPlayer()
+        p.setMediaItems(req.items, req.startIndex, req.startPositionMs)
+        p.prepare()
+        p.playWhenReady = true
+        playerState.value = p
+        attachEffects()
 
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                error.value = null
-                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                    // the previous episode was watched to the end
-                    req.keys.getOrNull(player.currentMediaItemIndex - 1)?.let { VideoStore.savePosition(this@VideoActivity, it, 0L, 0L) }
-                }
-            }
-
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) {
-                    ended = true
-                    currentKey()?.let { VideoStore.savePosition(this@VideoActivity, it, 0L, 0L) }
-                    if (req.returnResult) finishWithResult("playback_completion")
-                }
-            }
-
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (!isPlaying) savePosition()
-                updatePipActions()
-            }
-
-            override fun onPlayerError(e: PlaybackException) {
-                error.value = explain(e)
-            }
-        })
-        player.setMediaItems(req.items, req.startIndex, req.startPositionMs)
-        player.prepare()
-        player.playWhenReady = true
-
-        // where you are is saved every few seconds too, in case the phone kills the app
         lifecycleScope.launch {
-            while (true) {
-                delay(10_000)
-                if (player.isPlaying) savePosition()
+            var tick = 0
+            while (isActive) {
+                delay(100)
+                tick++
+                val q = playerOrNull() ?: continue
+                // A-B repeat
+                val a = abA.value
+                val b = abB.value
+                if (a != null && b != null && q.currentPosition >= b) q.seekTo(a)
+                // where you are is saved every 10 seconds too, in case the phone kills the app
+                if (tick % 100 == 0 && q.isPlaying) savePosition()
             }
         }
 
         setContent {
             PowerSoundTheme {
-                VideoScreen(
-                    activity = this,
-                    player = player,
-                    onBack = { leave() }
-                )
+                VideoScreen(activity = this, onBack = { leave() })
             }
         }
         registerPipReceiver()
+        setupCast()
     }
 
-    private fun buildPlayer(headers: Map<String, String>): ExoPlayer {
+    // ---------------------------------------------------------------- the player
+
+    private val listener = object : Player.Listener {
+        override fun onVideoSizeChanged(videoSize: VideoSize) = followVideoShape(videoSize)
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            error.value = null
+            abA.value = null
+            abB.value = null
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                // the previous episode was watched to the end
+                keys.getOrNull(player.currentMediaItemIndex - 1)?.let { VideoStore.savePosition(this@VideoActivity, it, 0L, 0L) }
+            }
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) {
+                ended = true
+                currentKey()?.let { VideoStore.savePosition(this@VideoActivity, it, 0L, 0L) }
+                if (request?.returnResult == true) finishWithResult("playback_completion")
+            } else ended = false
+        }
+
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            // "end of this video" sleep timer did its job
+            if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM && sleepAt.value == -1L) {
+                sleepAt.value = null
+                playerOrNull()?.pauseAtEndOfMediaItems = false
+            }
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (!isPlaying) savePosition()
+            updatePipActions()
+            VideoBackgroundService.refresh()
+        }
+
+        override fun onTracksChanged(tracks: Tracks) {
+            if (pendingExternalAudio) selectExternalAudio(tracks)
+        }
+
+        override fun onPlayerError(e: PlaybackException) {
+            error.value = explain(e)
+        }
+    }
+
+    private fun buildPlayer(): ExoPlayer {
+        val st = SettingsStore.value
+        val decoder = st.videoDecoder.coerceIn(0, 2)
         val ua = headers.entries.firstOrNull { it.key.equals("User-Agent", true) }?.value
             ?: "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}) PowerSound"
         val http = DefaultHttpDataSource.Factory()
@@ -166,10 +261,31 @@ class VideoActivity : ComponentActivity() {
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(20_000)
             .setDefaultRequestProperties(headers.filterKeys { !it.equals("User-Agent", true) })
-        val sources = DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http))
-        val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
-        return ExoPlayer.Builder(this, renderers)
-            .setMediaSourceFactory(sources)
+        dataSources = DefaultDataSource.Factory(this, http)
+        val swAudio = st.videoSwAudio
+        // HW: the phone's chip first; SW: software first (for the picture, and for the sound when chosen)
+        val selector = MediaCodecSelector { mime, secure, tunneling ->
+            val list = MediaCodecUtil.getDecoderInfos(mime, secure, tunneling)
+            val software = if (mime.startsWith("audio/")) swAudio else decoder == 2
+            if (software) list.sortedBy { if (it.softwareOnly) 0 else 1 } else list
+        }
+        val delayState = audioDelayMs
+        val stereoProcessor = stereo
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
+                val sink = DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(arrayOf(stereoProcessor))
+                    .build()
+                return DelayedAudioSink(sink) { delayState.intValue * 1000L }
+            }
+        }
+        renderers.setMediaCodecSelector(selector)
+        renderers.setEnableDecoderFallback(decoder != 0)
+        if (decoder == 1) renderers.forceEnableMediaCodecAsynchronousQueueing()
+        val p = ExoPlayer.Builder(this, renderers)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources!!))
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
                 true
@@ -178,6 +294,39 @@ class VideoActivity : ComponentActivity() {
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             .build()
+        if (audioSessionId != C.AUDIO_SESSION_ID_UNSET) p.setAudioSessionId(audioSessionId)
+        p.volume = if (muted.value) 0f else 1f
+        p.addListener(listener)
+        return p
+    }
+
+    private var dataSources: DefaultDataSource.Factory? = null
+
+    /** HW / HW+ / SW, or "Use SW audio decoder": the player is built again at the same spot. */
+    fun rebuildPlayer() {
+        val old = playerOrNull() ?: return
+        val items = (0 until old.mediaItemCount).map { old.getMediaItemAt(it) }
+        val index = old.currentMediaItemIndex
+        val pos = old.currentPosition
+        val play = old.playWhenReady
+        val params = old.trackSelectionParameters
+        val speed = old.playbackParameters
+        val repeat = old.repeatMode
+        val shuffle = old.shuffleModeEnabled
+        savePosition()
+        old.removeListener(listener)
+        old.release()
+        val p = buildPlayer()
+        p.trackSelectionParameters = params
+        p.playbackParameters = speed
+        p.repeatMode = repeat
+        p.shuffleModeEnabled = shuffle
+        if (items.isNotEmpty()) p.setMediaItems(items, index, pos)
+        p.prepare()
+        p.playWhenReady = play
+        error.value = null
+        playerState.value = p
+        attachEffects()
     }
 
     private fun explain(e: PlaybackException): String = when (e.errorCode) {
@@ -190,10 +339,209 @@ class VideoActivity : ComponentActivity() {
         PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
         PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES ->
-            "This phone can't decode this video's format."
+            "This phone can't decode this video's format. Try another decoder (the HW button at the top)."
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED -> "This video file isn't supported or is damaged."
         else -> "Can't play this video (${e.errorCodeName})."
+    }
+
+    fun togglePlay() {
+        val p = playerOrNull() ?: return
+        if (p.isPlaying) p.pause()
+        else {
+            if (p.playbackState == Player.STATE_ENDED) p.seekTo(0L)
+            if (p.playbackState == Player.STATE_IDLE) p.prepare()
+            p.play()
+        }
+    }
+
+    // ---------------------------------------------------------------- tools (⋮)
+
+    fun setMuted(on: Boolean) {
+        muted.value = on
+        playerOrNull()?.volume = if (on) 0f else 1f
+    }
+
+    /** Loop: off → this video → the whole list. */
+    fun cycleLoop(): Int {
+        val p = playerOrNull() ?: return Player.REPEAT_MODE_OFF
+        p.repeatMode = when (p.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ONE
+            Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL
+            else -> Player.REPEAT_MODE_OFF
+        }
+        return p.repeatMode
+    }
+
+    /** A-B repeat: first press marks A, second marks B (the part between them repeats), third clears. */
+    fun abPress(): String {
+        val p = playerOrNull() ?: return ""
+        val pos = p.currentPosition
+        return when {
+            abA.value == null -> { abA.value = pos; "A set — press again at the end" }
+            abB.value == null -> {
+                if (pos <= (abA.value ?: 0L) + 500) { abA.value = null; "A-B repeat off" }
+                else { abB.value = pos; p.seekTo(abA.value ?: 0L); "Repeating A ↔ B" }
+            }
+            else -> { abA.value = null; abB.value = null; "A-B repeat off" }
+        }
+    }
+
+    private var sleepJob: Job? = null
+
+    /** Sleep timer: [minutes] > 0, 0 off, -1 at the end of this video. The sound fades out over the last 10 seconds. */
+    fun setSleep(minutes: Int) {
+        sleepJob?.cancel()
+        val p = playerOrNull() ?: return
+        p.pauseAtEndOfMediaItems = minutes == -1
+        when {
+            minutes == 0 -> sleepAt.value = null
+            minutes == -1 -> sleepAt.value = -1L
+            else -> {
+                val ms = minutes * 60_000L
+                sleepAt.value = System.currentTimeMillis() + ms
+                sleepJob = lifecycleScope.launch {
+                    delay(ms - 10_000)
+                    for (i in 19 downTo 0) {
+                        if (!muted.value) playerOrNull()?.volume = i / 20f
+                        delay(500)
+                    }
+                    playerOrNull()?.pause()
+                    playerOrNull()?.volume = if (muted.value) 0f else 1f
+                    sleepAt.value = null
+                    savePosition()
+                }
+            }
+        }
+    }
+
+    fun setStereoMode(mode: Int) {
+        stereoMode.intValue = mode
+        stereo.mode = mode
+    }
+
+    /** Synchronization: + makes the sound later, − earlier (milliseconds). */
+    fun setAudioDelay(ms: Int) {
+        audioDelayMs.intValue = ms.coerceIn(-5000, 5000)
+    }
+
+    fun setRotationMode(mode: Int) {
+        rotation.intValue = mode
+        requestedOrientation = when (mode) {
+            1 -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+            2 -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            3 -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            else -> {
+                playerOrNull()?.videoSize?.let { followVideoShape(it, force = true) }
+                requestedOrientation
+            }
+        }
+    }
+
+    /** Takes a picture of the video (no controls) into Pictures/PowerSound. */
+    fun screenshot(done: (String) -> Unit) {
+        val sv = playerView?.videoSurfaceView as? SurfaceView
+        val size = playerOrNull()?.videoSize
+        if (sv == null || size == null || size.width <= 0 || size.height <= 0) {
+            done("No picture to capture")
+            return
+        }
+        if (Build.VERSION.SDK_INT < 29) {
+            done("Screenshots need Android 10 or newer")
+            return
+        }
+        val bmp = Bitmap.createBitmap(size.width, size.height, Bitmap.Config.ARGB_8888)
+        PixelCopy.request(sv, bmp, { result ->
+            if (result != PixelCopy.SUCCESS) {
+                done("Couldn't capture the picture")
+                return@request
+            }
+            val title = (playerOrNull()?.mediaMetadata?.title?.toString() ?: "video").replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60)
+            lifecycleScope.launch {
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val values = ContentValues().apply {
+                            put(MediaStore.Images.Media.DISPLAY_NAME, "${title}_${System.currentTimeMillis()}.jpg")
+                            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PowerSound")
+                        }
+                        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return@runCatching false
+                        contentResolver.openOutputStream(uri)?.use { bmp.compress(Bitmap.CompressFormat.JPEG, 95, it) } ?: false
+                    }.getOrDefault(false)
+                }
+                done(if (ok) "Saved in Pictures/PowerSound" else "Couldn't save the picture")
+            }
+        }, Handler(Looper.getMainLooper()))
+    }
+
+    // ---------------------------------------------------------------- audio: external file, tracks, equalizer
+
+    private var pendingExternalAudio = false
+
+    /** Audio → Open: plays another sound file (another language, a better track) with this video. */
+    fun openExternalAudio(uri: Uri) {
+        val p = playerOrNull() ?: return
+        val item = p.currentMediaItem ?: return
+        val f = DefaultMediaSourceFactory(dataSources ?: return)
+        val pos = p.currentPosition
+        val key = currentKey()
+        val merged = MergingMediaSource(f.createMediaSource(item), f.createMediaSource(MediaItem.fromUri(uri)))
+        pendingExternalAudio = true
+        p.setMediaSource(merged, pos)
+        p.prepare()
+        p.play()
+        keys = mutableListOf(key ?: VideoStore.keyOf(uri))
+    }
+
+    private fun selectExternalAudio(tracks: Tracks) {
+        val groups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        if (groups.isEmpty()) return
+        pendingExternalAudio = false
+        val g = groups.last()
+        val p = playerOrNull() ?: return
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+            .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0))
+            .build()
+    }
+
+    /** The equalizer and bass boost (⋮ → Equalizer) on this video's sound. */
+    private fun attachEffects() {
+        runCatching { equalizer?.release() }
+        runCatching { bassBoost?.release() }
+        equalizer = null
+        bassBoost = null
+        if (audioSessionId == C.AUDIO_SESSION_ID_UNSET) return
+        val st = SettingsStore.value
+        equalizer = runCatching {
+            Equalizer(0, audioSessionId).apply {
+                val levels = st.videoEqBands.split(',').mapNotNull { it.trim().toIntOrNull() }
+                for (b in 0 until numberOfBands.toInt()) {
+                    levels.getOrNull(b)?.let { setBandLevel(b.toShort(), it.toShort()) }
+                }
+                enabled = st.videoEqOn
+            }
+        }.getOrNull()
+        bassBoost = runCatching {
+            BassBoost(0, audioSessionId).apply {
+                if (strengthSupported) setStrength(st.videoBass.coerceIn(0, 1000).toShort())
+                enabled = st.videoEqOn && st.videoBass > 0
+            }
+        }.getOrNull()
+    }
+
+    /** Saves the equalizer as it is now (it is used again for the next videos). */
+    fun saveEqualizer(on: Boolean, bass: Int) {
+        val eq = equalizer
+        val bands = if (eq != null) (0 until eq.numberOfBands.toInt()).joinToString(",") { eq.getBandLevel(it.toShort()).toString() } else ""
+        SettingsStore.update { it.copy(videoEqOn = on, videoEqBands = bands, videoBass = bass) }
+        runCatching { eq?.enabled = on }
+        runCatching {
+            bassBoost?.let { b ->
+                if (b.strengthSupported) b.setStrength(bass.coerceIn(0, 1000).toShort())
+                b.enabled = on && bass > 0
+            }
+        }
     }
 
     // ---------------------------------------------------------------- screen
@@ -216,9 +564,9 @@ class VideoActivity : ComponentActivity() {
         if (hasFocus) goFullScreen()
     }
 
-    /** Wide videos turn the phone sideways, tall ones keep it upright (until the rotate button is used). */
-    private fun followVideoShape(size: VideoSize) {
-        if (userOrientation != null || size.width <= 0 || size.height <= 0) return
+    /** Wide videos turn the phone sideways, tall ones keep it upright (rotation "By the video"). */
+    private fun followVideoShape(size: VideoSize, force: Boolean = false) {
+        if ((rotation.intValue != 0 && !force) || size.width <= 0 || size.height <= 0) return
         val wide = size.width * size.pixelWidthHeightRatio > size.height
         requestedOrientation = if (wide) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         else ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
@@ -228,9 +576,7 @@ class VideoActivity : ComponentActivity() {
     /** Rotate button: sideways ↔ upright. */
     fun rotate() {
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val next = if (landscape) ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        userOrientation = next
-        requestedOrientation = next
+        setRotationMode(if (landscape) 3 else 2)
     }
 
     /** Screen brightness for this video only (0…1), or -1 for the phone's own. */
@@ -250,31 +596,191 @@ class VideoActivity : ComponentActivity() {
 
     /** Adds a subtitle file (picked with the file picker) to the video that is playing, and turns it on. */
     fun addSubtitle(uri: Uri, name: String?) {
-        val i = player.currentMediaItemIndex
-        val item = player.currentMediaItem ?: return
-        val pos = player.currentPosition
+        val p = playerOrNull() ?: return
+        val i = p.currentMediaItemIndex
+        val item = p.currentMediaItem ?: return
+        val pos = p.currentPosition
         val sub = VideoRequest.subtitle(uri, name ?: uri.lastPathSegment, selected = true)
         val subs = item.localConfiguration?.subtitleConfigurations.orEmpty().map {
             it.buildUpon().setSelectionFlags(0).build()
         } + sub
-        player.replaceMediaItem(i, item.buildUpon().setSubtitleConfigurations(subs).build())
-        player.seekTo(i, pos)
-        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+        p.replaceMediaItem(i, item.buildUpon().setSubtitleConfigurations(subs).build())
+        p.seekTo(i, pos)
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
             .clearOverridesOfType(C.TRACK_TYPE_TEXT)
             .build()
     }
 
+    // ---------------------------------------------------------------- Chromecast
+
+    private var castServer: MediaServer? = null
+    private val castFiles = HashMap<Long, Uri>()
+    private var castListener: SessionManagerListener<CastSession>? = null
+    private var castPoll: Job? = null
+
+    /** True when this phone can cast at all (Google Play services). */
+    fun canCast(): Boolean = CastControl.context(this) != null
+
+    private fun setupCast() {
+        val ctx = CastControl.context(this) ?: return
+        val l = object : SessionManagerListener<CastSession> {
+            override fun onSessionStarted(session: CastSession, sessionId: String) {
+                if (CastControl.videoOwnsCast) castVideo(session)
+            }
+
+            override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) {
+                if (CastControl.videoOwnsCast) castVideo(session)
+            }
+
+            override fun onSessionEnded(session: CastSession, error: Int) = backFromCast()
+            override fun onSessionSuspended(session: CastSession, reason: Int) = Unit
+            override fun onSessionStarting(session: CastSession) = Unit
+            override fun onSessionStartFailed(session: CastSession, error: Int) {
+                CastControl.videoOwnsCast = false
+            }
+            override fun onSessionEnding(session: CastSession) = Unit
+            override fun onSessionResuming(session: CastSession, sessionId: String) = Unit
+            override fun onSessionResumeFailed(session: CastSession, error: Int) = Unit
+        }
+        runCatching { ctx.sessionManager.addSessionManagerListener(l, CastSession::class.java) }
+        castListener = l
+    }
+
+    /**
+     * The Cast button. Already connected to a Chromecast (music playing there, say): the video goes there now.
+     * Otherwise returns false and the screen shows the list of Chromecasts; picking one sends the video.
+     */
+    fun castButton(): Boolean {
+        CastControl.videoOwnsCast = true
+        val session = CastControl.context(this)?.sessionManager?.currentCastSession
+        if (session != null && session.isConnected) {
+            castVideo(session)
+            return true
+        }
+        return false
+    }
+
+    private fun castVideo(session: CastSession) {
+        val p = playerOrNull() ?: return
+        val item = p.currentMediaItem ?: return
+        val uri = item.localConfiguration?.uri ?: return
+        val web = uri.scheme == "http" || uri.scheme == "https"
+        val url: String
+        val mime: String
+        if (web) {
+            url = uri.toString()
+            mime = item.localConfiguration?.mimeType
+                ?: when {
+                    url.contains(".m3u8", true) -> "application/x-mpegURL"
+                    url.contains(".mpd", true) -> "application/dash+xml"
+                    url.contains(".webm", true) -> "video/webm"
+                    else -> "video/mp4"
+                }
+        } else {
+            val server = castServer ?: MediaServer(openSong = { id -> openForCast(id) }, cover = { null }).also { castServer = it }
+            server.start()
+            val id = (castFiles.keys.maxOrNull() ?: 0L) + 1
+            castFiles[id] = uri
+            url = server.songUrl(id) ?: run {
+                castError("The phone needs to be on Wi-Fi to cast its videos")
+                return
+            }
+            mime = runCatching { contentResolver.getType(uri) }.getOrNull() ?: "video/mp4"
+        }
+        val md = com.google.android.gms.cast.MediaMetadata(com.google.android.gms.cast.MediaMetadata.MEDIA_TYPE_MOVIE)
+        md.putString(com.google.android.gms.cast.MediaMetadata.KEY_TITLE, item.mediaMetadata.title?.toString() ?: "Video")
+        val info = MediaInfo.Builder(url)
+            .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+            .setContentType(mime)
+            .setContentUrl(url)
+            .setMetadata(md)
+            .build()
+        val load = MediaLoadRequestData.Builder()
+            .setMediaInfo(info)
+            .setAutoplay(true)
+            .setCurrentTime(p.currentPosition)
+            .build()
+        val client = session.remoteMediaClient ?: return
+        runCatching { client.load(load) }.onFailure { castError("The Chromecast didn't accept the video"); return }
+        p.pause()
+        val name = session.castDevice?.friendlyName ?: "Chromecast"
+        castingTo.value = name
+        CastControl.setDevice(name)
+        castPoll?.cancel()
+        castPoll = lifecycleScope.launch {
+            while (isActive) {
+                val c = CastControl.context(this@VideoActivity)?.sessionManager?.currentCastSession?.remoteMediaClient
+                if (c != null) {
+                    castPosition.longValue = c.approximateStreamPosition
+                    castDuration.longValue = c.streamDuration.coerceAtLeast(0L)
+                    castPlaying.value = c.isPlaying
+                }
+                delay(500)
+            }
+        }
+    }
+
+    private fun castError(msg: String) {
+        error.value = msg
+        CastControl.videoOwnsCast = false
+    }
+
+    private fun openForCast(id: Long): ServedFile? = runCatching {
+        val uri = castFiles[id] ?: return null
+        val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return null
+        val stream = java.io.FileInputStream(pfd.fileDescriptor)
+        val size = pfd.statSize.takeIf { it > 0 } ?: stream.channel.size()
+        val mime = contentResolver.getType(uri) ?: "video/mp4"
+        ServedFile(stream.channel, size, mime) {
+            stream.close()
+            pfd.close()
+        }
+    }.getOrNull()
+
+    private fun remote() = CastControl.context(this)?.sessionManager?.currentCastSession?.remoteMediaClient
+
+    fun castToggle() {
+        val c = remote() ?: return
+        if (c.isPlaying) c.pause() else c.play()
+    }
+
+    fun castSeek(ms: Long) {
+        runCatching { remote()?.seek(MediaSeekOptions.Builder().setPosition(ms.coerceAtLeast(0L)).build()) }
+    }
+
+    fun stopCasting() {
+        CastControl.stop(this)
+    }
+
+    /** Casting ended: the video goes on here, paused at the spot the TV reached. */
+    private fun backFromCast() {
+        if (castingTo.value == null) {
+            CastControl.videoOwnsCast = false
+            return
+        }
+        castPoll?.cancel()
+        val at = castPosition.longValue
+        castingTo.value = null
+        CastControl.videoOwnsCast = false
+        castServer?.stop()
+        playerOrNull()?.let { p ->
+            if (at > 0) p.seekTo(at)
+            p.pause()
+        }
+    }
+
     // ---------------------------------------------------------------- where you stopped
 
-    private fun currentKey(): String? = request?.keys?.getOrNull(player.currentMediaItemIndex)
+    private fun currentKey(): String? = playerOrNull()?.let { keys.getOrNull(it.currentMediaItemIndex) }
 
     private fun savePosition() {
-        if (!::player.isInitialized || ended) return
+        val p = playerOrNull() ?: return
+        if (ended || castingTo.value != null) return
         val key = currentKey() ?: return
-        val d = player.duration
+        val d = p.duration
         if (d == C.TIME_UNSET || d <= 0) return
-        VideoStore.savePosition(this, key, player.currentPosition, d)
+        VideoStore.savePosition(this, key, p.currentPosition, d)
     }
 
     // ---------------------------------------------------------------- leaving, result for the app that sent the video
@@ -283,9 +789,10 @@ class VideoActivity : ComponentActivity() {
 
     private fun finishWithResult(endBy: String) {
         val req = request
-        if (req != null && ::player.isInitialized) {
-            val pos = if (endBy == "playback_completion") player.duration.coerceAtLeast(0L) else player.currentPosition
-            val dur = player.duration.coerceAtLeast(0L)
+        val p = playerOrNull()
+        if (req != null && p != null) {
+            val pos = if (endBy == "playback_completion") p.duration.coerceAtLeast(0L) else p.currentPosition
+            val dur = p.duration.coerceAtLeast(0L)
             val data = Intent()
                 // MX Player style
                 .putExtra("end_by", endBy)
@@ -294,27 +801,51 @@ class VideoActivity : ComponentActivity() {
                 // VLC style
                 .putExtra("extra_position", pos)
                 .putExtra("extra_duration", dur)
-            req.items.getOrNull(player.currentMediaItemIndex)?.localConfiguration?.uri?.let { data.setData(it) }
+            p.currentMediaItem?.localConfiguration?.uri?.let { data.setData(it) }
             setResult(Activity.RESULT_OK, data)
         }
         savePosition()
         finish()
     }
 
+    override fun onPause() {
+        super.onPause()
+        // ⋮ → Background Play: the sound goes on with a notification
+        val p = playerOrNull()
+        if (p != null && SettingsStore.value.videoBackground && p.isPlaying && !isChangingConfigurations &&
+            !isInPictureInPictureModeCompat() && !isFinishing && castingTo.value == null
+        ) VideoBackgroundService.start(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        VideoBackgroundService.stop(this)
+    }
+
     override fun onStop() {
         super.onStop()
-        // left the app (not to the floating window): pause and remember the spot
-        if (::player.isInitialized && !isInPictureInPictureModeCompat()) {
-            player.pause()
-            savePosition()
+        // left the app (not to the floating window, not playing in the background): pause and remember the spot
+        val p = playerOrNull() ?: return
+        val background = SettingsStore.value.videoBackground && p.isPlaying
+        if (!isInPictureInPictureModeCompat() && !background) {
+            p.pause()
         }
+        savePosition()
     }
 
     override fun onDestroy() {
         pipReceiver?.let { runCatching { unregisterReceiver(it) } }
-        if (::player.isInitialized) {
+        VideoBackgroundService.stop(this)
+        castListener?.let { l -> runCatching { CastControl.context(this)?.sessionManager?.removeSessionManagerListener(l, CastSession::class.java) } }
+        castPoll?.cancel()
+        // the TV keeps playing the video; the phone's little server stops with this screen
+        castServer?.stop()
+        if (castingTo.value != null) CastControl.videoOwnsCast = false
+        runCatching { equalizer?.release() }
+        runCatching { bassBoost?.release() }
+        playerOrNull()?.let {
             savePosition()
-            player.release()
+            it.release()
         }
         super.onDestroy()
     }
@@ -329,19 +860,20 @@ class VideoActivity : ComponentActivity() {
         packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)
 
     fun enterPip() {
-        if (!canPip() || !::player.isInitialized) return
+        if (!canPip() || playerOrNull() == null) return
         runCatching { enterPictureInPictureMode(pipParams()) }
     }
 
     private fun pipParams(): PictureInPictureParams {
-        val size = player.videoSize
+        val p = player
+        val size = p.videoSize
         var w = if (size.width > 0) (size.width * size.pixelWidthHeightRatio).toInt() else 16
         var h = if (size.height > 0) size.height else 9
         // Android allows 1:2.39 … 2.39:1
         if (w > h * 239 / 100) w = h * 239 / 100
         if (h > w * 239 / 100) h = w * 239 / 100
         val b = PictureInPictureParams.Builder().setAspectRatio(Rational(maxOf(1, w), maxOf(1, h)))
-        val playing = player.playWhenReady
+        val playing = p.playWhenReady
         val action = RemoteAction(
             Icon.createWithResource(this, if (playing) R.drawable.ic_w_pause else R.drawable.ic_w_play),
             if (playing) "Pause" else "Play",
@@ -356,14 +888,12 @@ class VideoActivity : ComponentActivity() {
     }
 
     private fun updatePipActions() {
-        if (canPip() && ::player.isInitialized) runCatching { setPictureInPictureParams(pipParams()) }
+        if (canPip() && playerOrNull() != null) runCatching { setPictureInPictureParams(pipParams()) }
     }
 
     private fun registerPipReceiver() {
         val r = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                if (player.playWhenReady) player.pause() else player.play()
-            }
+            override fun onReceive(context: Context, intent: Intent) = togglePlay()
         }
         ContextCompat.registerReceiver(this, r, IntentFilter(ACTION_PIP), ContextCompat.RECEIVER_NOT_EXPORTED)
         pipReceiver = r
@@ -372,7 +902,8 @@ class VideoActivity : ComponentActivity() {
     /** Home button while a video plays: it keeps playing in a small window. */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (::player.isInitialized && player.isPlaying && com.powersound.player.data.SettingsStore.value.videoAutoPip) enterPip()
+        val p = playerOrNull() ?: return
+        if (p.isPlaying && SettingsStore.value.videoAutoPip && !SettingsStore.value.videoBackground) enterPip()
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
@@ -380,7 +911,7 @@ class VideoActivity : ComponentActivity() {
         inPip.value = isInPictureInPictureMode
         // the floating window was closed (swiped away / X): stop, like leaving the video
         if (!isInPictureInPictureMode && !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
-            player.pause()
+            playerOrNull()?.pause()
             leave()
         }
     }
@@ -389,13 +920,17 @@ class VideoActivity : ComponentActivity() {
         super.onNewIntent(intent)
         // another video was opened while this one is on screen
         val req = VideoRequest.from(this, intent) ?: return
+        val p = playerOrNull() ?: return
         savePosition()
         request = req
+        keys = req.keys.toMutableList()
         ended = false
-        userOrientation = null
-        player.setMediaItems(req.items, req.startIndex, req.startPositionMs)
-        player.prepare()
-        player.play()
+        abA.value = null
+        abB.value = null
+        if (rotation.intValue == 0) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        p.setMediaItems(req.items, req.startIndex, req.startPositionMs)
+        p.prepare()
+        p.play()
     }
 }
 

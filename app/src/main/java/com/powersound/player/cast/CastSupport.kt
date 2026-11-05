@@ -59,6 +59,10 @@ object CastControl {
     /** Name of the Chromecast the music plays on, or null when playing on the phone. */
     val device: StateFlow<String?> = _device
 
+    /** True while the video player is (or is about to start) casting: the music then stays off the Chromecast. */
+    @Volatile
+    var videoOwnsCast = false
+
     internal fun setDevice(name: String?) {
         _device.value = name
     }

@@ -308,6 +308,8 @@ class PlaybackService : MediaLibraryService() {
         val p = main ?: return
         val r = remote ?: return
         if (s.player === r) return
+        // the video player is sending a video to the Chromecast: the music stays on the phone
+        if (com.powersound.player.cast.CastControl.videoOwnsCast) return
         val cs = castContext?.sessionManager?.currentCastSession ?: return
         castServer?.start()
         val play = p.playWhenReady
