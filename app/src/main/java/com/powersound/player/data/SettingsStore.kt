@@ -84,6 +84,9 @@ data class AppSettings(
     val fadeMs: Int = 350,
     /** Sleep timer: lower the volume slowly over the last minutes instead of stopping at once. */
     val sleepFade: Boolean = true,
+    /** Video player: subtitle size (1 = normal) and the small window when Home is pressed. */
+    val videoSubSize: Float = 1f,
+    val videoAutoPip: Boolean = true,
     // ---- Audio → Crossfade, Fade, and Gapless ----
     val autoFade: Int = 0,                   // 0 no fading, 1 non-gapless tracks, 2 all songs, 3 shuffled songs
     val crossfadeSec: Float = 5f,
@@ -340,6 +343,7 @@ object SettingsStore {
         put("accent", s.accent); put("keepScreenOn", s.keepScreenOn)
         put("rgMode", s.replayGain); put("rgSrc", s.rgSource); put("rgPre", s.replayGainPreamp); put("rgNoTag", s.replayGainNoTagDb)
         put("fade", s.fadeOnPause); put("fadeMs", s.fadeMs); put("sleepFade", s.sleepFade)
+        put("videoSubSize", s.videoSubSize.toDouble()); put("videoAutoPip", s.videoAutoPip)
         put("vizOpacity", s.vizFadedOpacity.toDouble()); put("vizSec", s.vizPresetSeconds)
         put("bg", s.bgEnabled); put("bgBlur", s.bgBlur); put("bgInt", s.bgIntensity.toDouble()); put("bgSat", s.bgSaturation.toDouble())
         put("artHq", s.artHighQuality)
@@ -432,6 +436,8 @@ object SettingsStore {
             fadeOnPause = o.optBoolean("fade", d.fadeOnPause),
             fadeMs = o.optInt("fadeMs", d.fadeMs),
             sleepFade = o.optBoolean("sleepFade", d.sleepFade),
+            videoSubSize = o.optDouble("videoSubSize", d.videoSubSize.toDouble()).toFloat().coerceIn(0.5f, 2f),
+            videoAutoPip = o.optBoolean("videoAutoPip", d.videoAutoPip),
             vizFadedOpacity = o.optDouble("vizOpacity", d.vizFadedOpacity.toDouble()).toFloat(),
             vizPresetSeconds = o.optInt("vizSec", d.vizPresetSeconds),
             bgEnabled = o.optBoolean("bg", d.bgEnabled),

@@ -1303,6 +1303,7 @@ private fun ScreenContent(
                         cat == Category.PLAYLISTS -> playlists.isEmpty()
                         cat == Category.BOOKMARKS -> bookmarks.isEmpty()
                         cat == Category.STREAMS -> streams.isEmpty()
+                        cat == Category.VIDEOS -> false // read only when opened
                         cat.kind == Kind.SONGS -> vm.songsFor(cat, stats).isEmpty()
                         else -> library.songs.isEmpty()
                     }
@@ -1374,6 +1375,10 @@ private fun ScreenContent(
                     bottomInset = bottomInset,
                     onBack = { vm.pop() },
                     onPlay = { vm.playStream(it) }
+                )
+                Kind.VIDEOS -> com.powersound.player.ui.VideosScreen(
+                    bottomInset = bottomInset,
+                    onBack = { vm.pop() }
                 )
                 Kind.BOOKMARKS -> BookmarksScreen(
                     bookmarks = bookmarks,

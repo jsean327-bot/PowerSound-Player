@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
@@ -384,6 +385,7 @@ fun Category.icon(): ImageVector = when (this) {
     Category.COMPOSERS -> Icons.Rounded.Edit
     Category.PLAYLISTS -> Icons.Rounded.PlaylistPlay
     Category.STREAMS -> Icons.Rounded.Radio
+    Category.VIDEOS -> Icons.Rounded.VideoLibrary
     Category.QUEUE -> Icons.Rounded.QueueMusic
     Category.BOOKMARKS -> Icons.Rounded.Bookmark
     Category.MOST_PLAYED -> Icons.Rounded.PlayCircleFilled
@@ -404,6 +406,7 @@ fun Category.color(): Color = when (this) {
     Category.COMPOSERS -> Color(0xFF3FAE6A)
     Category.PLAYLISTS -> Color(0xFFD08A5B)
     Category.STREAMS -> Color(0xFF6FBF73)
+    Category.VIDEOS -> Color(0xFFE0645C)
     Category.QUEUE -> Color(0xFFC9A63F)
     Category.BOOKMARKS -> Color(0xFF5B7FD0)
     Category.MOST_PLAYED -> Color(0xFFB98BF0)

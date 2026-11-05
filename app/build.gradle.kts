@@ -88,5 +88,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-session:1.3.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.3.1") // .m3u8 radio streams
+    implementation("androidx.media3:media3-ui:1.3.1") // video picture and subtitles
+    implementation("androidx.media3:media3-exoplayer-dash:1.3.1") // DASH (.mpd) video streams
     implementation("androidx.media3:media3-cast:1.3.1") // Chromecast (brings Google Cast and MediaRouter)
 }

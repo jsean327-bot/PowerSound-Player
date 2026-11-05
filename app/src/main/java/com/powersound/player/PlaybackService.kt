@@ -241,6 +241,13 @@ class PlaybackService : MediaLibraryService() {
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var castWake: android.os.PowerManager.WakeLock? = null
 
+    /** A video starts in the video player: the music pauses (not when it plays on a Chromecast). */
+    fun pauseForVideo() {
+        if (isCasting) return
+        val p = session?.player ?: return
+        if (p.playWhenReady) p.pause()
+    }
+
     /** True while the music plays on a Chromecast. */
     val isCasting: Boolean get() = remote != null && session?.player === remote
 
