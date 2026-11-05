@@ -59,6 +59,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableFloatStateOf
@@ -304,7 +306,9 @@ fun PillButton(
     onClick: () -> Unit,
     active: Boolean = false,
     enabled: Boolean = true,
-    size: Int = 40
+    size: Int = 40,
+    /** Solid dark background (floating over the list). */
+    solid: Boolean = false
 ) {
     val colors = MaterialTheme.colorScheme
     val content = when {
@@ -317,7 +321,14 @@ fun PillButton(
             .height(size.dp)
             .then(if (text == null) Modifier.width(size.dp) else Modifier)
             .clip(RoundedCornerShape(50))
-            .background(if (active) colors.primary.copy(alpha = 0.18f) else PillBg)
+            .background(
+                when {
+                    solid && active -> colors.primary.copy(alpha = 0.25f).compositeOver(Color(0xF2101014))
+                    solid -> Color(0xF2101014)
+                    active -> colors.primary.copy(alpha = 0.18f)
+                    else -> PillBg
+                }
+            )
             .border(1.dp, PillBorder, RoundedCornerShape(50))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = if (text == null) 0.dp else 14.dp),
@@ -339,8 +350,25 @@ fun ActionPills(
     onMore: (() -> Unit)?,
     enabled: Boolean = true,
     searchActive: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** "Select" (multi-select), shown in the floating pills like Poweramp. */
+    onSelect: (() -> Unit)? = null
 ) {
+    if (LocalFloatingPills.current) {
+        // floating at the bottom (Poweramp style): solid pills side by side, in the middle
+        Row(
+            modifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PillButton(icon = Icons.Rounded.Shuffle, onClick = onShuffle, enabled = enabled, size = 48, solid = true)
+            PillButton(icon = Icons.Rounded.PlayArrow, onClick = onPlay, enabled = enabled, size = 48, solid = true)
+            if (onSearch != null) PillButton(icon = Icons.Rounded.Search, onClick = onSearch, active = searchActive, size = 48, solid = true)
+            if (onSelect != null) PillButton(text = "Select", onClick = onSelect, enabled = enabled, size = 48, solid = true)
+            if (onMore != null) PillButton(icon = Icons.Rounded.MoreVert, onClick = onMore, size = 48, solid = true)
+        }
+        return
+    }
     Row(
         modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -350,9 +378,19 @@ fun ActionPills(
         PillButton(icon = Icons.Rounded.PlayArrow, onClick = onPlay, enabled = enabled)
         if (onSearch != null) PillButton(icon = Icons.Rounded.Search, onClick = onSearch, active = searchActive)
         Spacer(Modifier.weight(1f))
+        if (onSelect != null) PillButton(text = "Select", onClick = onSelect, enabled = enabled)
         if (onMore != null) PillButton(icon = Icons.Rounded.MoreVert, onClick = onMore)
     }
 }
+
+/** True inside the floating bottom pills (they then look like Poweramp's). */
+val LocalFloatingPills = androidx.compose.runtime.compositionLocalOf { false }
+
+/**
+ * How far the bottom bar has slid away while scrolling (0 shown … 1 hidden). The floating pills follow it
+ * down to the bottom of the screen, like Poweramp.
+ */
+val LocalNavHide = androidx.compose.runtime.compositionLocalOf<androidx.compose.runtime.State<Float>> { mutableStateOf(0f) }
 
 @Composable
 fun BackChip(label: String, onClick: () -> Unit) {
@@ -686,14 +724,27 @@ fun PageHeader(
 }
 
 /** Square tile with cover art and the title/subtitle chips, like the Folders and Albums grids. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun GroupTile(title: String, subtitle: String, coverId: Long?, key: String = "", onClick: () -> Unit) {
+fun GroupTile(
+    title: String,
+    subtitle: String,
+    coverId: Long?,
+    key: String = "",
+    /** Multi-select: null = not selecting, true / false = ticked or not. */
+    checked: Boolean? = null,
+    onLongClick: (() -> Unit)? = null,
+    onClick: () -> Unit
+) {
     Box(
         Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .then(
+                if (checked == true) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         val person = key.startsWith("artist:") || key.startsWith("albumartist:") || key.startsWith("composer:")
         if (person) {
@@ -715,6 +766,20 @@ fun GroupTile(title: String, subtitle: String, coverId: Long?, key: String = "",
             OverlayChip(title, big = true)
             Spacer(Modifier.height(3.dp))
             OverlayChip(subtitle)
+        }
+        if (checked != null) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(if (checked) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.55f))
+                    .border(2.dp, Color.White, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                if (checked) Icon(Icons.Rounded.Check, contentDescription = "Selected", tint = Color.Black, modifier = Modifier.size(18.dp))
+            }
         }
     }
 }

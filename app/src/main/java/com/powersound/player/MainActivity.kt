@@ -550,9 +550,10 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
     var navHidden by remember { mutableStateOf(false) }
     val staticNav = appSettings.staticNavbar
     LaunchedEffect(staticNav, tab, showNowPlaying) { if (staticNav) navHidden = false }
-    val navHide by androidx.compose.animation.core.animateFloatAsState(
+    val navHideState = androidx.compose.animation.core.animateFloatAsState(
         if (navHidden && !staticNav) 1f else 0f, tween(com.powersound.player.ui.animMs(220)), label = "navHide"
     )
+    val navHide by navHideState
     val navScroll = remember {
         object : NestedScrollConnection {
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
@@ -577,6 +578,8 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         }
 
         // Each tab keeps its scroll positions / search text while you switch tabs.
+        // (the floating list buttons follow the bottom bar down when it slides away)
+        androidx.compose.runtime.CompositionLocalProvider(com.powersound.player.ui.LocalNavHide provides navHideState) {
         tabHolder.SaveableStateProvider(tab.name) {
         when (tab) {
             Tab.LIBRARY -> LibraryHost(
@@ -602,6 +605,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 onOpenGroup = { g, back -> vm.openGroup(g, back) },
                 onSongMenu = openSongMenu
             )
+        }
         }
         }
 
@@ -1342,7 +1346,9 @@ private fun ScreenContent(
                         onAddToQueue = addQueue,
                         extraMenu = if (cat == Category.PLAYLISTS) listOf(
                             "New playlist" to { nameDialog = "New playlist" to { n: String -> com.powersound.player.data.LibraryStores.createPlaylist(n); Unit } }
-                        ) else emptyList()
+                        ) else emptyList(),
+                        // "Select" several albums / folders / artists… (not playlists: delete would remove the songs' files)
+                        actions = if (cat == Category.PLAYLISTS) null else listActions
                     )
                 }
                 Kind.TREE -> {

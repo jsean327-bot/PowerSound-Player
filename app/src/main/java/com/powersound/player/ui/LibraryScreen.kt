@@ -56,6 +56,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -159,7 +162,9 @@ fun GroupGridScreen(
     onPlay: (List<Song>) -> Unit,
     onShuffle: (List<Song>) -> Unit,
     onAddToQueue: (List<Song>) -> Unit,
-    extraMenu: List<Pair<String, () -> Unit>> = emptyList()
+    extraMenu: List<Pair<String, () -> Unit>> = emptyList(),
+    /** Multi-select of albums / folders / artists… (null: none). */
+    actions: ListActions? = null
 ) {
     val state = rememberLazyGridState()
     val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
@@ -184,6 +189,15 @@ fun GroupGridScreen(
     val headerItems = if (query != null) 2 else 1
     val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
 
+    // ---- multi-select of tiles: the keys of the chosen groups (null = not selecting)
+    var selected by remember { mutableStateOf<Set<String>?>(null) }
+    val selecting = selected != null && actions != null
+    fun toggle(key: String) {
+        val s = selected ?: return
+        selected = if (key in s) s - key else s + key
+    }
+    androidx.activity.compose.BackHandler(enabled = selecting) { selected = null }
+
     val pills: @Composable (Modifier) -> Unit = { m ->
         Box(m) {
             ActionPills(
@@ -199,7 +213,8 @@ fun GroupGridScreen(
                 onSearch = { query = if (query == null) "" else null },
                 onMore = { menu = true },
                 enabled = allSongs.isNotEmpty(),
-                searchActive = query != null
+                searchActive = query != null,
+                onSelect = if (actions != null && shown.isNotEmpty()) ({ selected = emptySet() }) else null
             )
             Box(Modifier.align(Alignment.TopEnd)) {
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -242,7 +257,11 @@ fun GroupGridScreen(
                 }
             }
             itemsIndexed(shown, key = { i, _ -> lazyKeys[i] }) { _, g ->
-                GroupTile(g.title, g.subtitle, g.coverId, g.key) { onOpen(g) }
+                GroupTile(
+                    g.title, g.subtitle, g.coverId, g.key,
+                    checked = if (selecting) selected?.contains(g.key) == true else null,
+                    onLongClick = if (actions != null) ({ if (selecting) toggle(g.key) else selected = setOf(g.key) }) else null
+                ) { if (selecting) toggle(g.key) else onOpen(g) }
             }
         }
 
@@ -258,7 +277,29 @@ fun GroupGridScreen(
             )
         }
 
-        BottomPills(st.bottomButtons, scrolled || !st.headerButtons, bottomInset) { pills(Modifier) }
+        val sel = selected
+        if (selecting && sel != null && actions != null) {
+            val chosenGroups = shown.filter { it.key in sel }
+            val chosen = chosenGroups.flatMap { it.songs }
+            fun done(f: (List<Song>) -> Unit) { if (chosen.isNotEmpty()) { f(chosen); selected = null } }
+            SelectionBar(
+                count = chosen.size,
+                allSelected = shown.isNotEmpty() && shown.all { it.key in sel },
+                deleteRemoves = actions.deleteRemoves,
+                bottomInset = bottomInset,
+                label = "${chosenGroups.size} selected • ${chosen.size} songs",
+                onAll = { selected = if (shown.all { it.key in sel }) emptySet() else shown.map { it.key }.toSet() },
+                onClose = { selected = null },
+                onPlay = { done { onPlay(it) } },
+                onPlayNext = { done(actions.playNext) },
+                onQueue = { done(actions.addToQueue) },
+                onPlaylist = { done(actions.addToPlaylist) },
+                onTags = actions.editTags?.let { edit -> { done(edit) } },
+                onDelete = { done(actions.delete) }
+            )
+        } else {
+            BottomPills(st.bottomButtons, scrolled || !st.headerButtons, bottomInset) { pills(Modifier) }
+        }
     }
 }
 
@@ -280,11 +321,26 @@ fun FloatingPills(visible: Boolean, bottomInset: Dp, content: @Composable () -> 
             exit = slideOutVertically { it } + fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(start = 12.dp, end = 34.dp, bottom = bottomInset + 6.dp)
+                .padding(start = 12.dp, end = 12.dp, bottom = bottomInset + 6.dp)
+                .followBottomBar(bottomInset)
         ) {
-            content()
+            androidx.compose.runtime.CompositionLocalProvider(LocalFloatingPills provides true) { content() }
         }
     }
+}
+
+/**
+ * While the bottom bar slides away (scrolling down a list), floating things go down with it to the bottom of
+ * the screen, like Poweramp; they come back up with the bar.
+ */
+@Composable
+fun Modifier.followBottomBar(bottomInset: Dp): Modifier {
+    val hide = LocalNavHide.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val navBars = androidx.compose.foundation.layout.WindowInsets.navigationBars
+        .asPaddingValues().calculateBottomPadding()
+    val distance = with(density) { (bottomInset - navBars - 4.dp).coerceAtLeast(0.dp).toPx() }
+    return this.graphicsLayer { translationY = hide.value * distance }
 }
 
 @Composable
@@ -408,7 +464,8 @@ fun SongListScreen(
                 onSearch = { query = if (query == null) "" else null },
                 onMore = { menu = true },
                 enabled = shown.isNotEmpty(),
-                searchActive = query != null
+                searchActive = query != null,
+                onSelect = if (actions != null && shown.isNotEmpty()) ({ selected = emptySet() }) else null
             )
             Box(Modifier.align(Alignment.TopEnd)) {
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -522,6 +579,8 @@ private fun SelectionBar(
     allSelected: Boolean,
     deleteRemoves: Boolean,
     bottomInset: Dp,
+    /** "3 albums • 42 songs" (null: "N songs selected"). */
+    label: String? = null,
     onAll: () -> Unit,
     onClose: () -> Unit,
     onPlay: () -> Unit,
@@ -537,6 +596,7 @@ private fun SelectionBar(
             Modifier
                 .align(Alignment.BottomCenter)
                 .padding(start = 10.dp, end = 10.dp, bottom = bottomInset + 6.dp)
+                .followBottomBar(bottomInset)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(22.dp))
                 .background(Color(0xFF1E1E27).copy(alpha = 0.97f))
@@ -546,7 +606,7 @@ private fun SelectionBar(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SelIcon(Icons.Rounded.Close, "Done", true, onClose)
                 Text(
-                    if (count == 1) "1 song selected" else "$count songs selected",
+                    label ?: if (count == 1) "1 song selected" else "$count songs selected",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
