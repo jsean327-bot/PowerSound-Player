@@ -165,6 +165,8 @@ class VideoActivity : ComponentActivity() {
         // opened straight from another app: the settings may not be loaded yet
         SettingsStore.init(this)
         VideoPrefsStore.init(this)
+        // opened from a file manager / another app: crashes are saved too (Settings → Misc → View error log)
+        com.powersound.player.data.CrashLog.install(this)
         val req = VideoRequest.from(this, intent)
         if (req == null) {
             finish()
@@ -211,8 +213,8 @@ class VideoActivity : ComponentActivity() {
                 VideoScreen(activity = this, onBack = { leave() })
             }
         }
-        registerPipReceiver()
-        setupCast()
+        runCatching { registerPipReceiver() }
+        runCatching { setupCast() }
     }
 
     // ---------------------------------------------------------------- the player
