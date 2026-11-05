@@ -231,6 +231,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         com.powersound.player.data.LoudnessStore.init(app)
         com.powersound.player.data.SettingsStore.init(app)
         com.powersound.player.data.CrashLog.install(app)
+        com.powersound.player.data.ListPrefs.init(app)
         com.powersound.player.ui.HintStore.init(app)
         // notification buttons that need the app (Settings → Notifications → Buttons)
         viewModelScope.launch {

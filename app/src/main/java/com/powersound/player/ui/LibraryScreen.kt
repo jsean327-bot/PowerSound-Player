@@ -56,6 +56,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.runtime.produceState
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.graphics.graphicsLayer
@@ -164,24 +167,45 @@ fun GroupGridScreen(
     onAddToQueue: (List<Song>) -> Unit,
     extraMenu: List<Pair<String, () -> Unit>> = emptyList(),
     /** Multi-select of albums / folders / artists… (null: none). */
-    actions: ListActions? = null
+    actions: ListActions? = null,
+    /** ⋮ menu (Poweramp's): Rescan, Select Folders, Add to Launcher, library settings. */
+    menu: ListMenuActions? = null
 ) {
     val state = rememberLazyGridState()
     val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
-    var columns by rememberSaveable { mutableIntStateOf(2) }
-    var sort by rememberSaveable { mutableIntStateOf(0) }
+    val listPrefs by com.powersound.player.data.ListPrefs.all.collectAsState()
+    val pref = listPrefs[title] ?: com.powersound.player.data.ListPref()
+    fun setPref(change: (com.powersound.player.data.ListPref) -> com.powersound.player.data.ListPref) =
+        com.powersound.player.data.ListPrefs.update(title, change)
+    val view = pref.view
+    val columns = com.powersound.player.data.gridColumns(view)
+    val isGrid = view in setOf(0, 7, 8, 9)
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var query by rememberSaveable { mutableStateOf<String?>(null) }
-    var menu by remember { mutableStateOf(false) }
-    val shown = remember(groups, query, sort) {
+    var sheet by remember { mutableStateOf<String?>(null) }
+
+    // List Options → By date added/modified: the files' own dates (read in the background)
+    val fileDates by produceState<Map<String, Long>>(emptyMap(), groups, pref.sort) {
+        if (pref.sort == 4) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            groups.associate { g ->
+                g.key to g.songs.maxOfOrNull { s -> runCatching { java.io.File(s.path).lastModified() }.getOrDefault(0L) }.let { it ?: 0L }
+            }
+        }
+    }
+    val shown = remember(groups, query, pref.sort, pref.reverse, fileDates) {
         val q = query?.trim()?.lowercase().orEmpty()
         val list = if (q.isEmpty()) groups else groups.filter { it.title.lowercase().contains(q) || it.subtitle.lowercase().contains(q) }
-        when (sort) {
-            1 -> list.reversed()
-            2 -> list.sortedByDescending { it.songs.size }
-            3 -> list.sortedBy { it.songs.size }
+        fun pathOf(g: Group) = if (g.key.startsWith("folder:")) g.key.removePrefix("folder:") else g.songs.firstOrNull()?.path ?: g.title
+        val sorted = when (pref.sort) {
+            1 -> list.sortedBy { pathOf(it) }
+            2 -> list.sortedBy { pathOf(it).lowercase() }
+            3 -> list.sortedByDescending { g -> g.songs.maxOfOrNull { it.dateAdded } ?: 0L }
+            4 -> list.sortedByDescending { fileDates[it.key] ?: 0L }
+            5 -> list.sortedByDescending { it.songs.size }
             else -> list
         }
+        if (pref.reverse) sorted.reversed() else sorted
     }
     val allSongs = remember(shown) { shown.flatMap { it.songs } }
     val keys = remember(shown) { shown.map { letterKey(com.powersound.player.data.MusicRepository.sortKey(it.title)) } }
@@ -211,30 +235,22 @@ fun GroupGridScreen(
                 },
                 onPlay = { onPlay(allSongs) },
                 onSearch = { query = if (query == null) "" else null },
-                onMore = { menu = true },
+                onMore = { sheet = "menu" },
                 enabled = allSongs.isNotEmpty(),
                 searchActive = query != null,
                 onSelect = if (actions != null && shown.isNotEmpty()) ({ selected = emptySet() }) else null
             )
-            Box(Modifier.align(Alignment.TopEnd)) {
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Add all to queue") }, onClick = { menu = false; onAddToQueue(allSongs) })
-                    extraMenu.forEach { (label, action) ->
-                        DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() })
-                    }
-                    MenuHeader("List options • sort")
-                    listOf("Name A–Z", "Name Z–A", "Most songs", "Fewest songs").forEachIndexed { i, label ->
-                        DropdownMenuItem(
-                            text = { Text(if (sort == i) "✓  $label" else "     $label") },
-                            onClick = { sort = i; menu = false }
-                        )
-                    }
-                    MenuHeader("Zoom (or pinch the list)")
-                    DropdownMenuItem(text = { Text("Bigger tiles") }, onClick = { if (columns > 1) columns--; menu = false })
-                    DropdownMenuItem(text = { Text("Smaller tiles") }, onClick = { if (columns < 4) columns++; menu = false })
-                }
-            }
         }
+    }
+
+    // pinch: grids get bigger / smaller tiles, lists bigger / smaller rows
+    val gridOrder = listOf(9, 8, 0, 7)
+    val listOrder = listOf(6, 5, 4, 3, 2, 1)
+    fun zoom(bigger: Boolean) {
+        val order = if (isGrid) gridOrder else listOrder
+        val i = order.indexOf(view).coerceAtLeast(0)
+        val next = order[(if (bigger) i - 1 else i + 1).coerceIn(0, order.size - 1)]
+        if (next != view) setPref { it.copy(view = next) }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -243,10 +259,10 @@ fun GroupGridScreen(
             state = state,
             modifier = Modifier
                 .fillMaxSize()
-                .pinchToZoom(columns, onZoomIn = { if (columns > 1) columns-- }, onZoomOut = { if (columns < 4) columns++ }),
-            contentPadding = PaddingValues(start = 10.dp, end = 26.dp, bottom = bottomInset + 70.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .pinchToZoom(view, onZoomIn = { zoom(true) }, onZoomOut = { zoom(false) }),
+            contentPadding = PaddingValues(start = if (isGrid) 10.dp else 0.dp, end = 26.dp, bottom = bottomInset + 70.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (isGrid) (if (columns >= 4) 6.dp else 10.dp) else 0.dp),
+            verticalArrangement = Arrangement.spacedBy(if (isGrid) (if (columns >= 4) 6.dp else 10.dp) else 0.dp)
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 PageHeader(backLabel, title, icon, iconColor, onBack) { if (st.headerButtons) pills(Modifier) }
@@ -257,15 +273,21 @@ fun GroupGridScreen(
                 }
             }
             itemsIndexed(shown, key = { i, _ -> lazyKeys[i] }) { _, g ->
-                GroupTile(
-                    g.title, g.subtitle, g.coverId, g.key,
-                    checked = if (selecting) selected?.contains(g.key) == true else null,
-                    onLongClick = if (actions != null) ({ if (selecting) toggle(g.key) else selected = setOf(g.key) }) else null
-                ) { if (selecting) toggle(g.key) else onOpen(g) }
+                val checked = if (selecting) selected?.contains(g.key) == true else null
+                val longClick: (() -> Unit)? = if (actions != null) ({ if (selecting) toggle(g.key) else selected = setOf(g.key) }) else null
+                val click = { if (selecting) toggle(g.key) else onOpen(g) }
+                if (isGrid) {
+                    GroupTile(
+                        g.title, if (pref.titlesOnly || view == 0 || view == 7) "" else g.subtitle, g.coverId, g.key,
+                        checked = checked, onLongClick = longClick, small = columns >= 3, onClick = click
+                    )
+                } else {
+                    GroupRow(g, view, pref.titlesOnly, checked, longClick, click)
+                }
             }
         }
 
-        if (sort == 0 && st.azScroll) {
+        if (pref.sort == 0 && !pref.reverse && st.azScroll) {
             FastScroller(
                 itemKeys = keys,
                 onJump = { i -> scope.launch { state.scrollToItem(i + headerItems) } },
@@ -300,6 +322,100 @@ fun GroupGridScreen(
         } else {
             BottomPills(st.bottomButtons, scrolled || !st.headerButtons, bottomInset) { pills(Modifier) }
         }
+    }
+
+    // ---- ⋮ menu and its cards (like Poweramp)
+    when (sheet) {
+        "menu" -> ListMenuCard(
+            title = title,
+            onSelectFolders = menu?.allFolders?.let { { sheet = "folders" } },
+            onRescan = { menu?.onRescan?.invoke() },
+            onAddToLauncher = menu?.category?.let { { sheet = "launcher" } },
+            onListOptions = { sheet = "options" },
+            extra = listOf("Add all to queue" to { onAddToQueue(allSongs) }) + extraMenu,
+            onDismiss = { if (sheet == "menu") sheet = null }
+        )
+        "options" -> ListOptionsCard(
+            title = title,
+            pref = pref,
+            onChange = { setPref(it) },
+            onSettings = { menu?.onSettings?.invoke() },
+            onDismiss = { sheet = null }
+        )
+        "launcher" -> AddToLauncherCard(
+            onAdd = { play, open, shuffle ->
+                val ok = pinListShortcut(context, title, menu?.category ?: "", null, play, open, shuffle)
+                if (!ok) android.widget.Toast.makeText(context, "This home screen doesn't accept app shortcuts", android.widget.Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { sheet = null }
+        )
+        "folders" -> FoldersSelectionCard(
+            allFolders = menu?.allFolders?.invoke().orEmpty(),
+            excluded = st.excludedFolders,
+            onSave = { out ->
+                com.powersound.player.data.SettingsStore.update { it.copy(excludedFolders = out) }
+                menu?.onRescan?.invoke()
+            },
+            onDismiss = { sheet = null }
+        )
+    }
+}
+
+/** What the ⋮ menu of a list can do (given by the app screen). */
+class ListMenuActions(
+    val onRescan: () -> Unit,
+    /** Library folders (for Select Folders), or null to hide it. */
+    val allFolders: (() -> List<String>)?,
+    /** The Category name (for Add to Launcher), or null to hide it. */
+    val category: String?,
+    val onSettings: () -> Unit
+)
+
+/** A group as a row (List views of List Options). */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun GroupRow(g: Group, view: Int, titlesOnly: Boolean, checked: Boolean?, onLongClick: (() -> Unit)?, onClick: () -> Unit) {
+    val art = when (view) { 6 -> 72; 5 -> 56; 4 -> 44; 2 -> 40; else -> 0 }
+    val oneLine = view == 2 || view == 1 || titlesOnly
+    val primary = MaterialTheme.colorScheme.primary
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(if (checked == true) primary.copy(alpha = 0.18f) else Color.Transparent)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 12.dp, vertical = if (view == 1 || view == 4) 5.dp else 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (checked != null) {
+            Icon(
+                if (checked) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                contentDescription = null,
+                tint = if (checked) primary else Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.padding(end = 10.dp).size(24.dp)
+            )
+        }
+        if (art > 0) {
+            val person = g.key.startsWith("artist:") || g.key.startsWith("albumartist:") || g.key.startsWith("composer:")
+            Box(Modifier.size(art.dp).clip(if (person) CircleShape else RoundedCornerShape(10.dp))) {
+                if (person) ArtistArtwork(g.title, g.coverId, Modifier.fillMaxSize(), sizePx = art * 3)
+                else Artwork(g.coverId, Modifier.fillMaxSize(), sizePx = art * 3, cornerDp = 0)
+            }
+            Spacer(Modifier.width(12.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                g.title,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = if (view == 1) 13.sp else 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!oneLine) {
+                Text(g.subtitle, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Text("${g.songs.size}", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
     }
 }
 

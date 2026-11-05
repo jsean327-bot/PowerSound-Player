@@ -134,6 +134,9 @@ class MainActivity : ComponentActivity() {
         val reopened = kotlinx.coroutines.flow.MutableStateFlow(0L)
         /** A file another app asked PowerSound to play ("Open with"), until the app has started playing it. */
         val openedUri = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
+
+        /** A home-screen list icon (⋮ → Add to Launcher) asked for a list: category, group, play, open, shuffle. */
+        val openedList = kotlinx.coroutines.flow.MutableStateFlow<android.os.Bundle?>(null)
         const val EXTRA_FROM_NOTIFICATION = "powersound.fromNotification"
     }
 
@@ -142,6 +145,7 @@ class MainActivity : ComponentActivity() {
         applySystemBars(com.powersound.player.data.SettingsStore.value)
         super.onCreate(savedInstanceState)
         com.powersound.player.data.CrashLog.install(this)
+        com.powersound.player.data.ListPrefs.init(this)
         // after a screen rotation Android gives the same intent again: an opened file must not play twice
         handleIntent(intent, openFile = savedInstanceState == null)
         setContent {
@@ -201,6 +205,9 @@ class MainActivity : ComponentActivity() {
         // "Open with PowerSound": the file plays as soon as the library is ready
         if (openFile && intent?.action == android.content.Intent.ACTION_VIEW) {
             intent.data?.let { openedUri.value = it }
+        }
+        if (openFile && intent?.action == com.powersound.player.ui.ACTION_OPEN_LIST) {
+            openedList.value = intent.extras
         }
     }
 
@@ -514,6 +521,33 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         }
     }
     fun saveTags(song: Song, edits: com.powersound.player.data.TagEdits) = saveTagsMany(listOf(song to edits))
+
+    // a home-screen list icon (⋮ → Add to Launcher): open and / or play that list
+    val listAsk by MainActivity.openedList.collectAsStateWithLifecycle()
+    LaunchedEffect(listAsk, library.loaded) {
+        val b = listAsk ?: return@LaunchedEffect
+        if (!library.loaded) return@LaunchedEffect
+        MainActivity.openedList.value = null
+        val cat = runCatching { Category.valueOf(b.getString(com.powersound.player.ui.EXTRA_LIST_CAT) ?: "") }.getOrNull() ?: return@LaunchedEffect
+        val groupKey = b.getString(com.powersound.player.ui.EXTRA_LIST_GROUP)
+        val groups = if (cat.kind == Kind.GROUPS) library.groupsFor(cat) else emptyList()
+        val group = groupKey?.let { k -> groups.firstOrNull { it.key == k } }
+        val songs = when {
+            group != null -> group.songs
+            cat.kind == Kind.GROUPS -> groups.flatMap { it.songs }
+            else -> vm.songsFor(cat, stats)
+        }
+        vm.tab = Tab.LIBRARY
+        if (b.getBoolean(com.powersound.player.ui.EXTRA_LIST_OPEN, true)) {
+            while (vm.pop()) { /* to the library's first page */ }
+            vm.push(Screen.Cat(cat))
+            if (group != null) vm.push(Screen.Detail(group, cat.label))
+        }
+        if (b.getBoolean(com.powersound.player.ui.EXTRA_LIST_PLAY, false) && songs.isNotEmpty()) {
+            val key = group?.key ?: "cat:${cat.name}"
+            if (b.getBoolean(com.powersound.player.ui.EXTRA_LIST_SHUFFLE, false)) vm.shuffleAll(songs, key) else vm.play(songs, 0, sourceKey = key)
+        }
+    }
 
     // "Open with PowerSound" from a file manager or another app
     val opened by MainActivity.openedUri.collectAsStateWithLifecycle()
@@ -1348,7 +1382,14 @@ private fun ScreenContent(
                             "New playlist" to { nameDialog = "New playlist" to { n: String -> com.powersound.player.data.LibraryStores.createPlaylist(n); Unit } }
                         ) else emptyList(),
                         // "Select" several albums / folders / artists… (not playlists: delete would remove the songs' files)
-                        actions = if (cat == Category.PLAYLISTS) null else listActions
+                        actions = if (cat == Category.PLAYLISTS) null else listActions,
+                        // ⋮ : Select Folders, Rescan, Add to Launcher, List Options (like Poweramp)
+                        menu = com.powersound.player.ui.ListMenuActions(
+                            onRescan = { vm.loadLibrary(force = true) },
+                            allFolders = { vm.allFolders },
+                            category = cat.name,
+                            onSettings = onOpenSettings
+                        )
                     )
                 }
                 Kind.TREE -> {

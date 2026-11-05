@@ -734,6 +734,8 @@ fun GroupTile(
     /** Multi-select: null = not selecting, true / false = ticked or not. */
     checked: Boolean? = null,
     onLongClick: (() -> Unit)? = null,
+    /** Smaller tiles (3–4 per row): smaller labels. */
+    small: Boolean = false,
     onClick: () -> Unit
 ) {
     Box(
@@ -761,11 +763,13 @@ fun GroupTile(
         Column(
             Modifier
                 .align(Alignment.BottomStart)
-                .padding(8.dp)
+                .padding(if (small) 5.dp else 8.dp)
         ) {
-            OverlayChip(title, big = true)
-            Spacer(Modifier.height(3.dp))
-            OverlayChip(subtitle)
+            OverlayChip(title, big = !small)
+            if (subtitle.isNotEmpty()) {
+                Spacer(Modifier.height(3.dp))
+                OverlayChip(subtitle)
+            }
         }
         if (checked != null) {
             Box(
