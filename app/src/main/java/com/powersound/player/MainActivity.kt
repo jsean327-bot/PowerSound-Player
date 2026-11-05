@@ -1556,6 +1556,7 @@ private fun dspSummary(): String {
     if (eq.enabled && eq.limiter) parts.add("Limiter")
     if (fx.spatialEnabled) parts.add("3D Surround")
     if (fx.reverbEnabled) parts.add("Reverb (${fx.reverbPreset})")
+    if (fx.crossfeedEnabled && !fx.spatialEnabled && !fx.mono) parts.add("Crossfeed")
     if (fx.tempoEnabled && fx.tempo != 1.0) parts.add("Tempo %.2fx".format(fx.tempo))
     if (fx.mono) parts.add("Mono")
     if (fx.stereoExpand > 0.0) parts.add("Stereo expand")

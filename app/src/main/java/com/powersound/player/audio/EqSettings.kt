@@ -173,6 +173,25 @@ val BUILT_IN_PRESETS = listOf(
             EqBand(8013.0, 1.3, 5.99),
             EqBand(10000.0, -3.0, 0.70, BandType.HIGH_SHELF)
         )
+    ),
+    // The same Liberty 4 NC correction plus a gentle vocal touch (a little less mud at 300 Hz, +1.5 dB presence around
+    // 3.2 kHz) — clearer singers (e.g. Elissa) without changing the song's character. Preamp keeps the peak below 0 dB.
+    EqPreset(
+        "Liberty 4 NC + Vocal", emptyList(), preampDb = -4.6,
+        bands = listOf(
+            EqBand(79.0, -4.7, 0.79),
+            EqBand(89.0, -1.0, 6.00),
+            EqBand(105.0, -1.6, 0.70, BandType.LOW_SHELF),
+            EqBand(264.0, -1.8, 0.35),
+            EqBand(300.0, -1.0, 1.0),
+            EqBand(2383.0, 4.0, 0.26),
+            EqBand(2945.0, -1.0, 3.83),
+            EqBand(3200.0, 1.5, 1.0),
+            EqBand(4874.0, 1.1, 3.01),
+            EqBand(7369.0, -6.0, 1.88),
+            EqBand(8013.0, 1.3, 5.99),
+            EqBand(10000.0, -3.0, 0.70, BandType.HIGH_SHELF)
+        )
     )
 )
 

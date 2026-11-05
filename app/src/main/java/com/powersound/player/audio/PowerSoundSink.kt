@@ -267,7 +267,8 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
                 limiter = s.limiter,
                 spatial = fx.spatialEnabled,
                 spatialAmount = fx.spatialAmount,
-                spatialRoom = fx.spatialRoom
+                spatialRoom = fx.spatialRoom,
+                crossfeed = if (fx.crossfeedEnabled && !fx.spatialEnabled && !fx.mono) fx.crossfeedLevel else -1
             )
         )
     }

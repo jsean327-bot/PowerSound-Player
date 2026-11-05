@@ -15,6 +15,9 @@ data class FxSettings(
     val spatialEnabled: Boolean = false,
     val spatialAmount: Double = 0.6,    // 0 .. 1  how much comes from around and above
     val spatialRoom: Double = 0.35,     // 0 .. 1  studio reverb
+    // ---- Crossfeed for headphones (see [CROSSFEED_LEVELS]) ----
+    val crossfeedEnabled: Boolean = false,
+    val crossfeedLevel: Int = 1,
     // ---- reverb (all 0 .. 1) ----
     val reverbEnabled: Boolean = false,
     val damp: Double = 0.5,
@@ -29,7 +32,7 @@ data class FxSettings(
     /** True when any effect changes the sound (otherwise audio can pass through untouched). */
     val active: Boolean
         get() = kotlin.math.abs(balance) > 0.001 || stereoExpand > 0.001 || mono ||
-            volume < 0.999 || reverbEnabled || spatialEnabled
+            volume < 0.999 || reverbEnabled || spatialEnabled || crossfeedEnabled
 
     val preDelayMs: Double get() = preDelay * 200.0
 }
@@ -68,6 +71,7 @@ fun FxSettings.toJson(): JSONObject = JSONObject().apply {
     put("balance", balance); put("expand", stereoExpand); put("mono", mono)
     put("tempoOn", tempoEnabled); put("tempo", tempo); put("volume", volume)
     put("s3d", spatialEnabled); put("s3dAmt", spatialAmount); put("s3dRoom", spatialRoom)
+    put("xfOn", crossfeedEnabled); put("xfLvl", crossfeedLevel)
     put("revOn", reverbEnabled); put("damp", damp); put("filter", filter); put("fade", fade)
     put("pre", preDelay); put("preMix", preDelayMix); put("size", size); put("mix", mix)
     put("revPreset", reverbPreset)
@@ -85,6 +89,8 @@ fun fxFromJson(o: JSONObject): FxSettings {
         spatialEnabled = o.optBoolean("s3d", d.spatialEnabled),
         spatialAmount = o.optDouble("s3dAmt", d.spatialAmount),
         spatialRoom = o.optDouble("s3dRoom", d.spatialRoom),
+        crossfeedEnabled = o.optBoolean("xfOn", d.crossfeedEnabled),
+        crossfeedLevel = o.optInt("xfLvl", d.crossfeedLevel),
         reverbEnabled = o.optBoolean("revOn", d.reverbEnabled),
         damp = o.optDouble("damp", d.damp),
         filter = o.optDouble("filter", d.filter),

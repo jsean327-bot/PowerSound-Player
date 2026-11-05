@@ -408,6 +408,7 @@ fun AudioInfoDialog(song: Song?, audioInfo: String, dspSummary: String, onDismis
             val effects = listOfNotNull(
                 if (fx.spatialEnabled) "3D Surround (around ${(fx.spatialAmount * 100).toInt()}%, room ${(fx.spatialRoom * 100).toInt()}%)" else null,
                 if (fx.reverbEnabled) "Reverb (${fx.reverbPreset})" else null,
+                if (fx.crossfeedEnabled && !fx.spatialEnabled && !fx.mono) "Crossfeed (${com.powersound.player.audio.CROSSFEED_LEVELS[fx.crossfeedLevel.coerceIn(0, 2)].first})" else null,
                 if (fx.tempoEnabled && fx.tempo != 1.0) "Tempo %.2fx".format(fx.tempo) else null,
                 if (fx.mono) "Mono" else null,
                 if (fx.stereoExpand > 0.0) "Stereo expand" else null,

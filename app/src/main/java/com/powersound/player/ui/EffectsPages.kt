@@ -191,6 +191,47 @@ private fun EffectsPage(bottomInset: Dp) {
 
         Spacer(Modifier.height(18.dp))
 
+        // Crossfeed: speakers-like stereo on headphones (off while 3D Surround or Mono is on — they already mix the ears)
+        val xfUsable = !fx.spatialEnabled && !fx.mono
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            FxToggle("Crossfeed", fx.crossfeedEnabled && xfUsable) {
+                edit { it.copy(crossfeedEnabled = !(it.crossfeedEnabled && xfUsable), spatialEnabled = false, mono = false) }
+            }
+            Spacer(Modifier.weight(1f))
+            com.powersound.player.audio.CROSSFEED_LEVELS.forEachIndexed { i, lv ->
+                val on = fx.crossfeedEnabled && xfUsable && fx.crossfeedLevel == i
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    Modifier
+                        .height(32.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.06f))
+                        .clickable {
+                            edit { it.copy(crossfeedLevel = i, crossfeedEnabled = true, spatialEnabled = false, mono = false) }
+                        }
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        lv.first,
+                        color = if (on) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+        Text(
+            "For headphones and earbuds: each ear also hears a soft, slightly later copy of the other side, like speakers " +
+                "in a room. Sounds stop sitting inside one ear, the singer's voice locks into the centre and long " +
+                "listening is less tiring. Voice level and tone stay the same. Not used together with 3D Surround or Mono.",
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 11.sp,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+        )
+
+        Spacer(Modifier.height(18.dp))
+
         // Balance • Stereo expand
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
             PowerKnob(
