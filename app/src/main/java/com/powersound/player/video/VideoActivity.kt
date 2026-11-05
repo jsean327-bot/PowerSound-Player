@@ -150,7 +150,11 @@ class VideoActivity : ComponentActivity() {
     val castDuration = mutableLongStateOf(0L)
     val castPlaying = mutableStateOf(false)
 
+    /** ⋮ → Aspect Ratio for this video (0 default … 7 custom). */
+    val aspect = mutableIntStateOf(0)
+
     private val stereo = StereoModeProcessor()
+    private var reverb: android.media.audiofx.PresetReverb? = null
     var equalizer: Equalizer? = null
         private set
     var bassBoost: BassBoost? = null
@@ -160,6 +164,7 @@ class VideoActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // opened straight from another app: the settings may not be loaded yet
         SettingsStore.init(this)
+        VideoPrefsStore.init(this)
         val req = VideoRequest.from(this, intent)
         if (req == null) {
             finish()
@@ -169,6 +174,12 @@ class VideoActivity : ComponentActivity() {
         keys = req.keys.toMutableList()
         headers = req.headers
         goFullScreen()
+        VideoPrefsStore.value.let { vp ->
+            if (vp.orientation != 0) setRotationMode(vp.orientation) else rotation.intValue = 0
+            // Display Settings → Screen → Brightness
+            if (vp.brightnessOn) setBrightness((vp.brightnessLevel / 15f).coerceIn(0.02f, 1f))
+            aspect.intValue = if (vp.aspectAll) vp.aspect else 0
+        }
         // the music stops while a video plays (unless it is playing on a Chromecast)
         PlaybackService.instance?.pauseForVideo()
         audioSessionId = runCatching { Util.generateAudioSessionIdV21(this) }.getOrDefault(C.AUDIO_SESSION_ID_UNSET)
@@ -213,6 +224,7 @@ class VideoActivity : ComponentActivity() {
             error.value = null
             abA.value = null
             abB.value = null
+            if (!VideoPrefsStore.value.aspectAll) aspect.intValue = 0
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                 // the previous episode was watched to the end
                 keys.getOrNull(player.currentMediaItemIndex - 1)?.let { VideoStore.savePosition(this@VideoActivity, it, 0L, 0L) }
@@ -440,6 +452,16 @@ class VideoActivity : ComponentActivity() {
 
     /** Takes a picture of the video (no controls) into Pictures/PowerSound. */
     fun screenshot(done: (String) -> Unit) {
+        (playerView?.videoSurfaceView as? android.view.TextureView)?.let { tv ->
+            if (Build.VERSION.SDK_INT < 29) { done("Screenshots need Android 10 or newer"); return }
+            val size = playerOrNull()?.videoSize
+            val bmp = runCatching {
+                if (size != null && size.width > 0 && size.height > 0) tv.getBitmap(size.width, size.height) else tv.bitmap
+            }.getOrNull()
+            if (bmp == null) { done("No picture to capture"); return }
+            saveScreenshot(bmp, done)
+            return
+        }
         val sv = playerView?.videoSurfaceView as? SurfaceView
         val size = playerOrNull()?.videoSize
         if (sv == null || size == null || size.width <= 0 || size.height <= 0) {
@@ -456,6 +478,11 @@ class VideoActivity : ComponentActivity() {
                 done("Couldn't capture the picture")
                 return@request
             }
+            saveScreenshot(bmp, done)
+        }, Handler(Looper.getMainLooper()))
+    }
+
+    private fun saveScreenshot(bmp: Bitmap, done: (String) -> Unit) {
             val title = (playerOrNull()?.mediaMetadata?.title?.toString() ?: "video").replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60)
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
@@ -471,7 +498,6 @@ class VideoActivity : ComponentActivity() {
                 }
                 done(if (ok) "Saved in Pictures/PowerSound" else "Couldn't save the picture")
             }
-        }, Handler(Looper.getMainLooper()))
     }
 
     // ---------------------------------------------------------------- audio: external file, tracks, equalizer
@@ -528,6 +554,24 @@ class VideoActivity : ComponentActivity() {
                 enabled = st.videoEqOn && st.videoBass > 0
             }
         }.getOrNull()
+        runCatching { reverb?.release() }
+        reverb = null
+        setReverb(VideoPrefsStore.value.reverb)
+    }
+
+    /** Equalizer → Reverb: 0 none, 1 small room, 2 medium room, 3 large room, 4 medium hall, 5 large hall, 6 plate. */
+    fun setReverb(preset: Int) {
+        VideoPrefsStore.update { it.copy(reverb = preset) }
+        if (audioSessionId == C.AUDIO_SESSION_ID_UNSET) return
+        if (preset == 0) {
+            runCatching { reverb?.enabled = false }
+            return
+        }
+        runCatching {
+            val r = reverb ?: android.media.audiofx.PresetReverb(0, audioSessionId).also { reverb = it }
+            r.preset = preset.toShort()
+            r.enabled = true
+        }
     }
 
     /** Saves the equalizer as it is now (it is used again for the next videos). */
@@ -553,15 +597,30 @@ class VideoActivity : ComponentActivity() {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
         }
+        applyBars(uiVisible)
+    }
+
+    private var uiVisible = false
+
+    /**
+     * Display Settings → Screen → Full Screen / Soft buttons: the status bar and the navigation bar show with
+     * the controls ("auto"), never, or always.
+     */
+    fun applyBars(controlsVisible: Boolean) {
+        uiVisible = controlsVisible
+        val p = VideoPrefsStore.value
+        val status = when (p.fullScreen) { 1 -> false; 2 -> true; else -> controlsVisible }
+        val nav = when (p.softButtons) { 1 -> false; 2 -> true; else -> controlsVisible }
         WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (status) show(WindowInsetsCompat.Type.statusBars()) else hide(WindowInsetsCompat.Type.statusBars())
+            if (nav) show(WindowInsetsCompat.Type.navigationBars()) else hide(WindowInsetsCompat.Type.navigationBars())
         }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) goFullScreen()
+        if (hasFocus) applyBars(uiVisible)
     }
 
     /** Wide videos turn the phone sideways, tall ones keep it upright (rotation "By the video"). */
@@ -770,6 +829,132 @@ class VideoActivity : ComponentActivity() {
         }
     }
 
+    // ---------------------------------------------------------------- ⋮ panel: stream, information, share, bookmarks, cut
+
+    /** ⋮ → Network Stream: plays a web address here. */
+    fun playUrl(url: String) {
+        val p = playerOrNull() ?: return
+        val uri = Uri.parse(url.trim())
+        val mime = when {
+            url.contains(".m3u8", true) -> MimeTypes.APPLICATION_M3U8
+            url.contains(".mpd", true) -> MimeTypes.APPLICATION_MPD
+            else -> null
+        }
+        savePosition()
+        val title = uri.lastPathSegment?.substringBeforeLast('.')?.takeIf { it.isNotBlank() } ?: uri.host ?: "Stream"
+        keys = mutableListOf(VideoStore.keyOf(uri))
+        ended = false
+        p.setMediaItem(
+            MediaItem.Builder().setUri(uri).setMimeType(mime)
+                .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build()).build()
+        )
+        p.prepare()
+        p.play()
+    }
+
+    /** ⋮ → Information: the file and its picture / sound / subtitle tracks. */
+    fun information(): List<Pair<String, String>> {
+        val p = playerOrNull() ?: return emptyList()
+        val out = ArrayList<Pair<String, String>>()
+        val item = p.currentMediaItem
+        val uri = item?.localConfiguration?.uri
+        out += "Title" to (item?.mediaMetadata?.title?.toString() ?: "")
+        uri?.let { u ->
+            if (u.scheme == "content") {
+                runCatching {
+                    contentResolver.query(u, arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.SIZE), null, null, null)?.use { c ->
+                        if (c.moveToFirst()) {
+                            c.getString(0)?.let { out += "File" to it }
+                            val size = c.getLong(1)
+                            if (size > 0) out += "Size" to (if (size > 1L shl 30) "%.2f GB".format(size / (1L shl 30).toDouble()) else "${size / (1L shl 20)} MB")
+                        }
+                    }
+                }
+            } else out += "Address" to u.toString()
+        }
+        if (p.duration > 0) out += "Length" to com.powersound.player.data.formatTime(p.duration)
+        p.videoFormat?.let { f ->
+            out += "Video" to listOfNotNull(
+                f.sampleMimeType?.substringAfter('/')?.uppercase(),
+                if (f.width > 0) "${f.width}×${f.height}" else null,
+                if (f.frameRate > 0) "%.3f fps".format(f.frameRate).replace(".000", "") else null,
+                if (f.bitrate > 0) "${f.bitrate / 1000} kbps" else null,
+                f.codecs
+            ).joinToString(" • ")
+        }
+        p.videoDecoderCounters?.let { out += "Dropped frames" to it.droppedBufferCount.toString() }
+        var a = 0
+        var t = 0
+        for (g in p.currentTracks.groups) {
+            for (i in 0 until g.length) {
+                val f = g.getTrackFormat(i)
+                when (g.type) {
+                    C.TRACK_TYPE_AUDIO -> {
+                        a++
+                        out += "Audio $a${if (g.isTrackSelected(i)) " (playing)" else ""}" to listOfNotNull(
+                            f.language?.takeIf { it != "und" },
+                            f.sampleMimeType?.substringAfter('/')?.uppercase(),
+                            if (f.channelCount > 0) "${f.channelCount} ch" else null,
+                            if (f.sampleRate > 0) "${f.sampleRate} Hz" else null,
+                            if (f.bitrate > 0) "${f.bitrate / 1000} kbps" else null
+                        ).joinToString(" • ")
+                    }
+                    C.TRACK_TYPE_TEXT -> {
+                        t++
+                        out += "Subtitle $t" to listOfNotNull(f.label, f.language, f.sampleMimeType?.substringAfter('/')).joinToString(" • ")
+                    }
+                }
+            }
+        }
+        out += "Decoder" to DECODERS[SettingsStore.value.videoDecoder.coerceIn(0, 2)]
+        return out
+    }
+
+    /** ⋮ → Share: the file (or the web address). */
+    fun share() {
+        val uri = playerOrNull()?.currentMediaItem?.localConfiguration?.uri ?: return
+        val web = uri.scheme == "http" || uri.scheme == "https"
+        val send = Intent(Intent.ACTION_SEND).apply {
+            if (web) {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, uri.toString())
+            } else {
+                type = runCatching { contentResolver.getType(uri) }.getOrNull() ?: "video/*"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+        runCatching { startActivity(Intent.createChooser(send, "Share")) }
+    }
+
+    fun bookmarks(): List<Long> = currentKey()?.let { VideoStore.bookmarks(this, it) }.orEmpty()
+
+    fun addBookmark(): Long? {
+        val key = currentKey() ?: return null
+        val pos = playerOrNull()?.currentPosition ?: return null
+        VideoStore.addBookmark(this, key, pos)
+        return pos
+    }
+
+    fun removeBookmark(ms: Long) {
+        currentKey()?.let { VideoStore.removeBookmark(this, it, ms) }
+    }
+
+    /** True when the video is a file on the phone (Cut works only on those). */
+    fun isLocalFile(): Boolean = playerOrNull()?.currentMediaItem?.localConfiguration?.uri?.scheme.let { it == "content" || it == "file" }
+
+    fun cut(startMs: Long, endMs: Long, progress: (Float) -> Unit, done: (String) -> Unit) {
+        val p = playerOrNull() ?: return
+        val uri = p.currentMediaItem?.localConfiguration?.uri ?: return
+        val title = p.mediaMetadata.title?.toString() ?: "video"
+        lifecycleScope.launch {
+            val r = VideoCutter.cut(this@VideoActivity, uri, startMs, endMs, title) { f ->
+                lifecycleScope.launch { progress(f) }
+            }
+            done(r.message)
+        }
+    }
+
     // ---------------------------------------------------------------- where you stopped
 
     private fun currentKey(): String? = playerOrNull()?.let { keys.getOrNull(it.currentMediaItemIndex) }
@@ -810,6 +995,10 @@ class VideoActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        // Display Settings → Screen → Pause playback if obstructed by another window
+        if (VideoPrefsStore.value.pauseObstructed && !isInPictureInPictureModeCompat() && !isChangingConfigurations &&
+            !SettingsStore.value.videoBackground
+        ) playerOrNull()?.pause()
         // ⋮ → Background Play: the sound goes on with a notification
         val p = playerOrNull()
         if (p != null && SettingsStore.value.videoBackground && p.isPlaying && !isChangingConfigurations &&
@@ -843,6 +1032,7 @@ class VideoActivity : ComponentActivity() {
         if (castingTo.value != null) CastControl.videoOwnsCast = false
         runCatching { equalizer?.release() }
         runCatching { bassBoost?.release() }
+        runCatching { reverb?.release() }
         playerOrNull()?.let {
             savePosition()
             it.release()

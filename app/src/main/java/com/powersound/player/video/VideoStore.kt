@@ -197,6 +197,32 @@ object VideoStore {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("positions", all.toString()).apply()
     }
 
+    // ---------------------------------------------------------------- bookmarks (⋮ → Bookmark)
+
+    fun bookmarks(context: Context, key: String): List<Long> {
+        val a = runCatching { marks(context).optJSONArray(key) }.getOrNull() ?: return emptyList()
+        val out = ArrayList<Long>()
+        for (i in 0 until a.length()) out.add(a.optLong(i))
+        return out.sorted()
+    }
+
+    fun addBookmark(context: Context, key: String, ms: Long) {
+        val list = (bookmarks(context, key) + ms).distinct().sorted()
+        saveMarks(context, key, list)
+    }
+
+    fun removeBookmark(context: Context, key: String, ms: Long) = saveMarks(context, key, bookmarks(context, key) - ms)
+
+    private fun marks(context: Context): JSONObject = runCatching {
+        JSONObject(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("bookmarks", null) ?: "{}")
+    }.getOrDefault(JSONObject())
+
+    private fun saveMarks(context: Context, key: String, list: List<Long>) {
+        val all = marks(context)
+        if (list.isEmpty()) all.remove(key) else all.put(key, org.json.JSONArray(list))
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("bookmarks", all.toString()).apply()
+    }
+
     @Volatile
     private var cache: JSONObject? = null
 

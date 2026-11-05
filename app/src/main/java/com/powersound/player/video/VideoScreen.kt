@@ -1,9 +1,15 @@
 package com.powersound.player.video
 
 import android.content.Context
+import android.graphics.Typeface
 import android.media.AudioManager
 import android.net.Uri
+import android.os.BatteryManager
 import android.provider.OpenableColumns
+import android.text.Layout
+import android.util.TypedValue
+import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,9 +18,16 @@ import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +41,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,7 +59,10 @@ import androidx.compose.material.icons.rounded.CastConnected
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ClosedCaption
 import androidx.compose.material.icons.rounded.CompareArrows
+import androidx.compose.material.icons.rounded.DisplaySettings
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.FastForward
+import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Forward10
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Lock
@@ -71,6 +88,7 @@ import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.ZoomIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -99,12 +117,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -116,11 +138,14 @@ import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.text.Cue
+import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
+import com.powersound.player.R
 import com.powersound.player.data.DEFAULT_VIDEO_TOOLS
 import com.powersound.player.data.SettingsStore
 import com.powersound.player.data.formatTime
@@ -128,20 +153,17 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 
-/** PlayerView picture sizes (AspectRatioFrameLayout FIT = 0, ZOOM = 4, FILL = 3). */
-private val RESIZE_MODES = listOf(
-    0 to "Fit",
-    4 to "Fill (crop)",
-    3 to "Stretch"
-)
+/** Picture size button: fit, fill (crop), stretch, the video's real pixel size. */
+private val RESIZE_MODES = listOf("Fit to screen", "Crop", "Stretch", "100%")
 
-private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
+private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 4f)
 
 /** One choice in the audio / subtitle lists. */
 private class TrackChoice(val label: String, val selected: Boolean, val apply: () -> Unit)
 
-/** A tool in the ⋮ strip. */
+/** A tool in the shortcuts strip. */
 private class Tool(val id: String, val label: String, val icon: ImageVector)
 
 private val TOOLS = listOf(
@@ -158,18 +180,36 @@ private val TOOLS = listOf(
     Tool("rotation", "Screen Rotation", Icons.Rounded.ScreenRotation)
 )
 
+private fun typefaceOf(font: Int, bold: Boolean): Typeface? {
+    val base = when (font) {
+        1 -> Typeface.SANS_SERIF
+        2 -> Typeface.SERIF
+        3 -> Typeface.MONOSPACE
+        4 -> Typeface.create("sans-serif-condensed", Typeface.NORMAL)
+        5 -> Typeface.create("sans-serif-light", Typeface.NORMAL)
+        6 -> Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        7 -> Typeface.create("sans-serif-black", Typeface.NORMAL)
+        else -> if (bold) Typeface.DEFAULT else null
+    }
+    return if (bold && base != null) Typeface.create(base, Typeface.BOLD) else base
+}
+
 /**
  * The video screen, laid out like MX Player: top bar (back, title, Cast, audio, subtitles, decoder, ⋮),
- * the ⋮ tools strip, the time bar, and lock / previous / play / next / picture size / small window at the
- * bottom. Gestures: left side brightness, right side volume, sideways to jump, double tap ±10 s.
+ * the shortcuts strip, the time bar, and lock / previous / play / next / picture size / small window at the
+ * bottom. Everything is set in ⋮ → Display Settings.
  */
 @OptIn(UnstableApi::class)
 @Composable
 fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
     val player = activity.playerState.value ?: return
     val context = LocalContext.current
-    val primary = MaterialTheme.colorScheme.primary
+    val appPrimary = MaterialTheme.colorScheme.primary
     val settings by SettingsStore.settings.collectAsState()
+    val vp by VideoPrefsStore.prefs.collectAsState()
+    val primary = if (vp.progressColor == 0) appPrimary else Color(vp.progressColor)
+    val controlColor = Color(vp.controlColor)
+    val frame = Color(vp.frameColor)
     val inPip by activity.inPip
     val error by activity.error
     val night by activity.night
@@ -178,6 +218,7 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
     val abA by activity.abA
     val abB by activity.abB
     val sleepAt by activity.sleepAt
+    val aspect by activity.aspect
 
     // ---- player state (follows the player when it is rebuilt)
     var playing by remember(player) { mutableStateOf(player.isPlaying) }
@@ -191,6 +232,8 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
     var repeat by remember(player) { mutableIntStateOf(player.repeatMode) }
     var shuffle by remember(player) { mutableStateOf(player.shuffleModeEnabled) }
     var speed by remember(player) { mutableFloatStateOf(player.playbackParameters.speed) }
+    var videoSize by remember(player) { mutableStateOf(player.videoSize) }
+    var cues by remember(player) { mutableStateOf<List<Cue>>(emptyList()) }
     DisposableEffect(player) {
         val l = object : Player.Listener {
             override fun onEvents(p: Player, events: Player.Events) {
@@ -204,6 +247,11 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                 repeat = p.repeatMode
                 shuffle = p.shuffleModeEnabled
                 speed = p.playbackParameters.speed
+                videoSize = p.videoSize
+            }
+
+            override fun onCues(cueGroup: CueGroup) {
+                cues = cueGroup.cues
             }
         }
         player.addListener(l)
@@ -217,19 +265,30 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
     }
 
     // ---- controls
-    var controls by remember { mutableStateOf(true) }
-    var tools by remember { mutableStateOf(false) }
+    var controls by remember { mutableStateOf(vp.showUiAtStart) }
     var locked by remember { mutableStateOf(false) }
     var poke by remember { mutableIntStateOf(0) } // any touch restarts the hide timer
     var resize by remember { mutableIntStateOf(0) }
     var dialog by remember { mutableStateOf<String?>(null) }
     var seeking by remember { mutableStateOf<Float?>(null) }
-    LaunchedEffect(controls, playing, poke, dialog, seeking, tools) {
-        if (controls && playing && dialog == null && seeking == null) {
-            delay(if (tools) 6000 else 3500)
+    var zoom by remember { mutableFloatStateOf(1f) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
+    var subBottomLive by remember { mutableStateOf<Int?>(null) }
+    var subScaleLive by remember { mutableStateOf<Float?>(null) }
+    var fastForward by remember { mutableStateOf(false) }
+    var speedBeforeFF by remember { mutableFloatStateOf(1f) }
+    LaunchedEffect(controls, playing, poke, dialog, seeking, vp.autoHide, vp.autoHideTenths) {
+        if (controls && playing && dialog == null && seeking == null && vp.autoHide) {
+            delay(vp.autoHideTenths * 100L)
             controls = false
-            tools = false
         }
+    }
+    // status / navigation bars follow the controls (Display Settings → Screen)
+    LaunchedEffect(controls, locked, vp.fullScreen, vp.softButtons) { activity.applyBars(controls && !locked) }
+    LaunchedEffect(player) {
+        // a new video: the picture's zoom starts fresh
+        zoom = 1f
+        pan = Offset.Zero
     }
 
     // ---- gesture feedback in the middle of the screen
@@ -246,8 +305,31 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
         if (!stay) hintTick++
     }
 
+    // ---- kids lock: touch effects
+    val ripples = remember { mutableStateListOf<Pair<Offset, Long>>() }
+    var frameTick by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(ripples.size) {
+        while (ripples.isNotEmpty()) {
+            frameTick = System.currentTimeMillis()
+            ripples.removeAll { frameTick - it.second > 700 }
+            delay(16)
+        }
+    }
+
     val audio = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val maxVolume = remember { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
+
+    // ---- clock and battery (title bar / always on screen)
+    var clock by remember { mutableStateOf("") }
+    LaunchedEffect(vp.titleClock, vp.osdClock) {
+        while (vp.titleClock || vp.osdClock) {
+            val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            val battery = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+            val time = java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date())
+            clock = if (battery >= 0) "$time  •  $battery%" else time
+            delay(20_000)
+        }
+    }
 
     // ---- file pickers: subtitles, another sound track
     val pickSubtitle = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -269,12 +351,16 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
     BackHandler {
         when {
             locked -> {
-                controls = true
-                show(Icons.Rounded.Lock, "Unlock first")
+                if (vp.lockMode == 0) controls = true
+                show(Icons.Rounded.Lock, if (vp.lockMode == 0) "Unlock first" else "Hold the lock 2 seconds to unlock")
             }
-            tools -> tools = false
             else -> onBack()
         }
+    }
+
+    fun seekBy(ms: Long) {
+        val target = (player.currentPosition + ms).coerceIn(0L, if (duration > 0) duration else Long.MAX_VALUE)
+        player.seekTo(target)
     }
 
     fun runTool(id: String) {
@@ -305,7 +391,6 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
             "eq" -> dialog = "eq"
             "speed" -> dialog = "speed"
             "screenshot" -> {
-                tools = false
                 controls = false
                 activity.screenshot { msg -> show(Icons.Rounded.PhotoCamera, msg) }
             }
@@ -315,50 +400,101 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                 show(Icons.Rounded.Headphones, if (on) "Background play on: leave the video, the sound goes on" else "Background play off")
             }
             "rotation" -> dialog = "rotation"
-            "settings" -> dialog = "more"
+            "settings" -> dialog = "display"
         }
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).clipToBounds()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val heightPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
+        val density = LocalDensity.current
 
-        // ---- the picture (and the subtitles)
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                    useController = false
-                    setShutterBackgroundColor(android.graphics.Color.BLACK)
-                    keepScreenOn = true
-                    activity.playerView = this
+        // ---- where the picture goes (aspect ratio, picture size, zoom)
+        val rotated = videoSize.unappliedRotationDegrees == 90 || videoSize.unappliedRotationDegrees == 270
+        val videoRatio = if (videoSize.width > 0 && videoSize.height > 0) {
+            val r = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
+            if (rotated) 1f / r else r
+        } else null
+        val ratio = aspectRatioOf(aspect, vp) ?: videoRatio
+        val screenRatio = widthPx / heightPx
+        val box: Pair<Float, Float> = when {
+            ratio == null || resize == 2 -> widthPx to heightPx
+            resize == 3 && videoSize.width > 0 -> {
+                val w = (if (rotated) videoSize.height else videoSize.width).toFloat() * (if (aspectRatioOf(aspect, vp) != null) 1f else videoSize.pixelWidthHeightRatio)
+                w to w / ratio
+            }
+            resize == 1 -> if (screenRatio > ratio) widthPx to widthPx / ratio else heightPx * ratio to heightPx
+            else -> if (screenRatio > ratio) heightPx * ratio to heightPx else widthPx to widthPx / ratio
+        }
+        val boxW = with(density) { box.first.toDp() }
+        val boxH = with(density) { box.second.toDp() }
+
+        // ---- the picture
+        Box(
+            Modifier
+                .align(Alignment.Center)
+                .requiredSize(boxW, boxH)
+                .graphicsLayer {
+                    scaleX = zoom
+                    scaleY = zoom
+                    translationX = pan.x
+                    translationY = pan.y
                 }
-            },
-            update = { view ->
-                if (view.player !== player) view.player = player
-                view.resizeMode = RESIZE_MODES[resize].first
-                view.subtitleView?.apply {
-                    setApplyEmbeddedStyles(true)
-                    setApplyEmbeddedFontSizes(false)
-                    setStyle(
-                        CaptionStyleCompat(
-                            android.graphics.Color.WHITE,
-                            android.graphics.Color.TRANSPARENT,
-                            android.graphics.Color.TRANSPARENT,
-                            CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                            android.graphics.Color.BLACK,
-                            null
-                        )
-                    )
-                    setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * settings.videoSubSize)
-                    setBottomPaddingFraction(if (inPip) 0.02f else 0.06f)
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    (LayoutInflater.from(ctx).inflate(R.layout.video_player_view, null) as PlayerView).apply {
+                        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                        useController = false
+                        resizeMode = 3 // FILL: the box above already has the right shape
+                        subtitleView?.visibility = View.GONE // the subtitles are drawn by our own view, not zoomed
+                        activity.playerView = this
+                    }
+                },
+                update = { view ->
+                    if (view.player !== player) view.player = player
+                    view.keepScreenOn = vp.keepScreenOn || playing
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // ---- night mode: a dark veil over the picture
         if (night) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
+
+        // ---- subtitles (our own view: alignment, position, size, colors from Display Settings)
+        val subW = if (vp.subFitVideo && ratio != null && resize != 2) minOf(box.first, widthPx) else widthPx
+        val subH = if (vp.subFitVideo && ratio != null && resize != 2) minOf(box.second, heightPx) else heightPx
+        AndroidView(
+            factory = { ctx -> SubtitleView(ctx) },
+            update = { sv ->
+                val bottom = (subBottomLive ?: vp.subBottom).coerceIn(0, 50)
+                val scale = (subScaleLive ?: vp.subScale.toFloat()) / 100f
+                sv.setApplyEmbeddedStyles(vp.subSsaStyles)
+                sv.setApplyEmbeddedFontSizes(vp.subSsaSizes)
+                sv.setStyle(
+                    CaptionStyleCompat(
+                        vp.subColor,
+                        if (vp.subBgOn) vp.subBgColor else android.graphics.Color.TRANSPARENT,
+                        if (vp.subBoxOn) vp.subBoxColor else android.graphics.Color.TRANSPARENT,
+                        when {
+                            vp.subBorderOn -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
+                            vp.subShadow -> CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
+                            else -> CaptionStyleCompat.EDGE_TYPE_NONE
+                        },
+                        vp.subBorderColor,
+                        typefaceOf(vp.subFont, vp.subBold)
+                    )
+                )
+                if (inPip) sv.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * scale)
+                else sv.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, vp.subSize * scale)
+                sv.setBottomPaddingFraction(if (inPip) 0.02f else 0.02f + bottom / 100f)
+                sv.setCues(alignCues(cues, vp.subAlign))
+            },
+            modifier = Modifier
+                .align(Alignment.Center)
+                .size(with(density) { subW.toDp() }, with(density) { subH.toDp() })
+        )
 
         if (inPip) return@BoxWithConstraints
 
@@ -368,103 +504,216 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
             return@BoxWithConstraints
         }
 
-        // ---- touch layer: taps, double taps, drags
-        var dragMode by remember { mutableIntStateOf(0) } // 0 none, 1 seek, 2 brightness, 3 volume
-        var dragStartValue by remember { mutableFloatStateOf(0f) }
-        var dragTotal by remember { mutableStateOf(Offset.Zero) }
-        var dragStartX by remember { mutableFloatStateOf(0f) }
+        // ---- always on screen: elapsed time / battery and clock
+        if ((vp.osdElapsed || vp.osdClock) && !controls) {
+            val bg = if (vp.osdBackground) Color.Black.copy(alpha = 0.5f) else Color.Transparent
+            Column(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .safeDrawingPadding()
+                    .padding(start = (8 + vp.osdOffset).dp, top = (8 + vp.osdOffset).dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(bg)
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                if (vp.osdElapsed) Text("${formatTime(position)} / ${formatTime(duration)}", color = Color(vp.osdTextColor), fontSize = 12.sp)
+                if (vp.osdClock) Text(clock, color = Color(vp.osdTextColor), fontSize = 12.sp)
+            }
+        }
+
+        // ---- touch layer
+        val subZoneTop = heightPx * (0.62f - (subBottomLive ?: vp.subBottom) / 100f)
         Box(
             Modifier
                 .fillMaxSize()
-                .pointerInput(locked, player) {
+                .pointerInput(locked, player, vp) {
                     detectTapGestures(
-                        onTap = {
+                        onPress = {
+                            tryAwaitRelease()
+                            if (fastForward) {
+                                fastForward = false
+                                player.setPlaybackSpeed(speedBeforeFF)
+                                hintTick++
+                            }
+                        },
+                        onTap = { at ->
                             poke++
-                            if (tools) tools = false else controls = !controls
+                            if (locked) {
+                                when (vp.lockMode) {
+                                    0 -> controls = !controls
+                                    2 -> ripples.add(at to System.currentTimeMillis())
+                                }
+                                return@detectTapGestures
+                            }
+                            when (vp.touchAction) {
+                                1 -> if (!controls) controls = true else activity.togglePlay()
+                                2 -> { activity.togglePlay(); controls = true }
+                                3 -> activity.togglePlay()
+                                else -> controls = !controls
+                            }
                         },
                         onDoubleTap = { at ->
-                            if (locked) return@detectTapGestures
+                            if (locked) {
+                                if (vp.lockMode == 2) ripples.add(at to System.currentTimeMillis())
+                                return@detectTapGestures
+                            }
+                            val interval = vp.moveInterval * 1000L
                             when {
-                                at.x < widthPx / 3 -> {
-                                    player.seekBack()
-                                    show(Icons.Rounded.Replay10, "−10 s")
+                                vp.gDoubleTapSeek && at.x < widthPx / 3 -> {
+                                    seekBy(-interval)
+                                    show(Icons.Rounded.FastRewind, "−${vp.moveInterval} s")
                                 }
-                                at.x > widthPx * 2 / 3 -> {
-                                    player.seekForward()
-                                    show(Icons.Rounded.Forward10, "+10 s")
+                                vp.gDoubleTapSeek && at.x > widthPx * 2 / 3 -> {
+                                    seekBy(interval)
+                                    show(Icons.Rounded.FastForward, "+${vp.moveInterval} s")
                                 }
-                                else -> activity.togglePlay()
+                                vp.gDoubleTapZoom -> {
+                                    zoom = if (zoom > 1.05f) 1f else 2f
+                                    pan = Offset.Zero
+                                    show(Icons.Rounded.ZoomIn, "${(zoom * 100).roundToInt()}%")
+                                }
+                                vp.gDoubleTapPlay -> activity.togglePlay()
+                            }
+                        },
+                        onLongPress = { at ->
+                            if (locked) {
+                                if (vp.lockMode == 2) ripples.add(at to System.currentTimeMillis())
+                                return@detectTapGestures
+                            }
+                            if (vp.gLongPressSpeed && player.isPlaying) {
+                                fastForward = true
+                                speedBeforeFF = player.playbackParameters.speed
+                                player.setPlaybackSpeed(vp.speedFF / 10f)
+                                show(Icons.Rounded.FastForward, "${vp.speedFF / 10f}X", stay = true)
                             }
                         }
                     )
                 }
-                .pointerInput(locked, player) {
+                .pointerInput(locked, player, vp, duration, zoom > 1.01f) {
                     if (locked) return@pointerInput
-                    detectDragGestures(
-                        onDragStart = { at ->
-                            dragMode = 0
-                            dragTotal = Offset.Zero
-                            dragStartX = at.x
-                        },
-                        onDragEnd = {
-                            if (dragMode == 1) player.seekTo(dragStartValue.toLong().coerceAtLeast(0L))
-                            dragMode = 0
-                            hintTick++
-                        },
-                        onDragCancel = {
-                            dragMode = 0
-                            hintTick++
-                        },
-                        onDrag = { change, amount ->
-                            change.consume()
-                            dragTotal += amount
-                            if (dragMode == 0) {
-                                if (abs(dragTotal.x) > 24f && abs(dragTotal.x) > abs(dragTotal.y)) {
-                                    dragMode = 1
-                                    dragStartValue = player.currentPosition.toFloat()
-                                } else if (abs(dragTotal.y) > 24f) {
-                                    if (dragStartX < widthPx / 2) {
-                                        dragMode = 2
-                                        dragStartValue = activity.brightness()
-                                    } else {
-                                        dragMode = 3
-                                        dragStartValue = audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()
+                    val pxPerInch = density * 160f
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val start = down.position
+                        var mode = 0 // 1 seek, 2 brightness, 3 volume, 4 speed, 5 subtitles up/down, 6 move picture, 10 zoom, 11 subtitle size, -1 nothing
+                        var total = Offset.Zero
+                        var startValue = 0f
+                        var target = 0f
+                        while (true) {
+                            val ev = awaitPointerEvent()
+                            val fingers = ev.changes.count { it.pressed }
+                            if (fingers == 0) break
+                            if (fingers >= 2) {
+                                if (mode !in 10..11) {
+                                    val c = ev.calculateCentroid()
+                                    mode = when {
+                                        vp.gSubZoom && c.y > subZoneTop && cues.isNotEmpty() -> 11.also { subScaleLive = vp.subScale.toFloat() }
+                                        vp.gZoom || vp.gZoomPan -> 10
+                                        else -> -1
                                     }
-                                    dragTotal = Offset.Zero
                                 }
-                                return@detectDragGestures
+                                val z = ev.calculateZoom()
+                                if (mode == 10) {
+                                    zoom = (zoom * z).coerceIn(0.5f, 4f)
+                                    if (vp.gZoomPan || vp.gPan) pan += ev.calculatePan()
+                                    show(Icons.Rounded.ZoomIn, "${(zoom * 100).roundToInt()}%", stay = true)
+                                } else if (mode == 11) {
+                                    subScaleLive = ((subScaleLive ?: 100f) * z).coerceIn(50f, 200f)
+                                    show(Icons.Rounded.Subtitles, "${subScaleLive?.roundToInt()}%", stay = true)
+                                }
+                                ev.changes.forEach { it.consume() }
+                                continue
                             }
-                            when (dragMode) {
+                            if (mode >= 10 || mode == -1) continue
+                            val ch = ev.changes.firstOrNull { it.pressed } ?: break
+                            val d = ch.positionChange()
+                            total += d
+                            if (mode == 0) {
+                                if (total.getDistance() < viewConfiguration.touchSlop) continue
+                                val horizontal = abs(total.x) > abs(total.y)
+                                mode = when {
+                                    zoom > 1.01f && (vp.gPan || vp.gZoomPan) -> 6
+                                    horizontal -> if (vp.gSeek) 1 else -1
+                                    vp.gSubUpDown && start.y > subZoneTop && cues.isNotEmpty() -> 5
+                                    start.x < widthPx * 0.4f -> if (vp.gBrightness) 2 else -1
+                                    start.x > widthPx * 0.6f -> if (vp.gVolume) 3 else -1
+                                    else -> if (vp.gSpeed) 4 else -1
+                                }
+                                startValue = when (mode) {
+                                    1 -> player.currentPosition.toFloat()
+                                    2 -> activity.brightness()
+                                    3 -> audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()
+                                    4 -> player.playbackParameters.speed
+                                    5 -> vp.subBottom.toFloat()
+                                    else -> 0f
+                                }
+                                total = Offset.Zero
+                                if (mode == -1) continue
+                            }
+                            ch.consume()
+                            when (mode) {
                                 1 -> {
-                                    // the whole width = 90 seconds
-                                    val target = (dragStartValue + amount.x / widthPx * 90_000f)
-                                        .coerceIn(0f, (duration.takeIf { it > 0 } ?: Long.MAX_VALUE).toFloat())
-                                    dragStartValue = target
-                                    val delta = ((target - player.currentPosition) / 1000).roundToInt()
+                                    // Navigation → Seek Speed (seconds of video per inch)
+                                    target = (startValue + total.x / pxPerInch * vp.seekSpeed * 1000f)
+                                        .coerceIn(0f, (if (duration > 0) duration else Long.MAX_VALUE).toFloat())
+                                    val delta = ((target - startValue) / 1000).roundToInt()
                                     show(null, "${if (delta >= 0) "+" else "−"}${formatTime(abs(delta) * 1000L)}\n${formatTime(target.toLong())}", stay = true)
                                 }
                                 2 -> {
-                                    val v = (dragStartValue - dragTotal.y / heightPx * 1.2f).coerceIn(0.01f, 1f)
+                                    val v = (startValue - total.y / heightPx * 1.2f).coerceIn(0.01f, 1f)
                                     activity.setBrightness(v)
-                                    show(Icons.Rounded.BrightnessMedium, "${(v * 100).roundToInt()}%", stay = true)
+                                    target = v
+                                    show(Icons.Rounded.BrightnessMedium, "${(v * 15).roundToInt()}", stay = true)
                                 }
                                 3 -> {
-                                    val v = (dragStartValue - dragTotal.y / heightPx * maxVolume * 1.2f).roundToInt().coerceIn(0, maxVolume)
-                                    if (v != audio.getStreamVolume(AudioManager.STREAM_MUSIC)) {
-                                        runCatching { audio.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0) }
-                                    }
+                                    val v = (startValue - total.y / heightPx * maxVolume * 1.2f).roundToInt().coerceIn(0, maxVolume)
+                                    if (v != audio.getStreamVolume(AudioManager.STREAM_MUSIC)) runCatching { audio.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0) }
                                     show(Icons.Rounded.VolumeUp, "${v * 100 / maxVolume}%", stay = true)
                                 }
+                                4 -> {
+                                    val v = ((startValue - total.y / heightPx * 3f) * 20).roundToInt() / 20f
+                                    val s = v.coerceIn(0.25f, 4f)
+                                    if (s != player.playbackParameters.speed) player.setPlaybackSpeed(s)
+                                    show(Icons.Rounded.Speed, "${trimSpeed(s)}×", stay = true)
+                                }
+                                5 -> {
+                                    subBottomLive = (startValue - total.y / heightPx * 100f).roundToInt().coerceIn(0, 50)
+                                    show(Icons.Rounded.Subtitles, "↕ ${subBottomLive}", stay = true)
+                                }
+                                6 -> pan += d
                             }
                         }
-                    )
+                        // the finger lifted
+                        when (mode) {
+                            1 -> player.seekTo(target.toLong().coerceAtLeast(0L))
+                            2 -> if (vp.brightnessOn) VideoPrefsStore.update { it.copy(brightnessLevel = (target * 15).roundToInt().coerceIn(0, 15)) }
+                            5 -> subBottomLive?.let { v -> VideoPrefsStore.update { it.copy(subBottom = v) } }
+                            11 -> subScaleLive?.let { v -> VideoPrefsStore.update { it.copy(subScale = (v / 5).roundToInt() * 5) } }
+                        }
+                        if (mode == 5) subBottomLive = null
+                        if (mode == 11) subScaleLive = null
+                        if (mode == 10 && zoom in 0.95f..1.05f) { zoom = 1f; pan = Offset.Zero }
+                        if (mode != 0) hintTick++
+                    }
                 }
         )
 
+        // kids lock touch effects
+        if (ripples.isNotEmpty()) {
+            Canvas(Modifier.fillMaxSize()) {
+                val now = frameTick
+                ripples.forEach { (at, t) ->
+                    val age = ((now - t) / 700f).coerceIn(0f, 1f)
+                    drawCircle(primary.copy(alpha = 0.5f * (1f - age)), radius = 30.dp.toPx() + 70.dp.toPx() * age, center = at)
+                }
+            }
+        }
+
         if (buffering) CircularProgressIndicator(Modifier.align(Alignment.Center).size(48.dp), color = primary)
 
-        // ---- gesture feedback
-        hint?.let { (icon, text) ->
+        // ---- gesture feedback / position while dragging the bar
+        val bigText = if (seeking != null && vp.showSeekPosition) null to formatTime(seeking!!.toLong()) else hint
+        bigText?.let { (icon, text) ->
             Column(
                 Modifier
                     .align(Alignment.Center)
@@ -475,7 +724,7 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (icon != null) Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
-                Text(text, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text(text, color = Color.White, fontSize = if (seeking != null) 26.sp else 17.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             }
         }
 
@@ -501,15 +750,85 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
             }
         }
 
-        // ---- locked: only the unlock button
+        // ---- the time bar (also used read-only when the screen is locked)
+        @Composable
+        fun TimeBar(interactive: Boolean) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val shown = seeking?.toLong() ?: position
+                Text(formatTime(shown), color = controlColor, fontSize = 12.sp)
+                val fraction = if (duration > 0) ((seeking ?: position.toFloat()) / duration).coerceIn(0f, 1f) else 0f
+                if (vp.progressStyle == 1) {
+                    FlatBar(
+                        fraction, primary, interactive && duration > 0,
+                        Modifier.weight(1f).padding(horizontal = 10.dp).height(28.dp),
+                        onChange = { f -> seeking = f * duration; poke++ },
+                        onDone = { seeking?.let { player.seekTo(it.toLong()) }; seeking = null }
+                    )
+                } else {
+                    Slider(
+                        value = fraction,
+                        onValueChange = { f -> seeking = f * duration; poke++ },
+                        onValueChangeFinished = {
+                            seeking?.let { player.seekTo(it.toLong()) }
+                            seeking = null
+                        },
+                        enabled = interactive && duration > 0,
+                        colors = SliderDefaults.colors(
+                            thumbColor = primary, activeTrackColor = primary, inactiveTrackColor = Color.White.copy(alpha = 0.3f),
+                            disabledThumbColor = primary, disabledActiveTrackColor = primary
+                        ),
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                    )
+                }
+                Text(
+                    when {
+                        duration <= 0 -> "--:--"
+                        vp.remainingTime -> "−" + formatTime(duration - (seeking?.toLong() ?: position))
+                        else -> formatTime(duration)
+                    },
+                    color = controlColor,
+                    fontSize = 12.sp,
+                    modifier = Modifier.clickable(enabled = interactive) { VideoPrefsStore.update { it.copy(remainingTime = !it.remainingTime) } }
+                )
+            }
+        }
+
+        // ---- locked
         if (locked) {
-            AnimatedVisibility(controls, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomStart)) {
-                Box(Modifier.safeDrawingPadding().padding(16.dp)) {
-                    RoundIcon(Icons.Rounded.Lock, "Unlock") {
-                        locked = false
-                        poke++
-                        show(Icons.Rounded.LockOpen, "Unlocked")
+            if (vp.lockMode == 0) {
+                AnimatedVisibility(controls, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomCenter)) {
+                    Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, frame))).safeDrawingPadding().padding(12.dp)) {
+                        if (vp.showUiWhenLocked) TimeBar(interactive = false)
+                        RoundIcon(Icons.Rounded.Lock, "Unlock", vp) {
+                            locked = false
+                            poke++
+                            show(Icons.Rounded.LockOpen, "Unlocked")
+                        }
                     }
+                }
+            } else {
+                // kids lock: a faint lock that opens only when held for 2 seconds
+                Box(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .safeDrawingPadding()
+                        .padding(16.dp)
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.25f))
+                        .pointerInput(Unit) {
+                            detectTapGestures(onPress = {
+                                val released = withTimeoutOrNull(2000) { tryAwaitRelease() }
+                                if (released == null) {
+                                    locked = false
+                                    controls = true
+                                    show(Icons.Rounded.LockOpen, "Unlocked")
+                                }
+                            })
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.Lock, contentDescription = "Hold to unlock", tint = Color.White.copy(alpha = 0.35f))
                 }
             }
             return@BoxWithConstraints
@@ -521,29 +840,30 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent)))
+                        .background(Brush.verticalGradient(listOf(frame, Color.Transparent)))
                         .safeDrawingPadding()
                 ) {
-                    // top: back, title, Cast, audio, subtitles, decoder, ⋮
+                    // top: back, title, (clock), Cast, audio, subtitles, decoder, ⋮
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        BarIcon(Icons.Rounded.ArrowBack, "Back", onBack)
+                        BarIcon(Icons.Rounded.ArrowBack, "Back", vp, onBack)
                         Text(
                             title,
-                            color = Color.White,
+                            color = controlColor,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f).padding(horizontal = 6.dp)
                         )
-                        if (activity.canCast()) BarIcon(Icons.Rounded.Cast, "Cast") {
+                        if (vp.titleClock) Text(clock, color = controlColor.copy(alpha = 0.8f), fontSize = 12.sp, modifier = Modifier.padding(end = 6.dp))
+                        if (activity.canCast()) BarIcon(Icons.Rounded.Cast, "Cast", vp) {
                             if (!activity.castButton()) dialog = "cast"
                         }
-                        BarIcon(Icons.Rounded.MusicNote, "Audio") { dialog = "audio" }
-                        BarIcon(Icons.Rounded.Subtitles, "Subtitles") { dialog = "subs" }
+                        BarIcon(Icons.Rounded.MusicNote, "Audio", vp) { dialog = "audio" }
+                        BarIcon(Icons.Rounded.Subtitles, "Subtitles", vp) { dialog = "subs" }
                         Box(
                             Modifier
                                 .height(44.dp)
@@ -552,12 +872,12 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                                 .padding(horizontal = 10.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(DECODERS[settings.videoDecoder.coerceIn(0, 2)], color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text(DECODERS[settings.videoDecoder.coerceIn(0, 2)], color = controlColor, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
-                        BarIcon(Icons.Rounded.MoreVert, "More") { tools = !tools; poke++ }
+                        BarIcon(Icons.Rounded.MoreVert, "More", vp) { dialog = "more" }
                     }
-                    // ⋮ tools
-                    AnimatedVisibility(tools) {
+                    // shortcuts
+                    if (vp.shortcuts) {
                         val chosen = settings.videoTools
                         val ids = buildList {
                             if ("night" in chosen) add("night")
@@ -569,14 +889,14 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                             Modifier
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             ids.forEach { id ->
                                 val t = TOOLS.firstOrNull { it.id == id }
                                 val (icon, label) = when (id) {
                                     "customise" -> Icons.Rounded.Edit to "Customise Items"
-                                    "settings" -> Icons.Rounded.Settings to "Settings"
+                                    "settings" -> Icons.Rounded.DisplaySettings to "Display Settings"
                                     "speed" -> Icons.Rounded.Speed to "${trimSpeed(speed)}X"
                                     "loop" -> (if (repeat == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat) to "Loop"
                                     "mute" -> (if (muted) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp) to "Mute"
@@ -594,7 +914,7 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                                     "background" -> settings.videoBackground
                                     else -> false
                                 }
-                                ToolItem(icon, label, active, primary) { runTool(id) }
+                                ToolItem(icon, label, active, primary, controlColor) { runTool(id) }
                             }
                         }
                     }
@@ -605,7 +925,7 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, frame)))
                         .safeDrawingPadding()
                         .padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
@@ -617,6 +937,8 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                         if (repeat == Player.REPEAT_MODE_ONE) add("Loop 1") else if (repeat == Player.REPEAT_MODE_ALL) add("Loop all")
                         if (shuffle) add("Shuffle")
                         if (activity.audioDelayMs.intValue != 0) add("Audio ${if (activity.audioDelayMs.intValue > 0) "+" else ""}${activity.audioDelayMs.intValue} ms")
+                        if (zoom != 1f) add("Zoom ${(zoom * 100).roundToInt()}%")
+                        if (aspect != 0) add(ASPECTS[aspect])
                     }
                     if (chips.isNotEmpty()) {
                         Row(Modifier.padding(start = 4.dp, bottom = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -629,63 +951,56 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(50))
                                         .background(primary)
+                                        .clickable {
+                                            if (c.startsWith("Zoom")) { zoom = 1f; pan = Offset.Zero }
+                                        }
                                         .padding(horizontal = 8.dp, vertical = 2.dp)
                                 )
                             }
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val shown = seeking?.toLong() ?: position
-                        Text(formatTime(shown), color = Color.White, fontSize = 12.sp)
-                        Slider(
-                            value = if (duration > 0) ((seeking ?: position.toFloat()) / duration).coerceIn(0f, 1f) else 0f,
-                            onValueChange = { f -> seeking = f * duration; poke++ },
-                            onValueChangeFinished = {
-                                seeking?.let { player.seekTo(it.toLong()) }
-                                seeking = null
-                            },
-                            enabled = duration > 0,
-                            colors = SliderDefaults.colors(thumbColor = primary, activeTrackColor = primary, inactiveTrackColor = Color.White.copy(alpha = 0.3f)),
-                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
-                        )
-                        Text(if (duration > 0) formatTime(duration) else "--:--", color = Color.White, fontSize = 12.sp)
-                    }
+                    if (!vp.progressBelow) TimeBar(interactive = true)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        BarIcon(Icons.Rounded.Lock, "Lock the screen") {
+                        BarIcon(Icons.Rounded.Lock, "Lock the screen", vp) {
                             locked = true
                             controls = false
-                            tools = false
-                            show(Icons.Rounded.Lock, "Locked")
+                            show(Icons.Rounded.Lock, if (vp.lockMode == 0) "Locked" else "Kids lock: hold the lock 2 seconds to unlock")
                         }
+                        if (vp.rotationButton) BarIcon(Icons.Rounded.ScreenRotation, "Rotate", vp) { poke++; activity.rotate() }
                         Spacer(Modifier.weight(1f))
-                        BarIcon(Icons.Rounded.SkipPrevious, "Previous") {
+                        if (vp.prevNextButtons) BarIcon(Icons.Rounded.SkipPrevious, "Previous", vp) {
                             poke++
                             if (hasPrev && player.currentPosition < 3000) player.seekToPreviousMediaItem() else player.seekTo(0L)
                         }
-                        Spacer(Modifier.width(14.dp))
-                        RoundIcon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play", big = true) {
+                        if (vp.moveButtons) BarIcon(Icons.Rounded.FastRewind, "Back ${vp.moveInterval} s", vp) { poke++; seekBy(-vp.moveInterval * 1000L) }
+                        Spacer(Modifier.width(10.dp))
+                        RoundIcon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play", vp, big = true) {
                             poke++
                             activity.togglePlay()
                         }
-                        Spacer(Modifier.width(14.dp))
-                        BarIcon(Icons.Rounded.SkipNext, "Next") {
+                        Spacer(Modifier.width(10.dp))
+                        if (vp.moveButtons) BarIcon(Icons.Rounded.FastForward, "Forward ${vp.moveInterval} s", vp) { poke++; seekBy(vp.moveInterval * 1000L) }
+                        if (vp.prevNextButtons) BarIcon(Icons.Rounded.SkipNext, "Next", vp) {
                             poke++
                             if (hasNext) player.seekToNextMediaItem() else show(Icons.Rounded.SkipNext, "Last video")
                         }
                         Spacer(Modifier.weight(1f))
-                        BarIcon(Icons.Rounded.AspectRatio, "Picture size") {
+                        BarIcon(Icons.Rounded.AspectRatio, "Picture size", vp) {
                             poke++
                             resize = (resize + 1) % RESIZE_MODES.size
-                            show(Icons.Rounded.AspectRatio, RESIZE_MODES[resize].second)
+                            zoom = 1f
+                            pan = Offset.Zero
+                            show(Icons.Rounded.AspectRatio, RESIZE_MODES[resize])
                         }
-                        if (activity.canPip()) BarIcon(Icons.Rounded.PictureInPictureAlt, "Small window") { activity.enterPip() }
+                        if (activity.canPip()) BarIcon(Icons.Rounded.PictureInPictureAlt, "Small window", vp) { activity.enterPip() }
                     }
+                    if (vp.progressBelow) TimeBar(interactive = true)
                 }
             }
         }
     }
 
-    // ---- dialogs
+    // ---- dialogs and panels
     when (dialog) {
         "audio" -> AudioDialog(
             activity = activity,
@@ -704,6 +1019,7 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                     dialog = null
                     pickSubtitle.launch(arrayOf("*/*"))
                 }) { Text("Open subtitle file (.srt / .ass / .vtt)…") }
+                TextButton(onClick = { dialog = "display" }) { Text("Subtitle look (Display Settings → Text)…") }
             }
         )
         "decoder" -> ChoiceDialog(
@@ -744,15 +1060,62 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
             empty = null,
             onDismiss = { dialog = null }
         )
-        "eq" -> EqualizerDialog(activity, onDismiss = { dialog = null })
+        "eq" -> EqualizerPanel(activity, onDismiss = { dialog = null })
         "customise" -> CustomiseDialog(onDismiss = { dialog = null })
-        "more" -> MoreDialog(onDismiss = { dialog = null })
+        "more" -> MorePanel(activity, onOpen = { dialog = it }, onDismiss = { dialog = null })
+        "display" -> DisplaySettingsPanel(onDismiss = { dialog = null })
+        "playlist" -> PlaylistDialog(player, onDismiss = { dialog = null })
+        "stream" -> NetworkStreamDialog(onPlay = { activity.playUrl(it) }, onDismiss = { dialog = null })
+        "info" -> InfoDialog(remember(player, title) { activity.information() }, onDismiss = { dialog = null })
+        "bookmarks" -> BookmarksDialog(activity, onDismiss = { dialog = null })
+        "cut" -> CutDialog(activity, onDismiss = { dialog = null })
+        "tutorial" -> TutorialDialog(onDismiss = { dialog = null })
         "cast" -> com.powersound.player.ui.CastDialog(onDismiss = {
             dialog = null
             // nothing chosen (or still connecting is fine): the music may use the Chromecast again
             val connecting = runCatching { !androidx.mediarouter.media.MediaRouter.getInstance(context).selectedRoute.isDefault }.getOrDefault(false)
             if (activity.castingTo.value == null && !connecting) com.powersound.player.cast.CastControl.videoOwnsCast = false
         })
+    }
+}
+
+/** Display Settings → Layout → Alignment, for subtitles that don't place themselves. */
+@OptIn(UnstableApi::class)
+private fun alignCues(cues: List<Cue>, align: Int): List<Cue> {
+    if (align == 1) return cues
+    return cues.map { c ->
+        if (c.bitmap != null || c.position != Cue.DIMEN_UNSET) c
+        else c.buildUpon()
+            .setTextAlignment(if (align == 0) Layout.Alignment.ALIGN_NORMAL else Layout.Alignment.ALIGN_OPPOSITE)
+            .setPosition(if (align == 0) 0.05f else 0.95f)
+            .setPositionAnchor(if (align == 0) Cue.ANCHOR_TYPE_START else Cue.ANCHOR_TYPE_END)
+            .build()
+    }
+}
+
+/** Style → Progress bar: Flat (a thin line you can drag). */
+@Composable
+private fun FlatBar(fraction: Float, color: Color, enabled: Boolean, modifier: Modifier, onChange: (Float) -> Unit, onDone: () -> Unit) {
+    Box(
+        modifier
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectTapGestures { o -> onChange((o.x / size.width).coerceIn(0f, 1f)); onDone() }
+            }
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragEnd = onDone,
+                    onDragCancel = onDone
+                ) { change, _ ->
+                    change.consume()
+                    onChange((change.position.x / size.width).coerceIn(0f, 1f))
+                }
+            },
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(Modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(alpha = 0.3f)))
+        Box(Modifier.fillMaxWidth(fraction).height(3.dp).background(color))
     }
 }
 
@@ -805,7 +1168,7 @@ private fun CastPanel(activity: VideoActivity, device: String, title: String) {
 }
 
 @Composable
-private fun ToolItem(icon: ImageVector, label: String, active: Boolean, accent: Color, onClick: () -> Unit) {
+private fun ToolItem(icon: ImageVector, label: String, active: Boolean, accent: Color, base: Color = Color.White, onClick: () -> Unit) {
     Column(
         Modifier
             .width(84.dp)
@@ -814,11 +1177,11 @@ private fun ToolItem(icon: ImageVector, label: String, active: Boolean, accent: 
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(icon, contentDescription = label, tint = if (active) accent else Color.White, modifier = Modifier.size(28.dp))
+        Icon(icon, contentDescription = label, tint = if (active) accent else base, modifier = Modifier.size(28.dp))
         Spacer(Modifier.height(4.dp))
         Text(
             label,
-            color = if (active) accent else Color.White,
+            color = if (active) accent else base,
             fontSize = 11.sp,
             textAlign = TextAlign.Center,
             maxLines = 2,
@@ -961,93 +1324,6 @@ private fun SmallButton(label: String, onClick: () -> Unit) {
     )
 }
 
-/** ⋮ → Equalizer: on/off, presets, the bands, bass boost. Kept for the next videos. */
-@Composable
-private fun EqualizerDialog(activity: VideoActivity, onDismiss: () -> Unit) {
-    val primary = MaterialTheme.colorScheme.primary
-    val st = SettingsStore.value
-    val eq = activity.equalizer
-    var on by remember { mutableStateOf(st.videoEqOn) }
-    var bass by remember { mutableIntStateOf(st.videoBass) }
-    val bands = remember { eq?.let { e -> (0 until e.numberOfBands.toInt()) }?.toList().orEmpty() }
-    val levels = remember { mutableStateListOf<Int>().apply { bands.forEach { b -> add(runCatching { eq!!.getBandLevel(b.toShort()).toInt() }.getOrDefault(0)) } } }
-    val range = remember { runCatching { eq!!.bandLevelRange.let { it[0].toInt() to it[1].toInt() } }.getOrDefault(-1500 to 1500) }
-    val presets = remember { eq?.let { e -> (0 until e.numberOfPresets.toInt()).map { it to e.getPresetName(it.toShort()) } }.orEmpty() }
-    fun close() {
-        activity.saveEqualizer(on, bass)
-        onDismiss()
-    }
-    AlertDialog(
-        onDismissRequest = { close() },
-        containerColor = Color(0xFF1B1B22),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Equalizer", color = Color.White, modifier = Modifier.weight(1f))
-                Switch(checked = on, onCheckedChange = { on = it; runCatching { eq?.enabled = it } })
-            }
-        },
-        text = {
-            if (eq == null) {
-                Text("This phone has no equalizer for videos.", color = Color.White.copy(alpha = 0.7f))
-                return@AlertDialog
-            }
-            Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
-                if (presets.isNotEmpty()) {
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        presets.forEach { (i, name) ->
-                            SmallButton(name) {
-                                runCatching {
-                                    eq.usePreset(i.toShort())
-                                    bands.forEachIndexed { k, b -> levels[k] = eq.getBandLevel(b.toShort()).toInt() }
-                                }
-                                on = true
-                                runCatching { eq.enabled = true }
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                }
-                bands.forEachIndexed { k, b ->
-                    val hz = runCatching { eq.getCenterFreq(b.toShort()) / 1000 }.getOrDefault(0)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            if (hz >= 1000) "${hz / 1000} kHz" else "$hz Hz",
-                            color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 12.sp,
-                            modifier = Modifier.width(60.dp)
-                        )
-                        Slider(
-                            value = levels[k].toFloat(),
-                            onValueChange = { v ->
-                                levels[k] = v.roundToInt()
-                                runCatching { eq.setBandLevel(b.toShort(), v.roundToInt().toShort()) }
-                                if (!on) { on = true; runCatching { eq.enabled = true } }
-                            },
-                            valueRange = range.first.toFloat()..range.second.toFloat(),
-                            colors = SliderDefaults.colors(thumbColor = primary, activeTrackColor = primary),
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text("${"%+.0f".format(levels[k] / 100f)} dB", color = Color.White, fontSize = 12.sp, modifier = Modifier.width(52.dp), textAlign = TextAlign.End)
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text("Bass boost", color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp)
-                Slider(
-                    value = bass.toFloat(),
-                    onValueChange = { bass = it.roundToInt(); if (!on) on = true },
-                    valueRange = 0f..1000f,
-                    colors = SliderDefaults.colors(thumbColor = primary, activeTrackColor = primary)
-                )
-                TextButton(onClick = {
-                    runCatching { bands.forEachIndexed { k, b -> eq.setBandLevel(b.toShort(), 0); levels[k] = 0 } }
-                    bass = 0
-                }) { Text("Reset") }
-            }
-        },
-        confirmButton = { TextButton(onClick = { close() }) { Text("Close") } }
-    )
-}
-
 /** ⋮ → Customise Items: which tools show in the strip. */
 @Composable
 private fun CustomiseDialog(onDismiss: () -> Unit) {
@@ -1185,7 +1461,7 @@ private fun displayName(context: Context, uri: Uri): String? = runCatching {
 }.getOrNull()
 
 @Composable
-private fun BarIcon(icon: ImageVector, description: String, onClick: () -> Unit) {
+private fun BarIcon(icon: ImageVector, description: String, prefs: VideoPrefs = VideoPrefsStore.value, onClick: () -> Unit) {
     Box(
         Modifier
             .size(44.dp)
@@ -1193,21 +1469,28 @@ private fun BarIcon(icon: ImageVector, description: String, onClick: () -> Unit)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(24.dp))
+        Icon(icon, contentDescription = description, tint = Color(prefs.controlColor), modifier = Modifier.size(24.dp))
     }
 }
 
 @Composable
-private fun RoundIcon(icon: ImageVector, description: String, modifier: Modifier = Modifier, big: Boolean = false, onClick: () -> Unit) {
+private fun RoundIcon(
+    icon: ImageVector,
+    description: String,
+    prefs: VideoPrefs = VideoPrefsStore.value,
+    modifier: Modifier = Modifier,
+    big: Boolean = false,
+    onClick: () -> Unit
+) {
     Box(
         modifier
             .size(if (big) 72.dp else 52.dp)
             .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.45f))
+            .background(Color(prefs.controlBg))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(if (big) 44.dp else 30.dp))
+        Icon(icon, contentDescription = description, tint = Color(prefs.controlColor), modifier = Modifier.size(if (big) 44.dp else 30.dp))
     }
 }
 
@@ -1247,55 +1530,3 @@ private fun ChoiceDialog(
     )
 }
 
-/** ⋮ : subtitle size, small window when leaving. */
-@Composable
-private fun MoreDialog(onDismiss: () -> Unit) {
-    val st by SettingsStore.settings.collectAsState()
-    val primary = MaterialTheme.colorScheme.primary
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1B1B22),
-        title = { Text("Video settings", color = Color.White) },
-        text = {
-            Column {
-                Text("Subtitle size", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(0.8f to "Small", 1f to "Normal", 1.25f to "Large", 1.5f to "Huge").forEach { (v, label) ->
-                        val on = abs(st.videoSubSize - v) < 0.01f
-                        Text(
-                            label,
-                            color = if (on) Color.Black else Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(if (on) primary else Color.White.copy(alpha = 0.10f))
-                                .clickable { SettingsStore.update { it.copy(videoSubSize = v) } }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                Row(
-                    Modifier.fillMaxWidth().clickable { SettingsStore.update { it.copy(videoAutoPip = !it.videoAutoPip) } },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Small window on Home", color = Color.White, fontSize = 15.sp)
-                        Text("Pressing Home keeps the video playing in a small window", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-                    }
-                    Switch(checked = st.videoAutoPip, onCheckedChange = { v -> SettingsStore.update { it.copy(videoAutoPip = v) } })
-                }
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "Gestures: left side up/down = brightness, right side = volume, slide sideways = jump, " +
-                        "double tap left/right = 10 seconds.",
-                    color = Color.White.copy(alpha = 0.55f),
-                    fontSize = 12.sp
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
-    )
-}
