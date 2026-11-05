@@ -728,7 +728,16 @@ fun PlaylistDialog(player: Player, onDismiss: () -> Unit) {
 /** ⋮ → Network Stream: type or paste a web address. */
 @Composable
 fun NetworkStreamDialog(onPlay: (String) -> Unit, onDismiss: () -> Unit) {
-    var url by remember { mutableStateOf("") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // a link already copied (from an anime / movie app or the browser) is filled in
+    var url by remember {
+        mutableStateOf(
+            runCatching {
+                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                VideoRequest.linkIn(cm?.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString())
+            }.getOrNull() ?: ""
+        )
+    }
     DarkDialog("Network Stream", onDismiss, confirm = {
         TextButton(enabled = url.startsWith("http"), onClick = { onPlay(url); onDismiss() }) { Text("Play") }
     }) {

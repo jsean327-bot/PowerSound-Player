@@ -82,7 +82,43 @@
                 <data android:mimeType="audio/x-mpegurl" />
                 <data android:mimeType="application/dash+xml" />
             </intent-filter>
+            <!-- web video links sent without a type (… .mp4 / .mkv / .m3u8 …) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.mp4" />
+                <data android:pathPattern=".*\\.mkv" />
+                <data android:pathPattern=".*\\.webm" />
+                <data android:pathPattern=".*\\.m3u8" />
+                <data android:pathPattern=".*\\.mpd" />
+                <data android:pathPattern=".*\\.avi" />
+                <data android:pathPattern=".*\\.mov" />
+                <data android:pathPattern=".*\\.ts" />
+            </intent-filter>
+            <!-- "Share" a video file to PowerSound -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
         </activity>
+
+        <!-- "Share" a link (from an app or the browser) → "Play video link" plays it in PowerSound -->
+        <activity-alias
+            android:name=".video.PlayLink"
+            android:targetActivity=".video.VideoActivity"
+            android:exported="true"
+            android:label="Play video link">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- Video ⋮ → Background Play: the video's sound goes on with a notification -->
         <service

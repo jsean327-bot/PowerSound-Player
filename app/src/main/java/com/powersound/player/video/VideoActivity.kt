@@ -178,6 +178,7 @@ class VideoActivity : ComponentActivity() {
         headers = req.headers
         goFullScreen()
         VideoPrefsStore.value.let { vp ->
+            // Display Settings → Screen → Orientation (default: turn with the phone)
             if (vp.orientation != 0) setRotationMode(vp.orientation) else rotation.intValue = 0
             // Display Settings → Screen → Brightness
             if (vp.brightnessOn) setBrightness((vp.brightnessLevel / 15f).coerceIn(0.02f, 1f))
@@ -1187,6 +1188,7 @@ class VideoRequest(
         private fun fromOtherApp(activity: Activity, intent: Intent): VideoRequest? {
             val uri: Uri = intent.data
                 ?: (intent.getParcelableExtra<Parcelable>(Intent.EXTRA_STREAM) as? Uri)
+                ?: linkIn(intent.getStringExtra(Intent.EXTRA_TEXT))?.let { Uri.parse(it) }
                 ?: return null
             val ex = intent.extras ?: Bundle()
             val title = ex.getString("title")
@@ -1237,6 +1239,10 @@ class VideoRequest(
                 returnResult = ex.getBoolean("return_result", false) || activity.callingActivity != null
             )
         }
+
+        /** The first web address in a shared text ("Watch this: https://… .m3u8"). */
+        fun linkIn(text: String?): String? =
+            text?.let { Regex("https?://\\S+").find(it)?.value?.trimEnd('.', ',', ')', ']', '"', '\'') }
 
         /** Headers as MX Player gets them (["Referer", "https://…", "Cookie", "…"]), or as a Bundle / Map. */
         private fun readHeaders(raw: Any?): Map<String, String> {

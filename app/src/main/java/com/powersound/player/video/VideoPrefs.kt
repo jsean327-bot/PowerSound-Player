@@ -22,7 +22,7 @@ data class VideoPrefs(
 
     // ---- Screen
     /** 0 by the video, 1 auto (turn with the phone), 2 landscape, 3 portrait. */
-    val orientation: Int = 0,
+    val orientation: Int = 1,
     /** Status bar: 0 shows with the controls, 1 always hidden, 2 always shown. */
     val fullScreen: Int = 0,
     /** Navigation bar: 0 shows with the controls, 1 always hidden, 2 always shown. */
@@ -146,6 +146,7 @@ object VideoPrefsStore {
         put("progressStyle", p.progressStyle)
         put("progressBelow", p.progressBelow)
         put("orientation", p.orientation)
+        put("orient2", true)
         put("fullScreen", p.fullScreen)
         put("softButtons", p.softButtons)
         put("brightnessOn", p.brightnessOn)
@@ -219,7 +220,8 @@ object VideoPrefsStore {
             progressColor = o.optInt("progressColor", d.progressColor),
             progressStyle = o.optInt("progressStyle", d.progressStyle),
             progressBelow = o.optBoolean("progressBelow", d.progressBelow),
-            orientation = o.optInt("orientation", d.orientation),
+            // older versions saved "by the video" as the default: now the screen turns with the phone
+            orientation = if (o.has("orient2")) o.optInt("orientation", d.orientation) else d.orientation,
             fullScreen = o.optInt("fullScreen", d.fullScreen),
             softButtons = o.optInt("softButtons", d.softButtons),
             brightnessOn = o.optBoolean("brightnessOn", d.brightnessOn),
