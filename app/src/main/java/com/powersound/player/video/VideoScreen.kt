@@ -591,7 +591,7 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                 }
                 .pointerInput(locked, player, vp, duration, zoom > 1.01f) {
                     if (locked) return@pointerInput
-                    val pxPerInch = density * 160f
+                    val pxPerInch = this@pointerInput.density * 160f // the gesture area's density, not the screen's Density object
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val start = down.position
