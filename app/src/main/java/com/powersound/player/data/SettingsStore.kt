@@ -739,6 +739,17 @@ object CrashLog {
         Thread.setDefaultUncaughtExceptionHandler(Handler(app, previous))
     }
 
+    /** Saves a handled error (the app keeps running) so it can be read from Settings → Misc → View error log. */
+    fun note(context: Context, what: String, e: Throwable) {
+        runCatching {
+            if (SettingsStore.value.keepCrashLog) {
+                java.io.File(context.applicationContext.filesDir, FILE).writeText(
+                    "PowerSound • ${java.util.Date()}\n$what\n\n" + android.util.Log.getStackTraceString(e)
+                )
+            }
+        }
+    }
+
     @Volatile
     private var watching = false
 

@@ -187,6 +187,28 @@ class PlaybackService : MediaLibraryService() {
                 }
             }
 
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                // Saved in Settings → Misc → View error log, then playback goes on by itself: the same song once more
+                // from where it stopped, and if it fails again right away, the next song.
+                val id = player.currentMediaItem?.mediaId
+                val title = player.currentMediaItem?.mediaMetadata?.title
+                com.powersound.player.data.CrashLog.note(this@PlaybackService, "Playback error in \"$title\" at ${player.currentPosition / 1000}s", error)
+                val now = android.os.SystemClock.elapsedRealtime()
+                val again = id != null && id == lastErrorId && now - lastErrorAt < 15_000
+                lastErrorId = id
+                lastErrorAt = now
+                scope.launch {
+                    delay(300)
+                    if (again && player.hasNextMediaItem()) {
+                        player.seekToNextMediaItem()
+                    } else if (again) {
+                        return@launch
+                    }
+                    player.prepare()
+                    player.play()
+                }
+            }
+
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 ExternalIntents.metaChanged(this@PlaybackService, player)
                 // Settings → Crossfade → Silence Between Tracks
@@ -210,6 +232,9 @@ class PlaybackService : MediaLibraryService() {
         setupCast()
         refreshWidget(force = true)
     }
+
+    private var lastErrorId: String? = null
+    private var lastErrorAt = 0L
 
     private val widgetListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
@@ -792,9 +817,13 @@ class PlaybackService : MediaLibraryService() {
                 .setAllowCrossProtocolRedirects(true)
                 .createDataSource()
         }
-        // Settings → Misc → Network Stream Buffer (used when the player is created)
+        // Settings → Misc → Network Stream Buffer (used when the player is created). Time comes first: at least 15 s
+        // are always loaded, whatever the size. Before, a hi-res FLAC (2–9 Mbps) could fill the byte limit with less
+        // than half a second ready to play, and the player stopped ("stuck buffering and not loading").
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(15_000, 50_000, 1_500, 3_000)
             .setTargetBufferBytes(SettingsStore.value.streamBufferKb.coerceIn(256, 16384) * 1024)
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
         return ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(
