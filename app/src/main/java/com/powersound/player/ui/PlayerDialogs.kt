@@ -44,6 +44,8 @@ import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.ThumbDown
 import androidx.compose.material.icons.rounded.ThumbUp
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -159,6 +161,19 @@ fun SongMenuDialog(
                         }
                     }
                 }
+                // ♥ Favorite Songs
+                val favs by com.powersound.player.data.Favorites.state.collectAsState()
+                val fav = favs.isFav(song.id)
+                Icon(
+                    if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
+                    tint = if (fav) Color(0xFFE85D8A) else Color.White.copy(alpha = 0.8f),
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .clickable { com.powersound.player.data.Favorites.toggleSong(song.id) }
+                        .padding(9.dp)
+                )
             }
             Spacer(Modifier.height(8.dp))
             fun act(f: () -> Unit): () -> Unit = { onDismiss(); f() }

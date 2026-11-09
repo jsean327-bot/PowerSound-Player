@@ -295,7 +295,7 @@ val DEFAULT_VIDEO_TOOLS = listOf(
     "night", "shuffle", "loop", "mute", "sleep", "ab", "eq", "speed", "screenshot", "background", "rotation"
 )
 
-val DEFAULT_PLAYER_BUTTONS = listOf("viz", "sleep", "repeat", "shuffle", "cast")
+val DEFAULT_PLAYER_BUTTONS = listOf("viz", "sleep", "repeat", "fav", "shuffle", "cast")
 val DEFAULT_NOTIF_BUTTONS = listOf(2, 3, 1, 7, 8, 0) // shuffle, close | repeat, -10, +10, none
 /** Settings → Notifications → Buttons. Index stored in [AppSettings.notifButtons]. */
 val NOTIF_ACTIONS = listOf("None", "Repeat", "Shuffle", "Close", "Like", "Unlike", "Rating", "-10", "+10", "Prev. category", "Next category")
@@ -388,6 +388,7 @@ object SettingsStore {
         put("statusNoBg", s.statusBarNoBg); put("navbar", s.navbarStyle); put("navOffset", s.offsetNavbar); put("sysNavNoBg", s.androidNavNoBg)
         put("artAnim", s.artAnimation); put("marquee", s.marquee); put("marqueeAll", s.marqueeEverywhere)
         put("playerButtons", JSONArray().apply { s.playerButtons.forEach { put(it) } })
+        put("favBtn", true)
         put("castBtn", true)
         put("noGap", s.preferNoGap); put("noEditLp", s.noEditLongPress); put("ratingType", s.ratingType); put("menuBtn", s.menuButton)
         put("menuLp", s.menuLongPress); put("lyricsBtn", s.lyricsButton); put("line2", s.line2Press); put("line2Lp", s.line2LongPress)
@@ -536,6 +537,8 @@ object SettingsStore {
             marquee = o.optBoolean("marquee", d.marquee),
             marqueeEverywhere = o.optBoolean("marqueeAll", d.marqueeEverywhere),
             playerButtons = (o.optJSONArray("playerButtons")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: d.playerButtons)
+                // once: the new ♥ button joins buttons saved before it existed
+                .let { b -> if (o.has("playerButtons") && !o.has("favBtn") && "fav" !in b) b + "fav" else b }
                 // the Cast button arrives once in the player screen for everyone; removing it afterwards is kept
                 .let { if (!o.has("castBtn") && "cast" !in it) it + "cast" else it },
             preferNoGap = o.optBoolean("noGap", d.preferNoGap),

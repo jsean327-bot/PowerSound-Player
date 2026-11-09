@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MoreVert
@@ -422,6 +423,8 @@ fun Category.icon(): ImageVector = when (this) {
     Category.YEARS -> Icons.Rounded.DateRange
     Category.COMPOSERS -> Icons.Rounded.Edit
     Category.PLAYLISTS -> Icons.Rounded.PlaylistPlay
+    Category.FAVORITE_SONGS, Category.FAVORITE_ALBUMS, Category.FAVORITE_ARTISTS, Category.FAVORITE_FOLDERS ->
+        Icons.Rounded.Favorite
     Category.STREAMS -> Icons.Rounded.Radio
     Category.VIDEOS -> Icons.Rounded.VideoLibrary
     Category.QUEUE -> Icons.Rounded.QueueMusic
@@ -443,6 +446,7 @@ fun Category.color(): Color = when (this) {
     Category.YEARS -> Color(0xFF4FB6C9)
     Category.COMPOSERS -> Color(0xFF3FAE6A)
     Category.PLAYLISTS -> Color(0xFFD08A5B)
+    Category.FAVORITE_SONGS, Category.FAVORITE_ALBUMS, Category.FAVORITE_ARTISTS, Category.FAVORITE_FOLDERS -> Color(0xFFE85D8A)
     Category.STREAMS -> Color(0xFF6FBF73)
     Category.VIDEOS -> Color(0xFFE0645C)
     Category.QUEUE -> Color(0xFFC9A63F)

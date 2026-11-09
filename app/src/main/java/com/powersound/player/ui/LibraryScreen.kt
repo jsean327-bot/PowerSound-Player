@@ -58,6 +58,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.runtime.produceState
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -193,7 +197,8 @@ fun GroupGridScreen(
             }
         }
     }
-    val shown = remember(groups, query, pref.sort, pref.reverse, fileDates) {
+    val favs by com.powersound.player.data.Favorites.state.collectAsState()
+    val shown = remember(groups, query, pref.sort, pref.reverse, fileDates, favs.pinned) {
         val q = query?.trim()?.lowercase().orEmpty()
         val list = if (q.isEmpty()) groups else groups.filter { it.title.lowercase().contains(q) || it.subtitle.lowercase().contains(q) }
         fun pathOf(g: Group) = if (g.key.startsWith("folder:")) g.key.removePrefix("folder:") else g.songs.firstOrNull()?.path ?: g.title
@@ -205,8 +210,12 @@ fun GroupGridScreen(
             5 -> list.sortedByDescending { it.songs.size }
             else -> list
         }
-        if (pref.reverse) sorted.reversed() else sorted
+        val ordered = if (pref.reverse) sorted.reversed() else sorted
+        // pinned ones (Select → 📌) always at the top, in the list's order
+        val (pinned, rest) = ordered.partition { favs.isPinned(it.key) }
+        pinned + rest
     }
+    val pinnedCount = remember(shown, favs.pinned) { shown.count { favs.isPinned(it.key) } }
     val allSongs = remember(shown) { shown.flatMap { it.songs } }
     val keys = remember(shown) { shown.map { letterKey(com.powersound.player.data.MusicRepository.sortKey(it.title)) } }
     val lazyKeys = remember(shown) { uniqueKeys(shown) { it.key } }
@@ -276,18 +285,23 @@ fun GroupGridScreen(
                 val checked = if (selecting) selected?.contains(g.key) == true else null
                 val longClick: (() -> Unit)? = if (actions != null) ({ if (selecting) toggle(g.key) else selected = setOf(g.key) }) else null
                 val click = { if (selecting) toggle(g.key) else onOpen(g) }
+                val pin = favs.isPinned(g.key)
+                val fav = favs.isFav(g.key)
                 if (isGrid) {
-                    GroupTile(
-                        g.title, if (pref.titlesOnly || view == 0 || view == 7) "" else g.subtitle, g.coverId, g.key,
-                        checked = checked, onLongClick = longClick, small = columns >= 3, onClick = click
-                    )
+                    Box {
+                        GroupTile(
+                            g.title, if (pref.titlesOnly || view == 0 || view == 7) "" else g.subtitle, g.coverId, g.key,
+                            checked = checked, onLongClick = longClick, small = columns >= 3, onClick = click
+                        )
+                        if (pin || fav) GroupBadges(pin, fav, Modifier.align(Alignment.TopStart).padding(6.dp))
+                    }
                 } else {
-                    GroupRow(g, view, pref.titlesOnly, checked, longClick, click)
+                    GroupRow(g, view, pref.titlesOnly, checked, longClick, click, pin, fav)
                 }
             }
         }
 
-        if (pref.sort == 0 && !pref.reverse && st.azScroll) {
+        if (pref.sort == 0 && !pref.reverse && st.azScroll && pinnedCount == 0) {
             FastScroller(
                 itemKeys = keys,
                 onJump = { i -> scope.launch { state.scrollToItem(i + headerItems) } },
@@ -312,6 +326,26 @@ fun GroupGridScreen(
                 label = "${chosenGroups.size} selected • ${chosen.size} songs",
                 onAll = { selected = if (shown.all { it.key in sel }) emptySet() else shown.map { it.key }.toSet() },
                 onClose = { selected = null },
+                favorite = chosenGroups.isNotEmpty() && chosenGroups.all { favs.isFav(it.key) },
+                onFavorite = {
+                    if (chosenGroups.isNotEmpty()) {
+                        val now = com.powersound.player.data.Favorites.toggleGroups(chosenGroups.map { it.key })
+                        android.widget.Toast.makeText(
+                            context, if (now) "Added to favorites ♥" else "Removed from favorites", android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        selected = null
+                    }
+                },
+                pinned = chosenGroups.isNotEmpty() && chosenGroups.all { favs.isPinned(it.key) },
+                onPin = {
+                    if (chosenGroups.isNotEmpty()) {
+                        val now = com.powersound.player.data.Favorites.togglePins(chosenGroups.map { it.key })
+                        android.widget.Toast.makeText(
+                            context, if (now) "Pinned to the top" else "Unpinned", android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        selected = null
+                    }
+                },
                 onPlay = { done { onPlay(it) } },
                 onPlayNext = { done(actions.playNext) },
                 onQueue = { done(actions.addToQueue) },
@@ -374,7 +408,16 @@ class ListMenuActions(
 /** A group as a row (List views of List Options). */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun GroupRow(g: Group, view: Int, titlesOnly: Boolean, checked: Boolean?, onLongClick: (() -> Unit)?, onClick: () -> Unit) {
+private fun GroupRow(
+    g: Group,
+    view: Int,
+    titlesOnly: Boolean,
+    checked: Boolean?,
+    onLongClick: (() -> Unit)?,
+    onClick: () -> Unit,
+    pinned: Boolean = false,
+    favorite: Boolean = false
+) {
     val art = when (view) { 6 -> 72; 5 -> 56; 4 -> 44; 2 -> 40; else -> 0 }
     val oneLine = view == 2 || view == 1 || titlesOnly
     val primary = MaterialTheme.colorScheme.primary
@@ -415,7 +458,27 @@ private fun GroupRow(g: Group, view: Int, titlesOnly: Boolean, checked: Boolean?
                 Text(g.subtitle, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+        if (pinned || favorite) GroupBadges(pinned, favorite, Modifier.padding(start = 8.dp))
         Text("${g.songs.size}", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+/** Small 📌 / ♥ marks on a pinned / favorite album, artist or folder. */
+@Composable
+private fun GroupBadges(pinned: Boolean, favorite: Boolean, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (pinned) MarkBadge(Icons.Rounded.PushPin, MaterialTheme.colorScheme.primary)
+        if (favorite) MarkBadge(Icons.Rounded.Favorite, Color(0xFFE85D8A))
+    }
+}
+
+@Composable
+private fun MarkBadge(icon: ImageVector, tint: Color) {
+    Box(
+        Modifier.size(22.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
     }
 }
 
@@ -541,6 +604,8 @@ fun SongListScreen(
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf(false) }
+    val songFavs by com.powersound.player.data.Favorites.state.collectAsState()
+    val songContext = androidx.compose.ui.platform.LocalContext.current
     val shown = remember(songs, query, sort) {
         val q = query?.trim()?.lowercase().orEmpty()
         val list = if (q.isEmpty()) songs else songs.filter {
@@ -675,6 +740,16 @@ fun SongListScreen(
                 bottomInset = bottomInset,
                 onAll = { selected = if (shown.all { it.id in sel }) emptySet() else shown.map { it.id }.toSet() },
                 onClose = { selected = null },
+                favorite = chosen.isNotEmpty() && chosen.all { songFavs.isFav(it.id) },
+                onFavorite = {
+                    if (chosen.isNotEmpty()) {
+                        val now = com.powersound.player.data.Favorites.toggleSongs(chosen.map { it.id })
+                        android.widget.Toast.makeText(
+                            songContext, if (now) "Added to Favorite Songs ♥" else "Removed from Favorite Songs", android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        selected = null
+                    }
+                },
                 onPlay = { done { onPlay(it, 0) } },
                 onPlayNext = { done(actions.playNext) },
                 onQueue = { done(actions.addToQueue) },
@@ -704,7 +779,13 @@ private fun SelectionBar(
     onQueue: () -> Unit,
     onPlaylist: () -> Unit,
     onTags: (() -> Unit)?,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    /** ♥: favorite / unfavorite the selection (null: hidden). */
+    favorite: Boolean = false,
+    onFavorite: (() -> Unit)? = null,
+    /** 📌: pin / unpin at the top of the list (null: hidden). */
+    pinned: Boolean = false,
+    onPin: (() -> Unit)? = null
 ) {
     val primary = MaterialTheme.colorScheme.primary
     Box(Modifier.fillMaxSize()) {
@@ -728,6 +809,12 @@ private fun SelectionBar(
                     fontSize = 15.sp,
                     modifier = Modifier.weight(1f)
                 )
+                if (onFavorite != null) {
+                    SelIcon(if (favorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, if (favorite) "Unfavorite" else "Favorite", count > 0, onFavorite)
+                }
+                if (onPin != null) {
+                    SelIcon(if (pinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin, if (pinned) "Unpin" else "Pin to top", count > 0, onPin)
+                }
                 Text(
                     if (allSelected) "None" else "All",
                     color = primary,

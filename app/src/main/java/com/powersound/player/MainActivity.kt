@@ -146,6 +146,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         com.powersound.player.data.CrashLog.install(this)
         com.powersound.player.data.ListPrefs.init(this)
+        com.powersound.player.data.Favorites.init(this)
         // after a screen rotation Android gives the same intent again: an opened file must not play twice
         handleIntent(intent, openFile = savedInstanceState == null)
         setContent {
@@ -1330,11 +1331,12 @@ private fun ScreenContent(
     // album / folder page → ⋮ → Choose cover
     var coverPickFor by remember { mutableStateOf<com.powersound.player.data.Group?>(null) }
     var playlistSongMenu by remember { mutableStateOf<Triple<Long, Song, (() -> Unit)?>?>(null) }
+    val favs by com.powersound.player.data.Favorites.state.collectAsStateWithLifecycle()
 
     when (screen) {
         Screen.Home -> {
             val queueEmpty = player.queue.isEmpty()
-            val empty = remember(library.songs, stats, queueEmpty, playlists, bookmarks, streams, appSettings.longTrackMin) {
+            val empty = remember(library.songs, stats, queueEmpty, playlists, bookmarks, streams, appSettings.longTrackMin, favs) {
                 Category.values().filter { cat ->
                     when {
                         cat.kind == Kind.QUEUE -> queueEmpty
@@ -1342,6 +1344,7 @@ private fun ScreenContent(
                         cat == Category.BOOKMARKS -> bookmarks.isEmpty()
                         cat == Category.STREAMS -> streams.isEmpty()
                         cat == Category.VIDEOS -> false // read only when opened
+                        cat.kind == Kind.GROUPS && cat.name.startsWith("FAVORITE_") -> library.groupsFor(cat).isEmpty()
                         cat.kind == Kind.SONGS -> vm.songsFor(cat, stats).isEmpty()
                         else -> library.songs.isEmpty()
                     }
@@ -1365,7 +1368,8 @@ private fun ScreenContent(
             val key = "cat:${cat.name}"
             when (cat.kind) {
                 Kind.GROUPS -> {
-                    val groups = if (cat == Category.PLAYLISTS) remember(playlists, library.songs) { vm.playlistGroups() } else library.groupsFor(cat)
+                    val groups = if (cat == Category.PLAYLISTS) remember(playlists, library.songs) { vm.playlistGroups() }
+                        else remember(library, cat, favs) { library.groupsFor(cat) }
                     GroupGridScreen(
                         title = cat.label,
                         icon = cat.icon(),
@@ -1437,13 +1441,13 @@ private fun ScreenContent(
                     onRemove = { com.powersound.player.data.LibraryStores.removeBookmark(it) }
                 )
                 else -> {
-                    val songs = remember(library.songs, stats, cat) { vm.songsFor(cat, stats) }
+                    val songs = remember(library.songs, stats, cat, favs) { vm.songsFor(cat, stats) }
                     SongListScreen(
                         songs = songs,
                         currentId = currentId,
                         bottomInset = bottomInset,
                         showIndex = cat == Category.ALL_SONGS,
-                        emptyText = "Nothing here yet",
+                        emptyText = if (cat == Category.FAVORITE_SONGS) "No favorite songs yet.\nTap ♥ in a song's menu, or select songs and tap ♥." else "Nothing here yet",
                         onPlay = { list, i -> tap(list, i, key) },
                         onShuffle = { vm.shuffleAll(it, key) },
                         onSongMenu = onSongMenu,

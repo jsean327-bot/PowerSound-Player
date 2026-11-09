@@ -80,6 +80,8 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.ThumbDown
 import androidx.compose.material.icons.rounded.ThumbUp
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.CastConnected
@@ -157,6 +159,7 @@ val PLAYER_BUTTONS = listOf(
     PlayerButton("playlist", "Add to playlist", Icons.Rounded.PlaylistAdd),
     PlayerButton("counter", "Track counter", Icons.Rounded.FormatListNumbered),
     PlayerButton("like", "Like", Icons.Outlined.ThumbUp),
+    PlayerButton("fav", "Favorite (♥)", Icons.Rounded.FavoriteBorder),
     PlayerButton("cast", "Cast (Chromecast)", Icons.Rounded.Cast)
 )
 
@@ -679,6 +682,19 @@ fun NowPlayingScreen(
                     "info" -> SmallPill(Icons.Rounded.Info, false, st.buttonsBg, onClick = onAudioInfo)
                     "bookmark" -> SmallPill(Icons.Rounded.BookmarkBorder, false, st.buttonsBg, onClick = { onBookmark(); showToast("Bookmark added", "Library → Bookmarks") })
                     "playlist" -> SmallPill(Icons.Rounded.PlaylistAdd, false, st.buttonsBg, onClick = onAddToPlaylist)
+                    "fav" -> {
+                        val favs by com.powersound.player.data.Favorites.state.collectAsState()
+                        val on = song != null && favs.isFav(song.id)
+                        SmallPill(
+                            if (on) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, on, st.buttonsBg,
+                            onClick = {
+                                song?.let {
+                                    com.powersound.player.data.Favorites.toggleSong(it.id)
+                                    showToast(if (on) "Removed from Favorite Songs" else "Added to Favorite Songs ♥", "Library → Favorite Songs")
+                                }
+                            }
+                        )
+                    }
                     "like" -> SmallPill(if (rating == 1) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp, rating == 1, st.buttonsBg, onClick = onLike, onLongClick = onDislike)
                     "counter" -> {
                         val total = state.queue.size

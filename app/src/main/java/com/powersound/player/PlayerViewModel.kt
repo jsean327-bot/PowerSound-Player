@@ -106,6 +106,12 @@ data class LibraryState(
         Category.GENRES -> genres
         Category.YEARS -> years
         Category.COMPOSERS -> composers
+        // Favorites: the albums / artists / folders marked with ♥ (Select → ♥)
+        Category.FAVORITE_ALBUMS -> com.powersound.player.data.Favorites.value.let { f -> albums.filter { f.isFav(it.key) } }
+        Category.FAVORITE_ARTISTS -> com.powersound.player.data.Favorites.value.let { f ->
+            (artists + albumArtists).filter { f.isFav(it.key) }.distinctBy { it.title.lowercase() }
+        }
+        Category.FAVORITE_FOLDERS -> com.powersound.player.data.Favorites.value.let { f -> folders.filter { f.isFav(it.key) } }
         else -> emptyList()
     }
 }
@@ -232,6 +238,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         com.powersound.player.data.SettingsStore.init(app)
         com.powersound.player.data.CrashLog.install(app)
         com.powersound.player.data.ListPrefs.init(app)
+        com.powersound.player.data.Favorites.init(app)
         com.powersound.player.ui.HintStore.init(app)
         // notification buttons that need the app (Settings → Notifications → Buttons)
         viewModelScope.launch {
@@ -626,6 +633,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val all = _library.value.songs
         return when (cat) {
             Category.ALL_SONGS -> all
+            Category.FAVORITE_SONGS -> com.powersound.player.data.Favorites.value.let { f -> all.filter { f.isFav(it.id) } }
             Category.MOST_PLAYED -> all.filter { (stats.plays[it.id] ?: 0) > 0 }
                 .sortedByDescending { stats.plays[it.id] ?: 0 }.take(100)
             Category.TOP_RATED -> all.filter { stats.isTop(it.id) }
