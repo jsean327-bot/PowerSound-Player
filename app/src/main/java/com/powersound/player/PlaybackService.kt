@@ -827,7 +827,10 @@ class PlaybackService : MediaLibraryService() {
             .build()
         return ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(
-                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(this, http))
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+                    androidx.media3.datasource.DefaultDataSource.Factory(this, http),
+                    com.powersound.player.audio.flac.SafeExtractors()
+                )
             )
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ false)
