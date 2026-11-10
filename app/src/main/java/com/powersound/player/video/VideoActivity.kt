@@ -225,7 +225,7 @@ class VideoActivity : ComponentActivity() {
         if (req.paths.isEmpty()) {
             p.setMediaItems(req.items, req.startIndex, req.startPositionMs)
             p.prepare()
-            p.play()
+            if (!recastIfCasting()) p.play()
             return
         }
         lifecycleScope.launch {
@@ -236,8 +236,18 @@ class VideoActivity : ComponentActivity() {
             if (request !== req) return@launch
             q.setMediaItems(items, req.startIndex, req.startPositionMs)
             q.prepare()
-            q.play()
+            if (!recastIfCasting()) q.play()
         }
+    }
+
+    /** Casting and a new video came (another episode from the app): it goes to the TV instead of the phone. */
+    private fun recastIfCasting(): Boolean {
+        if (castingTo.value == null) return false
+        val session = CastControl.context(this)?.sessionManager?.currentCastSession
+        if (session == null || !session.isConnected) return false
+        CastControl.videoOwnsCast = true
+        castVideo(session)
+        return true
     }
 
     private val listener = object : Player.Listener {
@@ -796,7 +806,10 @@ class VideoActivity : ComponentActivity() {
                 if (c != null) {
                     castPosition.longValue = c.approximateStreamPosition
                     castDuration.longValue = c.streamDuration.coerceAtLeast(0L)
-                    castPlaying.value = c.isPlaying
+                    if (castPlaying.value != c.isPlaying) {
+                        castPlaying.value = c.isPlaying
+                        VideoBackgroundService.refresh()
+                    }
                 }
                 delay(500)
             }
@@ -844,6 +857,8 @@ class VideoActivity : ComponentActivity() {
         castPoll?.cancel()
         val at = castPosition.longValue
         castingTo.value = null
+        // the casting notification goes (the screen is behind: nothing is playing any more)
+        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) VideoBackgroundService.stop(this)
         CastControl.videoOwnsCast = false
         castServer?.stop()
         playerOrNull()?.let { p ->
@@ -993,7 +1008,17 @@ class VideoActivity : ComponentActivity() {
 
     // ---------------------------------------------------------------- leaving, result for the app that sent the video
 
-    fun leave() = finishWithResult("user")
+    /**
+     * Back. While casting the screen goes behind (to the app the video came from, e.g. to pick another episode):
+     * the TV keeps playing, the controls stay in the notification, and opening another video sends it to the TV.
+     */
+    fun leave() {
+        if (castingTo.value != null) {
+            moveTaskToBack(true)
+            return
+        }
+        finishWithResult("user")
+    }
 
     private fun finishWithResult(endBy: String) {
         val req = request
@@ -1027,6 +1052,8 @@ class VideoActivity : ComponentActivity() {
         if (p != null && SettingsStore.value.videoBackground && p.isPlaying && !isChangingConfigurations &&
             !isInPictureInPictureModeCompat() && !isFinishing && castingTo.value == null
         ) VideoBackgroundService.start(this)
+        // casting: the TV's controls stay in a notification while you are in another app
+        if (castingTo.value != null && !isChangingConfigurations && !isFinishing) VideoBackgroundService.start(this)
     }
 
     override fun onResume() {

@@ -1157,7 +1157,9 @@ private fun CastPanel(activity: VideoActivity, device: String, title: String) {
             Spacer(Modifier.height(16.dp))
             TextButton(onClick = { activity.stopCasting() }) { Text("Stop casting") }
             Text(
-                "The phone's volume buttons change the TV's volume. The Chromecast plays the file itself, " +
+                "Back takes you to the other app (to pick another episode, say): the TV keeps playing, the controls " +
+                    "stay in the notification, and the next video you open with PowerSound goes straight to the TV.\n" +
+                    "The phone's volume buttons change the TV's volume. The Chromecast plays the file itself, " +
                     "so subtitles, audio settings and the equalizer are not used there.",
                 color = Color.White.copy(alpha = 0.5f),
                 fontSize = 12.sp,

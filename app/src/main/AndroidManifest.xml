@@ -57,6 +57,9 @@
         <activity
             android:name=".video.VideoActivity"
             android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.powersound.player.video"
+            android:autoRemoveFromRecents="true"
             android:label="PowerSound Video"
             android:theme="@style/Theme.PowerSound.Video"
             android:supportsPictureInPicture="true"
