@@ -591,6 +591,16 @@ fun SongRow(
                 maxLines = 1
             )
         }
+        // ♥ a favorite song (Library → Favorite Songs)
+        val favs by com.powersound.player.data.Favorites.state.collectAsState()
+        if (favs.isFav(song.id)) {
+            Icon(
+                Icons.Rounded.Favorite,
+                contentDescription = "Favorite",
+                tint = Color(0xFFE85D8A),
+                modifier = Modifier.padding(start = 6.dp, end = 2.dp).size(16.dp)
+            )
+        }
     }
 }
 

@@ -681,7 +681,9 @@ object DataBackup {
 
     private val FILES = listOf(
         "powersound_audio", "powersound_stats", "powersound_library",
-        "powersound_player", SettingsStore.PREFS, "powersound_hints"
+        "powersound_player", SettingsStore.PREFS, "powersound_hints",
+        // favorites and pins, each list's sort / view, the video player's settings, where each video stopped + bookmarks
+        "powersound_favorites", "powersound_lists", "powersound_video_prefs", "powersound_video"
     )
 
     fun export(context: Context): String {
