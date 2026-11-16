@@ -1344,6 +1344,7 @@ private fun ScreenContent(
                         cat == Category.BOOKMARKS -> bookmarks.isEmpty()
                         cat == Category.STREAMS -> streams.isEmpty()
                         cat == Category.VIDEOS -> false // read only when opened
+                        cat == Category.NETWORK -> false // searched only when opened
                         cat.kind == Kind.GROUPS && cat.name.startsWith("FAVORITE_") -> library.groupsFor(cat).isEmpty()
                         cat.kind == Kind.SONGS -> vm.songsFor(cat, stats).isEmpty()
                         else -> library.songs.isEmpty()
@@ -1431,6 +1432,20 @@ private fun ScreenContent(
                     bottomInset = bottomInset,
                     onBack = { vm.pop() }
                 )
+                Kind.NETWORK -> {
+                    val netContext = androidx.compose.ui.platform.LocalContext.current
+                    com.powersound.player.ui.NetworkScreen(
+                        bottomInset = bottomInset,
+                        playingId = player.queue.getOrNull(player.currentIndex)?.mediaId,
+                        onBack = { vm.pop() },
+                        onPlayAudio = { list, i, shuffle -> vm.playNetwork(list, i, shuffle) },
+                        onPlayVideo = { list, i ->
+                            com.powersound.player.video.VideoActivity.openNetwork(
+                                netContext, list.mapNotNull { it.url }, list.filter { it.url != null }.map { it.title }, i
+                            )
+                        }
+                    )
+                }
                 Kind.BOOKMARKS -> BookmarksScreen(
                     bookmarks = bookmarks,
                     songOf = { vm.song(it) },

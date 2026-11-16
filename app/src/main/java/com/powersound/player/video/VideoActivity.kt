@@ -106,7 +106,19 @@ class VideoActivity : ComponentActivity() {
         const val EXTRA_INDEX = "com.powersound.player.video.INDEX"
         const val EXTRA_TITLES = "com.powersound.player.video.TITLES"
         const val EXTRA_PATHS = "com.powersound.player.video.PATHS"
+        const val EXTRA_NET_URLS = "com.powersound.player.video.NET_URLS"
         private const val ACTION_PIP = "com.powersound.player.video.PIP_PLAY_PAUSE"
+
+        /** Opens videos of a media server on the network (Library → Network): their addresses and names. */
+        fun openNetwork(context: Context, urls: List<String>, titles: List<String>, index: Int) {
+            if (urls.isEmpty()) return
+            context.startActivity(
+                Intent(context, VideoActivity::class.java)
+                    .putExtra(EXTRA_NET_URLS, urls.toTypedArray())
+                    .putExtra(EXTRA_TITLES, titles.toTypedArray())
+                    .putExtra(EXTRA_INDEX, index)
+            )
+        }
 
         /** Opens [videos] (a folder) at [index]. */
         fun open(context: Context, videos: List<Video>, index: Int) {
@@ -1359,7 +1371,28 @@ class VideoRequest(
 
         fun from(activity: Activity, intent: Intent): VideoRequest? {
             val ids = intent.getLongArrayExtra(VideoActivity.EXTRA_IDS)
-            return if (ids != null && ids.isNotEmpty()) fromLibrary(activity, intent, ids) else fromOtherApp(activity, intent)
+            val net = intent.getStringArrayExtra(VideoActivity.EXTRA_NET_URLS)
+            return when {
+                ids != null && ids.isNotEmpty() -> fromLibrary(activity, intent, ids)
+                net != null && net.isNotEmpty() -> fromNetwork(activity, intent, net)
+                else -> fromOtherApp(activity, intent)
+            }
+        }
+
+        /** Library → Network: a folder of a media server (plain web addresses on the home network). */
+        private fun fromNetwork(context: Context, intent: Intent, urls: Array<String>): VideoRequest {
+            val index = intent.getIntExtra(VideoActivity.EXTRA_INDEX, 0).coerceIn(0, urls.size - 1)
+            val titles = intent.getStringArrayExtra(VideoActivity.EXTRA_TITLES)
+            val keys = ArrayList<String>()
+            val items = urls.mapIndexed { i, u ->
+                val uri = Uri.parse(u)
+                keys += VideoStore.keyOf(uri)
+                MediaItem.Builder()
+                    .setUri(uri)
+                    .setMediaMetadata(MediaMetadata.Builder().setTitle(titles?.getOrNull(i) ?: "Video").build())
+                    .build()
+            }
+            return VideoRequest(items, keys, index, VideoStore.position(context, keys[index]), emptyMap(), returnResult = false)
         }
 
         private fun fromLibrary(context: Context, intent: Intent, ids: LongArray): VideoRequest {

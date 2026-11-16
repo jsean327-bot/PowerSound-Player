@@ -1000,6 +1000,36 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         _player.value = _player.value.copy(sourceKey = "cat:STREAMS")
     }
 
+    // ---- network (Library → Network): songs of a media server's folder ----
+
+    fun playNetwork(items: List<com.powersound.player.net.DlnaItem>, index: Int, shuffle: Boolean) {
+        val c = controller ?: return
+        val list = items.filter { it.url != null }
+        if (list.isEmpty()) return
+        val media = list.map { t ->
+            val uri = android.net.Uri.parse(t.url)
+            MediaItem.Builder()
+                .setMediaId(com.powersound.player.ui.netId(t))
+                .setUri(uri)
+                .setMimeType(t.mime)
+                .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(t.title)
+                        .setArtist(t.artist ?: "Network")
+                        .setAlbumTitle(t.album)
+                        .setArtworkUri(t.artUrl?.let { android.net.Uri.parse(it) })
+                        .build()
+                )
+                .build()
+        }
+        c.shuffleModeEnabled = shuffle
+        c.setMediaItems(media, if (shuffle) list.indices.random() else index.coerceIn(0, list.size - 1), 0L)
+        c.prepare()
+        c.play()
+        _player.value = _player.value.copy(sourceKey = "cat:NETWORK")
+    }
+
     fun next() {
         controller?.seekToNextMediaItem()
     }
