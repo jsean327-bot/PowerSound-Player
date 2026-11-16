@@ -44,6 +44,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -344,6 +346,8 @@ fun NowPlayingScreen(
     }
 
     val layout = st.layout
+    // the phone on its side (Settings → Look and Feel → Screen Orientation: Default follows the phone)
+    val wide = androidx.compose.ui.platform.LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
     val centered = st.labelsCentered && layout != 0
     val title = np?.title ?: ""
     val line2 = listOfNotNull(np?.artist, np?.album?.takeIf { it.isNotBlank() }).joinToString(" - ")
@@ -482,34 +486,19 @@ fun NowPlayingScreen(
                     .fillMaxSize()
                     .statusBarsPadding()
                     .navigationBarsPadding()
-                    .padding(top = 64.dp, bottom = if (vizMode == VizMode.FULL) 40.dp else 220.dp)
+                    .padding(top = 64.dp, bottom = if (vizMode == VizMode.FULL || wide) 40.dp else 220.dp)
                     .alpha(if (vizMode == VizMode.FADE) 0.85f else 1f)
             )
         }
 
-        Column(
-            Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .padding(horizontal = 14.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                Modifier
-                    .alpha(contentAlpha)
-                    .padding(vertical = 6.dp)
-                    .width(40.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = 0.3f))
-            )
+        // The screen's three pieces. Upright they are stacked; with the phone on its side the cover is on the left
+        // and the labels and controls on the right.
 
             // ---- cover: tap = track list, long press = menu, swipe = change track, long swipe = change category ----
+        @Composable
+        fun Cover(coverModifier: Modifier) {
             Box(
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
+                coverModifier
                     .onGloballyPositioned { coverRect = it.boundsInRoot() }
                     .graphicsLayer {
                         translationX = artX.value
@@ -611,7 +600,11 @@ fun NowPlayingScreen(
                 }
             }
 
+        }
+
             // Alternative layout / Full cover: labels (and buttons) below the cover
+        @Composable
+        fun Labels() {
             if (layout != 0) Column(Modifier.fillMaxWidth().alpha(trackAlpha), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(10.dp))
                 Text(
@@ -641,8 +634,12 @@ fun NowPlayingScreen(
                 }
             }
 
-          Column(Modifier.fillMaxWidth().weight(1f).alpha(contentAlpha), horizontalAlignment = Alignment.CenterHorizontally) {
-            Spacer(Modifier.height(if (layout == 0) 12.dp else 8.dp))
+        }
+
+        @Composable
+        fun Controls(controlsModifier: Modifier) {
+          Column(controlsModifier.alpha(contentAlpha), horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(Modifier.height(if (wide) 2.dp else if (layout == 0) 12.dp else 8.dp))
 
             // ---- row of small buttons (editable); long press the empty space to edit ----
             val ids = st.playerButtons.filter { id -> PLAYER_BUTTONS.any { it.id == id } }
@@ -840,8 +837,8 @@ fun NowPlayingScreen(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = 6.dp)
-                    .height(92.dp)
+                    .padding(top = if (wide) 0.dp else 6.dp)
+                    .height(if (wide) 86.dp else 92.dp)
                     .pointerInput(Unit) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -948,6 +945,46 @@ fun NowPlayingScreen(
                     .padding(horizontal = 12.dp, vertical = 4.dp)
             )
           }
+        }
+
+        if (!wide) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    Modifier
+                        .alpha(contentAlpha)
+                        .padding(vertical = 6.dp)
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.3f))
+                )
+                Cover(Modifier.fillMaxWidth().aspectRatio(1f))
+                Labels()
+                Controls(Modifier.fillMaxWidth().weight(1f))
+            }
+        } else {
+            // the phone on its side: cover on the left (as tall as the screen allows), everything else on the right
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Cover(Modifier.fillMaxHeight().aspectRatio(1f, matchHeightConstraintsFirst = true))
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Labels()
+                    Controls(Modifier.fillMaxWidth().weight(1f))
+                }
+            }
         }
 
         // full-screen visualization: tap shows the controls for a moment

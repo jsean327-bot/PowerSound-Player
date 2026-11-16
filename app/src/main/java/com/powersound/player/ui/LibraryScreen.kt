@@ -182,7 +182,10 @@ fun GroupGridScreen(
     fun setPref(change: (com.powersound.player.data.ListPref) -> com.powersound.player.data.ListPref) =
         com.powersound.player.data.ListPrefs.update(title, change)
     val view = pref.view
-    val columns = com.powersound.player.data.gridColumns(view)
+    val baseColumns = com.powersound.player.data.gridColumns(view)
+    // the phone on its side: twice the columns, so the covers keep their size
+    val wide = androidx.compose.ui.platform.LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
+    val columns = if (wide && baseColumns > 1) baseColumns * 2 else baseColumns
     val isGrid = view in setOf(0, 7, 8, 9)
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -270,8 +273,8 @@ fun GroupGridScreen(
                 .fillMaxSize()
                 .pinchToZoom(view, onZoomIn = { zoom(true) }, onZoomOut = { zoom(false) }),
             contentPadding = PaddingValues(start = if (isGrid) 10.dp else 0.dp, end = 26.dp, bottom = bottomInset + 70.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (isGrid) (if (columns >= 4) 6.dp else 10.dp) else 0.dp),
-            verticalArrangement = Arrangement.spacedBy(if (isGrid) (if (columns >= 4) 6.dp else 10.dp) else 0.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (isGrid) (if (baseColumns >= 4) 6.dp else 10.dp) else 0.dp),
+            verticalArrangement = Arrangement.spacedBy(if (isGrid) (if (baseColumns >= 4) 6.dp else 10.dp) else 0.dp)
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 PageHeader(backLabel, title, icon, iconColor, onBack) { if (st.headerButtons) pills(Modifier) }
@@ -291,7 +294,7 @@ fun GroupGridScreen(
                     Box {
                         GroupTile(
                             g.title, if (pref.titlesOnly || view == 0 || view == 7) "" else g.subtitle, g.coverId, g.key,
-                            checked = checked, onLongClick = longClick, small = columns >= 3, onClick = click
+                            checked = checked, onLongClick = longClick, small = baseColumns >= 3, onClick = click
                         )
                         if (pin || fav) GroupBadges(pin, fav, Modifier.align(Alignment.TopStart).padding(6.dp))
                     }
@@ -948,9 +951,10 @@ fun TreeScreen(
     val all = remember(folders, songs) { songs + folders.flatMap { it.songs } }
     // Settings → Library → Shuffle → Shuffle All Songs In Folder Hierarchy (off: only this folder's own songs)
     val shuffleList = if (st.shuffleAllHier || songs.isEmpty()) all else songs
+    val hierWide = androidx.compose.ui.platform.LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
     Box(Modifier.fillMaxSize()) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Fixed(if (hierWide) 4 else 2),
             state = state,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 10.dp, end = 10.dp, bottom = bottomInset + 70.dp),
