@@ -54,7 +54,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.powersound.player.ui.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -333,8 +333,7 @@ fun GroupGridScreen(
                 onFavorite = {
                     if (chosenGroups.isNotEmpty()) {
                         val now = com.powersound.player.data.Favorites.toggleGroups(chosenGroups.map { it.key })
-                        android.widget.Toast.makeText(
-                            context, if (now) "Added to favorites ♥" else "Removed from favorites", android.widget.Toast.LENGTH_SHORT
+                        android.widget.Toast.makeText(context, com.powersound.player.data.Lang.tr(if (now) "Added to favorites ♥" else "Removed from favorites"), android.widget.Toast.LENGTH_SHORT
                         ).show()
                         selected = null
                     }
@@ -343,8 +342,7 @@ fun GroupGridScreen(
                 onPin = {
                     if (chosenGroups.isNotEmpty()) {
                         val now = com.powersound.player.data.Favorites.togglePins(chosenGroups.map { it.key })
-                        android.widget.Toast.makeText(
-                            context, if (now) "Pinned to the top" else "Unpinned", android.widget.Toast.LENGTH_SHORT
+                        android.widget.Toast.makeText(context, com.powersound.player.data.Lang.tr(if (now) "Pinned to the top" else "Unpinned"), android.widget.Toast.LENGTH_SHORT
                         ).show()
                         selected = null
                     }
@@ -382,7 +380,7 @@ fun GroupGridScreen(
         "launcher" -> AddToLauncherCard(
             onAdd = { play, open, shuffle ->
                 val ok = pinListShortcut(context, title, menu?.category ?: "", null, play, open, shuffle)
-                if (!ok) android.widget.Toast.makeText(context, "This home screen doesn't accept app shortcuts", android.widget.Toast.LENGTH_SHORT).show()
+                if (!ok) android.widget.Toast.makeText(context, com.powersound.player.data.Lang.tr("This home screen doesn't accept app shortcuts"), android.widget.Toast.LENGTH_SHORT).show()
             },
             onDismiss = { sheet = null }
         )
@@ -747,8 +745,7 @@ fun SongListScreen(
                 onFavorite = {
                     if (chosen.isNotEmpty()) {
                         val now = com.powersound.player.data.Favorites.toggleSongs(chosen.map { it.id })
-                        android.widget.Toast.makeText(
-                            songContext, if (now) "Added to Favorite Songs ♥" else "Removed from Favorite Songs", android.widget.Toast.LENGTH_SHORT
+                        android.widget.Toast.makeText(songContext, com.powersound.player.data.Lang.tr(if (now) "Added to Favorite Songs ♥" else "Removed from Favorite Songs"), android.widget.Toast.LENGTH_SHORT
                         ).show()
                         selected = null
                     }

@@ -59,7 +59,7 @@ import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material.icons.rounded.Timelapse
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.powersound.player.ui.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.ui.graphics.compositeOver

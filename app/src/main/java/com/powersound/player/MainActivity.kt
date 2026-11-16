@@ -53,7 +53,7 @@ import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.powersound.player.ui.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
@@ -146,6 +146,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         com.powersound.player.data.CrashLog.install(this)
         com.powersound.player.data.ListPrefs.init(this)
+        // Settings → Look and Feel → Language (before the first screen is drawn)
+        com.powersound.player.data.Lang.init(this)
         com.powersound.player.data.Favorites.init(this)
         // after a screen rotation Android gives the same intent again: an opened file must not play twice
         handleIntent(intent, openFile = savedInstanceState == null)
@@ -183,7 +185,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
             PowerSoundTheme(settings = appSettings) {
-                PowerSoundApp()
+                // Arabic: right to left (the player, equalizer and seek bars keep left to right, see their screens)
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalLayoutDirection provides
+                        if (com.powersound.player.data.Lang.arabic) androidx.compose.ui.unit.LayoutDirection.Rtl
+                        else androidx.compose.ui.unit.LayoutDirection.Ltr
+                ) {
+                    PowerSoundApp()
+                }
             }
         }
     }
@@ -486,7 +495,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
             if (errors.isEmpty()) {
                 ui.tagEditFor = null
                 ui.batchEditFor = null
-                android.widget.Toast.makeText(context, if (saved == 1) "Tags saved" else "Tags saved in $saved songs", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(context, com.powersound.player.data.Lang.tr(if (saved == 1) "Tags saved" else "Tags saved in $saved songs"), android.widget.Toast.LENGTH_SHORT).show()
             } else {
                 ui.batchEditFor = null
                 backupMessage = (if (saved > 0) "Saved in $saved songs. Not saved:\n" else "") + errors.take(8).joinToString("\n") +
@@ -630,7 +639,10 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 onOpenPlayer = { showNowPlaying = true },
                 listActions = listActions
             )
-            Tab.EQ -> EqualizerScreen(bottomInset)
+            // the equalizer keeps low → high frequencies from left to right in Arabic too
+            Tab.EQ -> androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr
+            ) { EqualizerScreen(bottomInset) }
             Tab.SEARCH -> SearchScreen(
                 library = library,
                 currentId = currentId,
@@ -697,6 +709,8 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         ) {
             val np = player.nowPlaying
             val current = vm.song(np?.songId)
+            // the player keeps left to right in Arabic too: seek bar, swipes, ⏮ ⏭
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
             NowPlayingScreen(
                 state = player,
                 position = vm.position,
@@ -758,6 +772,7 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
                 onAddToPlaylist = { np?.songId?.let { playlistFor = listOf(it) } },
                 onCast = { ui.showCast = true }
             )
+            }
         }
     }
 

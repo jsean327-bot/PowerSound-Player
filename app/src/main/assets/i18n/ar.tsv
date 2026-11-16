@@ -1,0 +1,1525 @@
+Look and Feel	المظهر
+Skin, player interface, language, notifications	السمة، واجهة المشغّل، اللغة، الإشعارات
+Audio	الصوت
+Crossfade, replay gain, focus, equalizer, outputs	التداخل، Replay Gain، التركيز الصوتي، المعادل، المخارج
+Visualization	المؤثرات المرئية
+Faded controls opacity, preset duration, spectrum	شفافية الأزرار الباهتة، مدة الإعداد المسبق، الطيف
+Background	الخلفية
+Blur, details, gradient, intensity, saturation	التمويه، التفاصيل، التدرج، الشدة، التشبع
+Album Art	غلاف الألبوم
+Download, quality, cache cleanup	التنزيل، الجودة، تنظيف الذاكرة المؤقتة
+Library	المكتبة
+Rescan, folders, lists, search, playlists, shuffle, scanner	إعادة الفحص، المجلدات، القوائم، البحث، قوائم التشغيل، الخلط، الفاحص
+Headset/Bluetooth	السماعات/البلوتوث
+Pause/resume on connection, headset buttons	إيقاف/استئناف عند الاتصال، أزرار السماعة
+Lock Screen	شاشة القفل
+Blur, default image, PowerSound on the lock screen	التمويه، الصورة الافتراضية، PowerSound على شاشة القفل
+Misc	متفرقات
+Scrobbling, tweaks, network streams, error log	Scrobbling، تعديلات، البث عبر الشبكة، سجل الأخطاء
+About	حول
+Version/changelog, updates, licenses, privacy	الإصدار/التغييرات، التحديثات، التراخيص، الخصوصية
+Skin	السمة
+Visual theme and per-skin options	الشكل العام وخيارات كل سمة
+Player Screen	شاشة التشغيل
+Buttons, labels, rating	الأزرار، النصوص، التقييم
+Lyrics	كلمات الأغاني
+Swipe, button, size, offset	السحب، الزر، الحجم، التوقيت
+Notifications	الإشعارات
+Buttons, keeping	الأزرار، الإبقاء
+Buttons	الأزرار
+Media notification buttons	أزرار إشعار الوسائط
+Icon	الأيقونة
+Launcher icon	أيقونة التطبيق
+Lists	القوائم
+Search	البحث
+Queue	قائمة الانتظار
+Playlists	قوائم التشغيل
+Shuffle	الخلط
+Scanner	الفاحص
+Crossfade, Fade, and Gapless	التداخل، التلاشي، والتشغيل بلا فواصل
+Audio Focus	التركيز الصوتي
+Equalizer	المعادل
+Graphic Equalizer Bands	نطاقات المعادل الرسومي
+Tone	النغمة
+Resampler	محوّل التردد
+Audio Outputs	مخارج الصوت
+Wired Headset/AUX	سماعة سلكية/AUX
+Speaker	مكبر الصوت
+Bluetooth	البلوتوث
+Other Output Devices	أجهزة إخراج أخرى
+Advanced Tweaks	تعديلات متقدمة
+Follow Day/Night Mode	اتباع الوضع النهاري/الليلي
+Settings Theme	سمة الإعدادات
+Settings Font	خط الإعدادات
+Language	اللغة
+Screen Orientation	اتجاه الشاشة
+Animations	الحركات
+Hide Status Bar	إخفاء شريط الحالة
+Keep Screen On	إبقاء الشاشة مضاءة
+Settings Shortcuts in Main Menu	اختصارات الإعدادات في القائمة الرئيسية
+Show tips again	إظهار التلميحات مجددًا
+Accent colour	لون التمييز
+Layout	التخطيط
+Track Labels	نصوص المقطع
+Labels Background	خلفية النصوص
+Player Buttons Background	خلفية أزرار المشغّل
+Material You colors	ألوان Material You
+Font	الخط
+Rounded Corners	الزوايا المستديرة
+Seekbar Style	شكل شريط التقديم
+Pro Buttons	الأزرار الاحترافية
+Knob Highlight	إبراز المقبض
+Eq. Graphic Mode Curve	منحنى المعادل الرسومي
+Transparent Status Bar	شريط حالة شفاف
+Transparent Navbar	شريط تنقل شفاف
+Offset Navbar	إزاحة شريط التنقل
+Android Navigation Bar	شريط تنقل أندرويد
+Album Art Animation	حركة غلاف الألبوم
+Animate Long Labels	تحريك النصوص الطويلة
+Animate Long Labels Everywhere	تحريك النصوص الطويلة في كل مكان
+Edit Player Screen Buttons	تعديل أزرار شاشة التشغيل
+Prefer No Gap	تفضيل عدم ترك فراغ
+Do Not Edit On Long Press	عدم التعديل بالضغط المطوّل
+Restore Player Screen Buttons	استعادة أزرار شاشة التشغيل
+Rating Type	نوع التقييم
+Menu Button	زر القائمة
+Menu Button Long Press	الضغط المطوّل على زر القائمة
+Lyrics Button	زر كلمات الأغاني
+Line2 Press	الضغط على السطر الثاني
+Line2 Long Press	الضغط المطوّل على السطر الثاني
+Navigate to the Folders	الانتقال إلى المجلدات
+Lyrics Swipe Up	السحب للأعلى للكلمات
+Lyrics Item In The Track Menu	عنصر الكلمات في قائمة المقطع
+Keep Screen On (lyrics)	إبقاء الشاشة مضاءة (الكلمات)
+Lyrics Time Offset	إزاحة توقيت الكلمات
+Lyrics Size	حجم الكلمات
+Preferred Lyrics App	تطبيق الكلمات المفضّل
+Custom URL	رابط مخصص
+Rescan Lyrics Tags	إعادة فحص وسوم الكلمات
+Scan LRC Files	فحص ملفات LRC
+Always Use UTF-8	استخدام UTF-8 دائمًا
+Download Lyrics	تنزيل الكلمات
+Navigate to the List	الانتقال إلى القائمة
+Keep Notification	إبقاء الإشعار
+Remove Notification on Disconnection	إزالة الإشعار عند قطع الاتصال
+Notification buttons	أزرار الإشعار
+Audio Info	معلومات الصوت
+Auto-advance Fading	التلاشي عند الانتقال التلقائي
+Manual Track Change Fading	التلاشي عند تغيير المقطع يدويًا
+Crossfade Length	مدة التداخل
+Fade Play/Pause/Stop	تلاشي التشغيل/الإيقاف المؤقت/الإيقاف
+Fade Length	مدة التلاشي
+Fade on Seek	التلاشي عند التقديم
+Silence Between Tracks	صمت بين المقاطع
+Gapless	التشغيل بلا فواصل
+Source	المصدر
+RG preamp	تضخيم RG المسبق
+Preamp for songs without RG info	التضخيم المسبق للأغاني بدون معلومات RG
+Resume After Call	الاستئناف بعد المكالمة
+Resume On Start	الاستئناف عند التشغيل
+Resume On Reopen	الاستئناف عند إعادة الفتح
+Short Audio Focus Change / Calls	تغيير قصير في التركيز الصوتي / المكالمات
+Resume On Focus Gain	الاستئناف عند استعادة التركيز
+Duck Volume	خفض الصوت
+Permanent Audio Focus Change	تغيير دائم في التركيز الصوتي
+Equalizer Values	قيم المعادل
+Tone Values	قيم النغمة
+Auto Save	حفظ تلقائي
+Smooth Equalizer/Tone Gains	تنعيم قيم المعادل/النغمة
+Import AutoEq Presets	استيراد إعدادات AutoEq
+Restore Equalizer Presets	استعادة إعدادات المعادل
+Number of Bands	عدد النطاقات
+Enable Custom Bands	تفعيل نطاقات مخصصة
+Custom Number of Bands	عدد النطاقات المخصص
+First Frequency	التردد الأول
+Last Frequency	التردد الأخير
+Bass Frequency	تردد الجهير
+Bass Q	Q الجهير
+Treble Frequency	تردد الحدّة
+Treble Q	Q الحدّة
+Resampler Type	نوع محوّل التردد
+Resampler Cutoff Frequency Ratio	نسبة تردد القطع للمحوّل
+Bluetooth output	مخرج البلوتوث
+Wired Headset/AUX output	مخرج السماعة السلكية/AUX
+Speaker output	مخرج مكبر الصوت
+USB DAC output	مخرج USB DAC
+Perfect Bit Perfect	Bit Perfect الكامل
+64-bit Audio Pipeline	مسار صوت 64-بت
+Output Format	صيغة الإخراج
+Sample Rate	معدل العينات
+Pause/Resume on Volume	إيقاف/استئناف حسب مستوى الصوت
+Restore Reverb Presets	استعادة إعدادات الصدى
+Visualization On Player Screen	المؤثرات المرئية في شاشة التشغيل
+Equalizer Screen Spectrum	الطيف في شاشة المعادل
+Visualization in Library	المؤثرات المرئية في المكتبة
+Preset Duration	مدة الإعداد المسبق
+Top Visualization Panel Opacity	شفافية لوحة المؤثرات العلوية
+Faded Controls Opacity	شفافية الأزرار الباهتة
+UI Timeout	مهلة الواجهة
+Visible Album Art	غلاف الألبوم الظاهر
+Ignore Touch	تجاهل اللمس
+Track Opacity	شفافية المقطع
+Hide System Bars For Full Screen	إخفاء أشرطة النظام في ملء الشاشة
+Scaled Bars For Faded Controls	أشرطة مصغّرة للأزرار الباهتة
+Crop Aspect	قص النسبة
+Force 30 FPS	فرض 30 إطارًا/ث
+Visualization Presets	إعدادات المؤثرات المرئية
+Enable Blurred Backgrounds	تفعيل الخلفيات المموّهة
+List Background	خلفية القوائم
+Lyrics Background	خلفية الكلمات
+Background Gradient	تدرج الخلفية
+Background Gradient Color	لون تدرج الخلفية
+Background Gradient For Lists	تدرج الخلفية للقوائم
+Background Blur	تمويه الخلفية
+Background Details	تفاصيل الخلفية
+Background Intensity	شدة الخلفية
+Background Saturation	تشبع الخلفية
+Download Album Art	تنزيل أغلفة الألبومات
+Download Artist Images	تنزيل صور الفنانين
+High Resolution	دقة عالية
+Download Only On Wi-Fi	التنزيل عبر Wi-Fi فقط
+Also Search By Title/Filename	البحث أيضًا بالعنوان/اسم الملف
+Prefer Downloaded Album Art	تفضيل الغلاف المُنزَّل
+Reset Negative Status	إعادة ضبط الحالة السلبية
+Delete Cache	حذف الذاكرة المؤقتة
+Force Default Image	فرض الصورة الافتراضية
+Use 24-bit RGB	استخدام RGB 24-بت
+Increase Resolution	زيادة الدقة
+Aspect Ratio	نسبة العرض إلى الارتفاع
+Rescan	إعادة الفحص
+Full Rescan	إعادة فحص كامل
+Find Duplicates	البحث عن المكررات
+Music Folders	مجلدات الموسيقى
+All Files Access	الوصول إلى كل الملفات
+Ignore Short Tracks	تجاهل المقاطع القصيرة
+Ignore Video Tracks	تجاهل مقاطع الفيديو
+Store/Restore Per Track Progress	حفظ/استعادة موضع كل مقطع
+-10/+10s Rewind Pro Buttons	أزرار الاحترافية للرجوع -10/+10 ث
+Track Duration For Per Track Progress and -10/+10s Buttons	مدة المقطع لحفظ الموضع وأزرار -10/+10 ث
+Count As Played	احتسابه كمشغَّل
+Reset Stats	إعادة ضبط الإحصائيات
+Library List Options	خيارات قوائم المكتبة
+Static Navbar	شريط تنقل ثابت
+Seekbar in Navbar	شريط التقديم في شريط التنقل
+Headers With Meta	عناوين مع البيانات
+A-Z Scroll	تمرير A-Z
+Header Buttons	أزرار العنوان
+Bottom Buttons	الأزرار السفلية
+Show Track Number	إظهار رقم المقطع
+Filename As Title	اسم الملف كعنوان
+Click Restarts Track	الضغط يعيد المقطع من البداية
+List Item Action	إجراء عنصر القائمة
+Delete Action	إجراء الحذف
+Join Albums	دمج الألبومات
+Album Artist Label for Tracks	اسم فنان الألبوم للمقاطع
+Album Artist Label for Albums	اسم فنان الألبوم للألبومات
+Album Artist Label for Album Artist Tracks	اسم فنان الألبوم لمقاطع فنان الألبوم
+Hide Unknown Album	إخفاء الألبوم المجهول
+Hide Unknown Artist	إخفاء الفنان المجهول
+Show Unsplit Combined Categories	إظهار الفئات المجمّعة غير المقسّمة
+Folders Hierarchy Immediate Root	جذر مباشر لتسلسل المجلدات
+Don't Ignore Articles For Sort	عدم تجاهل أدوات التعريف في الترتيب
+Play Tracks Only	تشغيل المقاطع فقط
+Search Track Titles Only	البحث في عناوين المقاطع فقط
+Search Categories	فئات البحث
+Queue Insert Position	موضع الإضافة في قائمة الانتظار
+Play Next Insert Position	موضع إضافة "التالي"
+Import System Library Playlists	استيراد قوائم تشغيل مكتبة النظام
+Import .m3u / .m3u8 Playlists	استيراد قوائم ‎.m3u / .m3u8
+Export Playlists	تصدير قوائم التشغيل
+Playlist Insert Position	موضع الإضافة في قائمة التشغيل
+Remove Playlist Entries On Track Deletion	حذف العناصر من القوائم عند حذف المقطع
+Don't Add Duplicates	عدم إضافة المكررات
+No Reshuffle	بدون إعادة خلط
+No Reshuffle For Large Lists	بدون إعادة خلط للقوائم الكبيرة
+Category Items Shuffle	خلط عناصر الفئة
+Shuffle All Songs In Folder Hierarchy	خلط كل أغاني تسلسل المجلدات
+Auto-scan	فحص تلقائي
+Rescan Immediately	إعادة الفحص فورًا
+Symbols to Split Multiple Artists	رموز فصل الفنانين المتعددين
+Symbols to Split Multiple Composers	رموز فصل الملحنين المتعددين
+Symbols to Split Multiple Genres	رموز فصل الأنواع المتعددة
+Unsplit Artists	فنانون بلا فصل
+Tag Encoding	ترميز الوسوم
+Fix Arabic Names	إصلاح الأسماء العربية
+Scan Loudness	قياس مستوى الصوت
+Always Use UTF-8 for .m3u	استخدام UTF-8 دائمًا لملفات ‎.m3u
+Resume On Wired Headset	الاستئناف عند توصيل سماعة سلكية
+Resume On Bluetooth	الاستئناف عند اتصال البلوتوث
+Pause On Headset Disconnect	الإيقاف عند فصل السماعة
+Pause On USB DAC connection	الإيقاف عند توصيل USB DAC
+Respond To Buttons	الاستجابة للأزرار
+Wired Headset	سماعة سلكية
+Strict Resume/Pause/Stop	استئناف/إيقاف مؤقت/إيقاف صارم
+Ignore Bluetooth Commands	تجاهل أوامر البلوتوث
+Ignore Repeat/Shuffle	تجاهل التكرار/الخلط
+Beep	صفارة
+Beep More	صفارة أكثر
+Vibrate	اهتزاز
+Last Processed Commands	آخر الأوامر المعالجة
+Blur	التمويه
+Show Default Image	إظهار الصورة الافتراضية
+Show On Lock Screen	الإظهار على شاشة القفل
+Open App Settings	فتح إعدادات التطبيق
+Scrobble via Official Last.fm app	Scrobble عبر تطبيق Last.fm الرسمي
+Scrobble via Simple Scrobbler	Scrobble عبر Simple Scrobbler
+Metachanged Intent	إشارة Metachanged
+Use Wakelock	استخدام Wakelock
+Shutdown Intent	إشارة الإغلاق
+Pause on Screen Off	الإيقاف عند إطفاء الشاشة
+Apply High Framerate	تطبيق معدل إطارات عالٍ
+Stop music when the app is swiped away	إيقاف الموسيقى عند سحب التطبيق من الشاشة
+Ask before deleting files	السؤال قبل حذف الملفات
+Network Stream Timeout	مهلة البث عبر الشبكة
+Network Stream Buffer	ذاكرة البث عبر الشبكة
+Keep an error log	الاحتفاظ بسجل الأخطاء
+View error log	عرض سجل الأخطاء
+Version/Changelog	الإصدار/التغييرات
+Check for updates	البحث عن تحديثات
+Get Support	الحصول على الدعم
+Open Source Licenses	تراخيص المصادر المفتوحة
+Privacy Policy	سياسة الخصوصية
+Back	رجوع
+Search settings	البحث في الإعدادات
+Settings	الإعدادات
+Close	إغلاق
+Nothing found	لم يُعثر على شيء
+Restore Defaults	استعادة الافتراضي
+Restored	تمت الاستعادة
+Cancel	إلغاء
+Follow Track	اتباع المقطع
+Native	الأصلي
+32-bit float (Hi-Res)	32-بت عشري (Hi-Res)
+EQ: {t}	المعادل: {t}
+No Equ/Tone	بدون معادل/نغمة
+None	لا شيء
+Equalizer Preset	إعداد المعادل المسبق
+None — the equalizer stays as it is	لا شيء — يبقى المعادل كما هو
+The preset is loaded automatically when this output becomes active.	يُحمَّل الإعداد تلقائيًا عند تفعيل هذا المخرج.
+Output Device:	جهاز الإخراج:
+Output Driver: Android AudioTrack,	مشغّل الإخراج: Android AudioTrack،
+32-bit float	32-بت عشري
+16-bit PCM	16-بت PCM
+Status: Active •	الحالة: نشط •
+%.1f → %.1f kHz (resampled)	%.1f ← %.1f kHz (بعد تحويل التردد)
+Status: Active	الحالة: نشط
+Status: Inactive	الحالة: غير نشط
+What PowerSound sends to this output	ما يرسله PowerSound إلى هذا المخرج
+32-bit float keeps every bit of 24-bit files and of the 64-bit processing, with no rounding and no dither. Use 16-bit only if this output has trouble with it.	32-بت عشري يحافظ على كل بت من ملفات 24-بت ومن المعالجة 64-بت، بدون تقريب وبدون Dither. استخدم 16-بت فقط إذا واجه هذا المخرج مشكلة معه.
+The sample rate PowerSound sends to this output	معدل العينات الذي يرسله PowerSound إلى هذا المخرج
+Native (recommended): the output's own rate (now {t} kHz). PowerSound converts once, with its own 64-bit resampler, and catches the peaks this creates on loud recordings — so Android doesn't resample again with its simpler converter and nothing clips. Follow Track: no conversion by PowerSound (Android may still convert). A change starts with the next track.	الأصلي (موصى به): المعدل الخاص بالمخرج (الآن {t} kHz). يحوّل PowerSound مرة واحدة بمحوّله 64-بت، ويمسك الذُّرى التي يسببها التحويل في التسجيلات العالية — فلا يعيد أندرويد التحويل بمحوّله الأبسط ولا يحدث تشويش. اتباع المقطع: لا يحوّل PowerSound (قد يحوّل أندرويد). يبدأ التغيير مع المقطع التالي.
+Disable the equalizer and tone for this output	تعطيل المعادل والنغمة لهذا المخرج
+No Duck	بدون خفض
+Don't lower the volume for notifications on this output	عدم خفض الصوت للإشعارات على هذا المخرج
+Visualization/Lyrics Delay	تأخير المؤثرات المرئية/الكلمات
+Extra delay so the visualization and the lyrics match what you hear: {t} ms	تأخير إضافي لتتطابق المؤثرات المرئية والكلمات مع ما تسمعه: {t} ms
+Save	حفظ
+Player Screen Buttons	أزرار شاشة التشغيل
+Up	للأعلى
+Down	للأسفل
+Restore	استعادة
+Nothing found yet — scan the library first.	لم يُعثر على شيء بعد — افحص المكتبة أولًا.
+Error log	سجل الأخطاء
+No errors saved. 👍	لا توجد أخطاء محفوظة. 👍
+Share error log	مشاركة سجل الأخطاء
+Share	مشاركة
+Clear	مسح
+Changelog	سجل التغييرات
+Couldn't load the changelog. Check your internet connection.	تعذّر تحميل سجل التغييرات. تحقق من اتصالك بالإنترنت.
+Swipe a page in any direction to go back. Pinch to zoom. ⋮ for sorting and zoom. Long press a song for its menu.	اسحب الصفحة في أي اتجاه للرجوع. قرّب بإصبعين للتكبير. ⋮ للترتيب والتكبير. اضغط مطولًا على أغنية لقائمتها.
+Select songs	تحديد الأغاني
+Long press a song → Select (or ⋮ → Select songs), tap more songs, then play, queue, add to a playlist or delete them together.	اضغط مطولًا على أغنية ← تحديد (أو ⋮ ← تحديد الأغاني)، اضغط على أغانٍ أخرى، ثم شغّلها أو أضفها للانتظار أو لقائمة تشغيل أو احذفها معًا.
+Drag a song by its ≡ handle to move it.	اسحب الأغنية من مقبض ≡ لتحريكها.
+Tags	الوسوم
+Song menu → Info/Tags → Edit: change the title, artist, album, cover and more (FLAC and MP3). For many songs at once: select them → Tags. Broken Arabic names: Settings → Library → Scanner → Fix Arabic Names.	قائمة الأغنية ← المعلومات/الوسوم ← تعديل: غيّر العنوان والفنان والألبوم والغلاف وغيرها (FLAC و MP3). لعدة أغانٍ معًا: حدّدها ← الوسوم. للأسماء العربية المعطوبة: الإعدادات ← المكتبة ← الفاحص ← إصلاح الأسماء العربية.
+Same loudness	مستوى صوت موحّد
+Settings → Audio → Replay Gain: turn it on, then Scan Loudness, so every song plays at the same level.	الإعدادات ← الصوت ← Replay Gain: فعّله، ثم قياس مستوى الصوت، لتُشغَّل كل الأغاني بنفس المستوى.
+Widget	الأداة
+Long press your home screen → Widgets → PowerSound.	اضغط مطولًا على الشاشة الرئيسية ← الأدوات ← PowerSound.
+Open with	الفتح بواسطة
+In a file manager or WhatsApp, open a music file with PowerSound to play it.	من مدير الملفات أو واتساب، افتح ملف موسيقى بـ PowerSound لتشغيله.
+Songs without lyrics get them from the internet when you open the lyrics (Settings → Lyrics → Download Lyrics).	الأغاني بدون كلمات تحصل عليها من الإنترنت عند فتح الكلمات (الإعدادات ← كلمات الأغاني ← تنزيل الكلمات).
+Car	السيارة
+With Android Auto, PowerSound shows its folders, albums, artists and playlists on the car screen.	مع Android Auto، يعرض PowerSound مجلداته وألبوماته وفنانيه وقوائم تشغيله على شاشة السيارة.
+Player	المشغّل
+Swipe the cover to change songs (further = change album/folder). Swipe down or tap the cover for the song's list. Swipe up for lyrics. Long press the cover for the track menu.	اسحب الغلاف لتغيير الأغنية (أبعد = تغيير الألبوم/المجلد). اسحب للأسفل أو اضغط على الغلاف لقائمة الأغاني. اسحب للأعلى للكلمات. اضغط مطولًا على الغلاف لقائمة المقطع.
+Seeking	التقديم
+Long press the progress area, move your finger, let go. Long press the elapsed time to go back to 0:00.	اضغط مطولًا على منطقة التقدم، حرّك إصبعك، ثم ارفعه. اضغط مطولًا على الوقت المنقضي للرجوع إلى 0:00.
+Categories	الفئات
+Long press ⏮ ⏭ for the previous / next album or folder.	اضغط مطولًا على ⏮ ⏭ للألبوم أو المجلد السابق / التالي.
+Long press the empty space between the buttons under the cover to edit them. Long press the 🎵, 🔁 and 🔀 buttons for more options. Tap the info line under the time to change it, long press for Audio Info.	اضغط مطولًا على الفراغ بين الأزرار تحت الغلاف لتعديلها. اضغط مطولًا على أزرار 🎵 و 🔁 و 🔀 لخيارات أكثر. اضغط على سطر المعلومات تحت الوقت لتغييره، ومطولًا لمعلومات الصوت.
+Mini player	المشغّل المصغّر
+Tap to open the player, swipe to change songs, long press for the song's list.	اضغط لفتح المشغّل، اسحب لتغيير الأغنية، اضغط مطولًا لقائمة الأغاني.
+Equalizer tab	تبويب المعادل
+Swipe between Equalizer, Effects and Reverb. Long press the equalizer icon below for quick on/off switches.	تنقّل بالسحب بين المعادل والمؤثرات والصدى. اضغط مطولًا على أيقونة المعادل بالأسفل لمفاتيح التشغيل/الإيقاف السريعة.
+Help	مساعدة
+Change the PowerSound visual theme. Per-skin options like extra Pro Buttons, Static Seekbar	غيّر الشكل العام لـ PowerSound. خيارات كل سمة مثل الأزرار الاحترافية الإضافية وشريط التقديم الثابت
+Follow the system Day/Night Mode: PowerSound Dark by day, PowerSound Black at night	اتباع الوضع النهاري/الليلي للنظام: PowerSound Dark نهارًا، PowerSound Black ليلًا
+Default	الافتراضي
+Light	فاتح
+Dark	داكن
+Alternative font	خط بديل
+Bold	عريض
+Bold+	عريض+
+General	عام
+List options like Filename As Title and Show Track Number are in Library → Lists	خيارات القوائم مثل اسم الملف كعنوان وإظهار رقم المقطع موجودة في المكتبة ← القوائم
+Auto	تلقائي
+Set launcher icon	تعيين أيقونة التطبيق
+Portrait (Vertical)	عمودي
+Landscape (Horizontal)	أفقي
+Disable/enable or change UI animation speed where possible	تعطيل/تفعيل أو تغيير سرعة حركات الواجهة حيث يمكن
+Disabled	معطّل
+Fast	سريع
+PowerSound always opens on Library → Folders	يفتح PowerSound دائمًا على المكتبة ← المجلدات
+Some phones can't change the status bar / navigation bar right away. You may need to leave and enter the app once for these options to apply	بعض الهواتف لا تغيّر شريط الحالة / شريط التنقل فورًا. قد تحتاج للخروج من التطبيق والدخول مرة لتطبيق هذه الخيارات
+Always keep the screen on in the app	إبقاء الشاشة مضاءة دائمًا داخل التطبيق
+Max	الأقصى
+The first-time tips appear again on each screen	تظهر تلميحات المرة الأولى مجددًا في كل شاشة
+Skins	السمات
+Follow Day/Night Mode is on (Look and Feel), so the skin changes with the system	اتباع الوضع النهاري/الليلي مفعّل (المظهر)، لذا تتغير السمة مع النظام
+Material You colors are on, so the accent colour comes from your wallpaper	ألوان Material You مفعّلة، لذا يأتي لون التمييز من الخلفية
+Track labels and buttons on the cover. Best for small or wide screens	نصوص المقطع والأزرار على الغلاف. الأفضل للشاشات الصغيرة أو العريضة
+Alternative layout	تخطيط بديل
+Moves track labels below the cover, makes on-cover buttons smaller and faded	ينقل نصوص المقطع تحت الغلاف، ويجعل الأزرار على الغلاف أصغر وباهتة
+Full cover	غلاف كامل
+Moves all track labels and buttons below the cover. Works best on long screen phones	ينقل كل نصوص المقطع والأزرار تحت الغلاف. الأفضل للهواتف ذات الشاشات الطويلة
+The menu button and the rating are set in Look and Feel → Player Screen, the lyrics button in Look and Feel → Lyrics	زر القائمة والتقييم في المظهر ← شاشة التشغيل، وزر الكلمات في المظهر ← كلمات الأغاني
+Centered	في المنتصف
+Centered: applied for Alternative layout / Full cover	في المنتصف: يُطبَّق على التخطيط البديل / الغلاف الكامل
+Enabled	مفعّل
+Hidden	مخفي
+Hidden: applied on the Player Screen. You may want to adjust Background so labels are always visible	مخفي: يُطبَّق على شاشة التشغيل. قد ترغب في ضبط الخلفية لتبقى النصوص ظاهرة دائمًا
+Needs Android 12 or newer	يتطلب أندرويد 12 أو أحدث
+More pronounced	أوضح
+Less pronounced	أخف
+More rounded	استدارة أكثر
+Less rounded	استدارة أقل
+Default: the song's waveform moves to the left, about a minute of it, now in the middle. Static: the whole song at once	الافتراضي: الموجة الصوتية للأغنية تتحرك لليسار، حوالي دقيقة منها، والموضع الحالي في المنتصف. ثابت: الأغنية كلها دفعة واحدة
+Static Seekbar	شريط تقديم ثابت
+Simple Seekbar (with Pro Buttons)	شريط تقديم بسيط (مع الأزرار الاحترافية)
+Category change (or -10/+10 s) buttons next to Play. Always enabled for Simple Seekbar	أزرار تغيير الفئة (أو -10/+10 ث) بجانب التشغيل. مفعّلة دائمًا مع شريط التقديم البسيط
+Monochromatic	أحادي اللون
+Colorful	ملوّن
+No Background	بدون خلفية
+Some covers may make the status bar icons hard to read. In this case you can adjust the Background options	بعض الأغلفة قد تجعل أيقونات شريط الحالة صعبة القراءة. في هذه الحالة يمكنك ضبط خيارات الخلفية
+Applied to the floating bar at the bottom	يُطبَّق على الشريط العائم في الأسفل
+Semi-transparent	شبه شفاف
+Move the bar slightly away from the corners (for screens with large corner radius)	إبعاد الشريط قليلًا عن الزوايا (للشاشات ذات الزوايا الكبيرة)
+Animate on track advance. Also applies to the bottom bar	تحريك عند الانتقال للمقطع التالي. يُطبَّق أيضًا على الشريط السفلي
+Scroll long track title and album/artist labels	تمرير عنوان المقطع الطويل ونصوص الألبوم/الفنان
+Scroll long track labels also in lists and the mini player	تمرير نصوص المقطع الطويلة في القوائم والمشغّل المصغّر أيضًا
+Player screen buttons appear as a row below the track cover	تظهر أزرار شاشة التشغيل كصف تحت غلاف المقطع
+To customize, long-press the empty space between the buttons or use the item below	للتخصيص، اضغط مطولًا على الفراغ بين الأزرار أو استخدم العنصر أدناه
+No buttons	بدون أزرار
+Minimize gaps between buttons for the centered layout	تقليل الفراغات بين الأزرار في التخطيط المتوسط
+Prevents button editing started by an accidental long press	يمنع بدء تعديل الأزرار بضغطة مطوّلة بالخطأ
+Other Buttons	أزرار أخرى
+Like/unlike thumbs	إعجاب/عدم إعجاب
+5 stars	5 نجوم
+5 stars (menu/lists only)	5 نجوم (القائمة/القوائم فقط)
+Stars: tap a star to rate, tap the same star again to clear the rating	النجوم: اضغط على نجمة للتقييم، واضغط على نفس النجمة مجددًا لمسح التقييم
+The menu can also be opened by long pressing the cover	يمكن فتح القائمة أيضًا بالضغط المطوّل على الغلاف
+Long press action for the track menu button	إجراء الضغط المطوّل على زر قائمة المقطع
+Handle press on the 2nd track text line	الضغط على السطر الثاني من نص المقطع
+Artist	الفنان
+Album	الألبوم
+Folder	المجلد
+Genre	النوع
+Handle long press on the 2nd track text line	الضغط المطوّل على السطر الثاني من نص المقطع
+A track counter (3/12) is available as a Player Screen button	عدّاد المقاطع (3/12) متاح كزر في شاشة التشغيل
+First press rewinds the track, second press changes the track. Includes headset/Bluetooth buttons and the notification	الضغطة الأولى ترجع المقطع للبداية، والثانية تغيّر المقطع. يشمل أزرار السماعة/البلوتوث والإشعار
+To reset a track to 0:00 on the Player Screen, long press the elapsed time (left of the Play button)	لإعادة المقطع إلى 0:00 في شاشة التشغيل، اضغط مطولًا على الوقت المنقضي (يسار زر التشغيل)
+-10/+10s Rewind Pro Buttons for long tracks are in Library → Advanced	أزرار -10/+10 ث الاحترافية للمقاطع الطويلة موجودة في المكتبة ← متقدم
+Track menu → Folder opens the Folders category instead of the Folders Hierarchy	قائمة المقطع ← المجلد تفتح فئة المجلدات بدلًا من تسلسل المجلدات
+When Lyrics Swipe is enabled, swipe the album art up to show lyrics	عند تفعيل السحب للكلمات، اسحب غلاف الألبوم للأعلى لإظهار الكلمات
+Return from lyrics by swiping down or to the side	ارجع من الكلمات بالسحب للأسفل أو للجانب
+Pinch to zoom the lyrics text	قرّب بإصبعين لتكبير نص الكلمات
+Swipe action on the Player Screen cover	إجراء السحب على غلاف شاشة التشغيل
+When local lyrics available	عند توفر كلمات محلية
+Always	دائمًا
+Local lyrics: the lyrics tag inside the file, or an .lrc file next to it	الكلمات المحلية: وسم الكلمات داخل الملف، أو ملف ‎.lrc بجانبه
+Button on the Player Screen cover	زر على غلاف شاشة التشغيل
+Long press on the lyrics button always opens the preferred lyrics app	الضغط المطوّل على زر الكلمات يفتح تطبيق الكلمات المفضّل دائمًا
+Open lyrics UI	فتح واجهة الكلمات
+Open 3rd party app	فتح تطبيق خارجي
+Keep the screen on while the lyrics are open	إبقاء الشاشة مضاءة أثناء فتح الكلمات
+Applied to synced lyrics in addition to the offset tag	يُطبَّق على الكلمات المتزامنة بالإضافة إلى وسم الإزاحة
+A positive value makes the lyrics text appear earlier, a negative value delays it	القيمة الموجبة تُظهر الكلمات أبكر، والسالبة تؤخرها
+Pinch to zoom on the lyrics screen too	قرّب بإصبعين في شاشة الكلمات أيضًا
+Small Font	خط صغير
+Large Font	خط كبير
+PowerSound loads lyrics from the track tags or from the .lrc file	يحمّل PowerSound الكلمات من وسوم المقطع أو من ملف ‎.lrc
+If no lyrics are found, the lyrics can be searched in the preferred lyrics app or in the browser	إذا لم توجد كلمات، يمكن البحث عنها في تطبيق الكلمات المفضّل أو في المتصفح
+App or site to search lyrics when none are found:	التطبيق أو الموقع للبحث عن الكلمات عندما لا توجد:
+For the Browser via custom URL\n{t}	للمتصفح عبر رابط مخصص\n{t}
+Done — lyrics will be read again	تم — ستُقرأ الكلمات من جديد
+Read the lyrics of every track again (tags and .lrc files)	إعادة قراءة كلمات كل المقاطع (الوسوم وملفات ‎.lrc)
+If enabled, PowerSound looks for .lrc files in the music folders with the same name as the track	عند التفعيل، يبحث PowerSound في مجلدات الموسيقى عن ملفات ‎.lrc بنفس اسم المقطع
+Reading .lrc files needs All Files Access — allow it in Library → All Files Access	قراءة ملفات ‎.lrc تحتاج الوصول إلى كل الملفات — اسمح به في المكتبة ← الوصول إلى كل الملفات
+If disabled, .lrc files that are not UTF-8 are read as Arabic (Windows-1256)	عند التعطيل، تُقرأ ملفات ‎.lrc غير المرمّزة بـ UTF-8 كعربية (Windows-1256)
+Internet	الإنترنت
+When a track has no lyrics, look them up on LRCLIB (free, often with timing). The artist, title, album and length are sent; found lyrics are saved on the phone	عندما لا توجد كلمات للمقطع، ابحث عنها في LRCLIB (مجاني، وغالبًا مع التوقيت). يُرسَل الفنان والعنوان والألبوم والمدة؛ وتُحفظ الكلمات الموجودة على الهاتف
+Use %ARTIST% and %TITLE% for the track's artist and title	استخدم %ARTIST% و %TITLE% لفنان المقطع وعنوانه
+Android 13 and newer draw the media notification themselves (colours from the album art, the seek bar and Play/Previous/Next)	أندرويد 13 وأحدث يرسم إشعار الوسائط بنفسه (ألوان من غلاف الألبوم، وشريط التقديم، والتشغيل/السابق/التالي)
+PowerSound adds your chosen extra buttons to it	يضيف PowerSound إليه الأزرار الإضافية التي اخترتها
+Media action buttons	أزرار إجراءات الوسائط
+Touching the notification opens the list the track is playing from	لمس الإشعار يفتح القائمة التي يُشغَّل منها المقطع
+Notification Keeping	إبقاء الإشعار
+The notification stays when playback ends by itself	يبقى الإشعار عندما ينتهي التشغيل من تلقاء نفسه
+If disabled, the notification is removed when the list finishes playing	عند التعطيل، يُزال الإشعار عند انتهاء تشغيل القائمة
+The notification can always be removed with the Close button or by stopping playback	يمكن دائمًا إزالة الإشعار بزر الإغلاق أو بإيقاف التشغيل
+The notification is removed when the headset/Bluetooth disconnects and the player is paused	يُزال الإشعار عند فصل السماعة/البلوتوث وإيقاف المشغّل مؤقتًا
+The media buttons are shared by all media controllers: the Android media notification, the lock screen, Android Auto, watches, etc.	أزرار الوسائط مشتركة بين كل أدوات التحكم: إشعار أندرويد، وشاشة القفل، وAndroid Auto، والساعات، إلخ.
+The playback buttons (play/pause/previous/next) are fixed and can't be changed	أزرار التشغيل (تشغيل/إيقاف مؤقت/السابق/التالي) ثابتة ولا يمكن تغييرها
+The first two buttons appear in the media notification; the others usually only in other controllers (Android Auto)	أول زرين يظهران في إشعار الوسائط؛ والباقي عادةً في أدوات التحكم الأخرى فقط (Android Auto)
+Notification/Android Auto	الإشعار/Android Auto
+Android Auto/Other	Android Auto/أخرى
+Button {n}	الزر {n}
+"Close" pauses the player and removes the notification	"إغلاق" يوقف المشغّل مؤقتًا ويزيل الإشعار
+The icon may look different depending on your Android version, launcher and system settings	قد تبدو الأيقونة مختلفة حسب إصدار أندرويد والمشغّل وإعدادات النظام
+It may take a few seconds for the launcher to update the icon	قد يستغرق تحديث الأيقونة بضع ثوانٍ
+Icons	الأيقونات
+Other	أخرى
+Export Settings/Data	تصدير الإعدادات/البيانات
+Save EQ, presets, playlists, bookmarks and settings to a file	حفظ المعادل والإعدادات المسبقة وقوائم التشغيل والعلامات والإعدادات في ملف
+Import Settings/Data	استيراد الإعدادات/البيانات
+Restore from a file saved with Export	الاستعادة من ملف محفوظ بالتصدير
+Detailed info about the audio processing. Also available by long pressing the small info line on the Player Screen	معلومات مفصلة عن معالجة الصوت. متاحة أيضًا بالضغط المطوّل على سطر المعلومات الصغير في شاشة التشغيل
+Crossfade options, fade type and length, gapless	خيارات التداخل، نوع ومدة التلاشي، التشغيل بلا فواصل
+Enable RG, set source, preamp values	تفعيل RG، تحديد المصدر، قيم التضخيم المسبق
+Pause/Resume/Duck volume on calls/notifications/start	إيقاف/استئناف/خفض الصوت عند المكالمات/الإشعارات/التشغيل
+Equalizer settings, number of bands, frequencies	إعدادات المعادل، عدد النطاقات، الترددات
+Resampling/dither settings	إعدادات تحويل التردد/Dither
+Wired Headset, Speaker, Bluetooth, USB and other outputs	السماعة السلكية، مكبر الصوت، البلوتوث، USB ومخارج أخرى
+Hi-Res 64-bit audio path, Perfect Bit Perfect	مسار صوت Hi-Res بدقة 64-بت، Bit Perfect الكامل
+Pause/resume on volume, MusicFX, presets reset	إيقاف/استئناف حسب مستوى الصوت، MusicFX، إعادة ضبط الإعدادات المسبقة
+Applied when the song changes automatically	يُطبَّق عندما تتغير الأغنية تلقائيًا
+No fading	بدون تلاشٍ
+Non-gapless tracks	المقاطع غير المتصلة
+All songs	كل الأغاني
+Shuffled songs	الأغاني المخلوطة
+Applied when you change the song (next / previous)	يُطبَّق عندما تغيّر الأغنية (التالي / السابق)
+Short crossfade	تداخل قصير
+Crossfade	تداخل
+How long the old and the new song overlap	مدة تداخل الأغنية القديمة مع الجديدة
+"Non-gapless tracks" keeps albums that play in order gapless and crossfades everything else	"المقاطع غير المتصلة" يبقي الألبومات التي تُشغَّل بالترتيب بلا فواصل، ويداخل كل ما عداها
+Perfect Bit Perfect disables all fading effects	Bit Perfect الكامل يعطّل كل مؤثرات التلاشي
+Crossfade is skipped when the song is the last one (repeat "song and stop", sleep timer)	يُتخطى التداخل عندما تكون الأغنية الأخيرة (تكرار "الأغنية ثم إيقاف"، مؤقت النوم)
+Smooth volume fade instead of a hard stop: app, notification, lock screen, widget and headset buttons	تلاشٍ ناعم للصوت بدل التوقف المفاجئ: التطبيق والإشعار وشاشة القفل والأداة وأزرار السماعة
+A very short fade when you jump in the song, so there is no click	تلاشٍ قصير جدًا عند القفز داخل الأغنية، لتجنّب صوت الطقطقة
+0 ms (gapless)	0 ms (بلا فواصل)
+Gapless playback is always on when there is no silence and no crossfade. Silence turns crossfade off.	التشغيل بلا فواصل مفعّل دائمًا عندما لا يوجد صمت ولا تداخل. الصمت يعطّل التداخل.
+Don't apply	عدم التطبيق
+Apply gain	تطبيق الكسب
+Apply gain / prevent clipping according to the peak	تطبيق الكسب / منع التشويش حسب الذروة
+Track	المقطع
+Reads REPLAYGAIN_ALBUM/TRACK_GAIN and _PEAK tags from FLAC and MP3 files. Drag a knob up/down, double-tap to reset.	يقرأ وسوم REPLAYGAIN_ALBUM/TRACK_GAIN و _PEAK من ملفات FLAC و MP3. اسحب المقبض للأعلى/للأسفل، واضغط مرتين لإعادة الضبط.
+Loudness Scan	قياس مستوى الصوت
+All {n} songs are measured. New songs: tap again	تم قياس كل الأغاني ({n}). للأغاني الجديدة: اضغط مجددًا
+Measure how loud each song is, so songs without Replay Gain tags play at the same level too ({t} of {n} measured)	قِس مستوى صوت كل أغنية، لتُشغَّل الأغاني بدون وسوم Replay Gain بنفس المستوى أيضًا (تم قياس {t} من {n})
+Scanning… {t} of {n}	جارٍ الفحص… {t} من {n}
+Keep PowerSound open. Tap to stop (what is measured stays)	أبقِ PowerSound مفتوحًا. اضغط للإيقاف (يبقى ما تم قياسه)
+Turn on Replay Gain above so the measured loudness is used	فعّل Replay Gain بالأعلى لاستخدام مستوى الصوت المقاس
+Resume playing on hang up (if paused by a call)	استئناف التشغيل بعد إنهاء المكالمة (إذا أُوقف بسببها)
+Resume playing when PowerSound is started	استئناف التشغيل عند تشغيل PowerSound
+Also resume when PowerSound is already running and reopened	الاستئناف أيضًا عندما يكون PowerSound يعمل ويُعاد فتحه
+(needs Resume On Start)	(يتطلب الاستئناف عند التشغيل)
+Audio focus decides what happens when another app or a call needs the sound	التركيز الصوتي يحدد ما يحدث عندما يحتاج تطبيق آخر أو مكالمة للصوت
+Temporarily pause on short audio focus changes (notifications, navigation, voice messages…). Calls always pause	إيقاف مؤقت عند التغييرات القصيرة في التركيز الصوتي (الإشعارات، الملاحة، الرسائل الصوتية…). المكالمات توقف دائمًا
+Resume after getting the focus back. If disabled, the player stays paused	الاستئناف بعد استعادة التركيز. عند التعطيل، يبقى المشغّل متوقفًا
+When possible, lower the volume on short audio focus instead of pausing. Can be turned off per output (Audio Outputs → No Duck)	عندما يمكن، اخفض الصوت عند التركيز القصير بدل الإيقاف. يمكن تعطيله لكل مخرج (مخارج الصوت ← بدون خفض)
+Pause when another player, game, etc. takes over the sound	الإيقاف عندما يأخذ مشغّل آخر أو لعبة أو غيرها الصوت
+Depending on the loaded preset, the equalizer is in Graphic or Parametric mode	حسب الإعداد المحمّل، يكون المعادل في الوضع الرسومي أو البارامتري
+Graphic mode: 5 to 32 bands spread over the whole range	الوضع الرسومي: من 5 إلى 32 نطاقًا موزعة على كامل المدى
+Parametric mode (e.g. AutoEq presets): every band has its own frequency, gain, Q and type	الوضع البارامتري (مثل إعدادات AutoEq): لكل نطاق تردده وكسبه وQ ونوعه الخاص
+{n} bands • set number of bands, frequencies	{n} نطاق • تحديد عدد النطاقات والترددات
+Set Bass/Treble frequencies and Q factors	تحديد ترددات الجهير/الحدّة وعوامل Q
+Changes are saved into the loaded user preset	تُحفظ التغييرات في إعداد المستخدم المحمّل
+Automatically lower the volume by the biggest boost (minus what the preset's own preamp already lowers), so boosts never overload and the limiter rarely has to act	خفض الصوت تلقائيًا بمقدار أكبر تعزيز (ناقص ما يخفضه التضخيم المسبق للإعداد)، فلا تُحمِّل التعزيزات الصوت أبدًا ونادرًا ما يتدخل المحدِّد
+Import "ParametricEQ.txt" files from the AutoEq project (e.g. for your earbuds). "Liberty 4 NC (AutoEq)" is built in	استيراد ملفات "ParametricEQ.txt" من مشروع AutoEq (مثلًا لسماعاتك). "Liberty 4 NC (AutoEq)" مدمج
+Imported AutoEq presets are removed, built-in presets stay	تُحذف إعدادات AutoEq المستوردة، وتبقى الإعدادات المدمجة
+Imported AutoEq presets will be removed.	ستُحذف إعدادات AutoEq المستوردة.
+Predefined number of bands, including the recommended band spread	عدد نطاقات محدد مسبقًا، مع التوزيع الموصى به
+Advanced	متقدم
+Your own number of bands and frequency range	عدد النطاقات ومدى الترددات الخاص بك
+Changing the bands keeps your current curve as well as possible. Tap a frequency on the Equalizer to change one band.	تغيير النطاقات يحافظ على منحناك الحالي قدر الإمكان. اضغط على تردد في المعادل لتغيير نطاق واحد.
+Bass and Treble are shelf filters controlled by the knobs on the Equalizer.	الجهير والحدّة مرشحات رفّية يُتحكم بها بالمقابض في المعادل.
+PowerSound converts a track to the output's own rate (Audio Outputs → output → Sample Rate → Native), once, in 64-bit	يحوّل PowerSound المقطع إلى معدل المخرج الخاص (مخارج الصوت ← المخرج ← معدل العينات ← الأصلي)، مرة واحدة، بدقة 64-بت
+High quality: 130 dB stop band, distortion below -134 dB. Very high quality: 160 dB, below -160 dB — both far under what a 24-bit file can hold. Very high uses a little more battery	جودة عالية: نطاق إيقاف 130 dB، وتشويش أقل من ‎-134 dB. جودة عالية جدًا: 160 dB، أقل من ‎-160 dB — كلاهما أقل بكثير مما يحمله ملف 24-بت. العالية جدًا تستهلك بطارية أكثر قليلًا
+High quality	جودة عالية
+Very high quality	جودة عالية جدًا
+Higher keeps more treble, lower keeps the filter cleaner	الأعلى يحافظ على حدّة أكثر، والأدنى يبقي المرشح أنظف
+Dither is only used for outputs set to 16-bit (Audio Outputs → output → Output Format). The default 32-bit float output needs none. Triangular is a safe choice; noise shaping moves the noise to frequencies the ear hears less.	يُستخدم Dither فقط للمخارج المضبوطة على 16-بت (مخارج الصوت ← المخرج ← صيغة الإخراج). الإخراج الافتراضي 32-بت عشري لا يحتاجه. المثلثي خيار آمن؛ وتشكيل الضوضاء ينقل الضوضاء لترددات تسمعها الأذن أقل.
+Every output has its own settings: equalizer preset, sample rate, no equalizer, no ducking and visualization/lyrics delay	لكل مخرج إعداداته: إعداد المعادل، معدل العينات، بدون معادل، بدون خفض، وتأخير المؤثرات المرئية/الكلمات
+Now playing on: {t}	يُشغَّل الآن على: {t}
+\nActive	\nنشط
+The decoder delivers 32-bit float (24-bit FLAC keeps all 24 bits), PowerSound processes in 64-bit floating point and sends 32-bit float to Android	المفكّك يقدّم 32-بت عشري (FLAC بدقة 24-بت يحتفظ بكل الـ24 بت)، ويعالج PowerSound بدقة 64-بت عشري ويرسل 32-بت عشري إلى أندرويد
+When nothing changes the sound, every sample passes bit-for-bit. A look-ahead limiter only acts on peaks above 0 dB (EQ boosts, Replay Gain, resampling) and never bends the waveform	عندما لا يغيّر شيء الصوت، تمر كل عينة بت ببت. المحدِّد الاستباقي يعمل فقط على الذُّرى فوق 0 dB (تعزيزات المعادل، Replay Gain، تحويل التردد) ولا يشوّه الموجة أبدًا
+Direct decoder-to-output path: no Equalizer, no Tone, no effects, no Replay Gain, no resampling, no fades	مسار مباشر من المفكّك إلى المخرج: بدون معادل، بدون نغمة، بدون مؤثرات، بدون Replay Gain، بدون تحويل تردد، بدون تلاشٍ
+Android still mixes the sound for the Bluetooth codec or the speaker; use a USB DAC for the cleanest path	لا يزال أندرويد يمزج الصوت لترميز البلوتوث أو لمكبر الصوت؛ استخدم USB DAC لأنقى مسار
+Volume	مستوى الصوت
+Pause when the volume is set to 0, resume when it is turned up again	الإيقاف عند ضبط الصوت على 0، والاستئناف عند رفعه مجددًا
+Let Android's audio effects (and equalizer apps) work with PowerSound. Adds "MusicFX" to the ⋮ menu of the Equalizer	السماح لمؤثرات صوت أندرويد (وتطبيقات المعادل) بالعمل مع PowerSound. يضيف "MusicFX" إلى قائمة ⋮ في المعادل
+Your saved reverb presets are removed, built-in ones stay	تُحذف إعدادات الصدى المحفوظة، وتبقى المدمجة
+Your saved reverb presets will be removed.	ستُحذف إعدادات الصدى المحفوظة.
+Visualization can be switched on with the Player Screen 🎵 button. It is shown when music is playing	يمكن تشغيل المؤثرات المرئية بزر 🎵 في شاشة التشغيل. تظهر أثناء تشغيل الموسيقى
+Classic	كلاسيكي
+Rounded	مستدير
+Visible behind the lists when visualization on the Player Screen is on. Some presets may make the lists harder to read	تظهر خلف القوائم عند تفعيل المؤثرات المرئية في شاشة التشغيل. بعض الإعدادات قد تجعل القوائم أصعب قراءة
+Never change automatically	عدم التغيير تلقائيًا أبدًا
+Change each: {t} s	التغيير كل: {t} ث
+Never	أبدًا
+2 min	2 دقيقة
+Time to show the controls during active visualization: {n} ms	مدة إظهار الأزرار أثناء المؤثرات المرئية النشطة: {n} ms
+Keep the album art visible during visualization	إبقاء غلاف الألبوم ظاهرًا أثناء المؤثرات المرئية
+In Fade Controls mode the first touch only shows the controls	في وضع الأزرار الباهتة، اللمسة الأولى تُظهر الأزرار فقط
+Track labels, rating, menu and album art (if visible) opacity	شفافية نصوص المقطع والتقييم والقائمة وغلاف الألبوم (إذا كان ظاهرًا)
+Hide the status bar and navigation completely in Full Screen mode	إخفاء شريط الحالة والتنقل تمامًا في وضع ملء الشاشة
+Bars visualizations fit the album art area in Fade Controls mode. If disabled, bars are always full-screen	تتسع المؤثرات المرئية الشريطية لمساحة غلاف الألبوم في وضع الأزرار الباهتة. عند التعطيل، تكون الأشرطة بملء الشاشة دائمًا
+Twice as many bars, uses a bit more battery	ضعف عدد الأشرطة، يستهلك بطارية أكثر قليلًا
+Keep round / wave visualizations square instead of stretching them	إبقاء المؤثرات الدائرية / الموجية مربعة بدل تمديدها
+Reduce the frame rate to 30 frames per second (saves battery)	خفض معدل الإطارات إلى 30 إطارًا في الثانية (يوفر البطارية)
+Visualization Delay: the extra delay that keeps the visualization and lyrics in time with the sound is set for each output (Audio → Audio Outputs)	تأخير المؤثرات المرئية: التأخير الإضافي الذي يُبقي المؤثرات المرئية والكلمات متزامنة مع الصوت يُضبط لكل مخرج (الصوت ← مخارج الصوت)
+Presets	الإعدادات المسبقة
+Built-in: {t}. Switched-off presets are skipped by the ◀ ▶ buttons and Preset Duration.	المدمجة: {t}. الإعدادات المعطّلة تُتخطى بأزرار ◀ ▶ ومدة الإعداد المسبق.
+The current album art, blurred, behind the screens	غلاف الألبوم الحالي، مموّهًا، خلف الشاشات
+Also behind the library lists	وخلف قوائم المكتبة أيضًا
+Also behind the lyrics	وخلف الكلمات أيضًا
+Lyrics and list backgrounds are dimmed a bit more to keep the text readable	خلفيات الكلمات والقوائم أغمق قليلًا لإبقاء النص مقروءًا
+Also apply the gradient to the list background	تطبيق التدرج على خلفية القوائم أيضًا
+Less	أقل
+More	أكثر
+Solid Color	لون ثابت
+Detailed	مفصّل
+Download	التنزيل
+Automatically search and download missing album art (iTunes)	البحث وتنزيل أغلفة الألبومات الناقصة تلقائيًا (iTunes)
+For Artists, Album Artists and Composers (Deezer). If disabled, the album art is used	للفنانين وفناني الألبومات والملحنين (Deezer). عند التعطيل، يُستخدم غلاف الألبوم
+Higher downloaded image resolution, uses more storage and data	دقة أعلى للصور المُنزَّلة، تستهلك مساحة وبيانات أكثر
+Images are downloaded only when Wi-Fi is connected	تُنزَّل الصور فقط عند الاتصال بـ Wi-Fi
+Search for album art even if the album tag is missing	البحث عن غلاف الألبوم حتى لو كان وسم الألبوم ناقصًا
+Prefer downloaded album art over the embedded picture and Cover.jpg/Folder.jpg	تفضيل الغلاف المُنزَّل على الصورة المدمجة وCover.jpg/Folder.jpg
+Clear the stored "not found" status of album/artist images	مسح حالة "لم يُعثر عليه" المحفوظة لصور الألبومات/الفنانين
+Downloaded images and the image cache will be deleted	ستُحذف الصور المُنزَّلة وذاكرة الصور المؤقتة
+Always show the default image instead of any album art	إظهار الصورة الافتراضية دائمًا بدل أي غلاف ألبوم
+Higher colour quality for album art. Needs 2x more memory per image	جودة ألوان أعلى لأغلفة الألبومات. تحتاج ضعف الذاكرة لكل صورة
+Sharper album art on the Player Screen. Uses more memory	غلاف ألبوم أوضح في شاشة التشغيل. يستهلك ذاكرة أكثر
+Keep album art aspect ratio as is. Tall images won't fill some places fully	إبقاء نسبة أبعاد الغلاف كما هي. الصور الطويلة لن تملأ بعض الأماكن تمامًا
+Keep Aspect Ratio	إبقاء نسبة الأبعاد
+Square	مربع
+Cover.jpg / Folder.jpg next to the songs are read when All Files Access is allowed (Library → All Files Access)	تُقرأ ملفات Cover.jpg / Folder.jpg بجانب الأغاني عند السماح بالوصول إلى كل الملفات (المكتبة ← الوصول إلى كل الملفات)
+PowerSound will search again for album/artist images that were not found before.	سيبحث PowerSound مجددًا عن صور الألبومات/الفنانين التي لم يُعثر عليها من قبل.
+Downloaded images and the image cache will be deleted.	ستُحذف الصور المُنزَّلة وذاكرة الصور المؤقتة.
+Read every file's tags again, clear the album art and lyrics caches and reload the library	إعادة قراءة وسوم كل ملف، ومسح ذاكرة الأغلفة والكلمات المؤقتة، وإعادة تحميل المكتبة
+Songs you have more than once (e.g. an MP3 and a FLAC). The best copy is kept, you choose what to delete	أغانٍ لديك منها أكثر من نسخة (مثل MP3 و FLAC). تُحفظ أفضل نسخة، وأنت تختار ما تحذفه
+Folders Selection — all {t} folders are included	اختيار المجلدات — كل المجلدات ({t}) مضمّنة
+Folders Selection — {t} of {t} folders excluded	اختيار المجلدات — {t} من {t} مجلدات مستبعدة
+Allowed. PowerSound can read .lrc lyrics files and cover.jpg / folder.jpg next to your songs	مسموح. يمكن لـ PowerSound قراءة ملفات كلمات ‎.lrc وcover.jpg / folder.jpg بجانب أغانيك
+Not allowed — tap to allow. Needed for .lrc lyrics files, cover.jpg / folder.jpg and a deeper Full Rescan	غير مسموح — اضغط للسماح. مطلوب لملفات كلمات ‎.lrc وcover.jpg / folder.jpg ولإعادة فحص كامل أعمق
+Don't ignore	عدم التجاهل
+Shorter than 2 s	أقصر من 2 ث
+Shorter than 6 s	أقصر من 6 ث
+Shorter than 10 s	أقصر من 10 ث
+Shorter than 15 s	أقصر من 15 ث
+Shorter than 30 s	أقصر من 30 ث
+Shorter than 45 s	أقصر من 45 ث
+Don't add the sound of video files (mp4, 3gp …) to the library	عدم إضافة صوت ملفات الفيديو (mp4, 3gp …) إلى المكتبة
+Library categories, navbar, headers, track labels, albums, sorting	فئات المكتبة، شريط التنقل، العناوين، نصوص المقاطع، الألبومات، الترتيب
+What search looks in and what Play plays	أين يبحث البحث وماذا يشغّل زر التشغيل
+Where added songs go	أين تذهب الأغاني المضافة
+Import, export, insert position, duplicates	الاستيراد، التصدير، موضع الإضافة، المكررات
+Reshuffle, category shuffle, folders hierarchy	إعادة الخلط، خلط الفئات، تسلسل المجلدات
+Auto-scan, split symbols, tag encoding	الفحص التلقائي، رموز الفصل، ترميز الوسوم
+Long tracks ({t} min or more) continue where you stopped them	المقاطع الطويلة ({t} دقيقة أو أكثر) تكمل من حيث أوقفتها
+In long tracks ({t} min or more) the category Pro Buttons become -10/+10 s jump buttons	في المقاطع الطويلة ({t} دقيقة أو أكثر) تصبح أزرار الفئة الاحترافية أزرار قفز -10/+10 ث
+{t} min — also used by the Long Tracks category	{t} دقيقة — تُستخدم أيضًا لفئة المقاطع الطويلة
+1 min	1 دقيقة
+60 min	60 دقيقة
+At start	عند البدء
+How much of a track must be heard before it counts in Most Played / Recently Played	كم يجب سماعه من المقطع قبل أن يُحتسب في الأكثر تشغيلًا / المشغّلة مؤخرًا
+Clear play counts and recently played. Ratings and likes stay	مسح عدد مرات التشغيل والمشغّلة مؤخرًا. تبقى التقييمات والإعجابات
+Folders Selection	اختيار المجلدات
+PowerSound will ask Android to read all your music files again, clear its caches and reload the library. It can take a while.	سيطلب PowerSound من أندرويد قراءة كل ملفات الموسيقى مجددًا، ومسح ذاكرته المؤقتة وإعادة تحميل المكتبة. قد يستغرق ذلك بعض الوقت.
+Play counts and recently played will be cleared. Ratings and likes are kept.	سيُمسح عدد مرات التشغيل والمشغّلة مؤخرًا. تبقى التقييمات والإعجابات.
+All categories are shown on the Library page	كل الفئات ظاهرة في صفحة المكتبة
+{n} categories hidden	{n} فئات مخفية
+Keep the bottom bar in place. If disabled, it slides away while you scroll down a list	إبقاء الشريط السفلي في مكانه. عند التعطيل، ينزلق بعيدًا أثناء التمرير للأسفل
+Show the thin progress line under the playing track in the bottom bar	إظهار خط التقدم الرفيع تحت المقطع المشغَّل في الشريط السفلي
+Show the songs count and total time in album / folder headers	إظهار عدد الأغاني والمدة الإجمالية في عناوين الألبومات / المجلدات
+Letter bar on the right side of long lists	شريط الحروف على الجانب في القوائم الطويلة
+Shuffle / Play / Search / ⋮ buttons in the list header	أزرار الخلط / التشغيل / البحث / ⋮ في عنوان القائمة
+The same buttons floating at the bottom while you scroll (always shown when Header Buttons are off)	نفس الأزرار عائمة في الأسفل أثناء التمرير (تظهر دائمًا عند تعطيل أزرار العنوان)
+Separate number in album / folder lists	رقم منفصل في قوائم الألبومات / المجلدات
+In the meta line	في سطر البيانات
+In the title, everywhere	في العنوان، في كل مكان
+Show the file name instead of the title tag	إظهار اسم الملف بدل وسم العنوان
+Behavior	السلوك
+Tapping the song that is playing starts it again. If disabled, it just keeps playing	الضغط على الأغنية المشغَّلة يعيدها من البداية. عند التعطيل، تستمر في التشغيل
+Play and go to the player	التشغيل والانتقال إلى المشغّل
+Play and stay in the list	التشغيل والبقاء في القائمة
+Add to queue and stay in the list	الإضافة إلى قائمة الانتظار والبقاء في القائمة
+Show Delete in the track menu	إظهار الحذف في قائمة المقطع
+Albums	الألبومات
+Tracks with the same album name and album artist are shown as one album, even from different folders	المقاطع بنفس اسم الألبوم وفنان الألبوم تظهر كألبوم واحد، حتى من مجلدات مختلفة
+Show the album artist instead of the track artist under track titles	إظهار فنان الألبوم بدل فنان المقطع تحت عناوين المقاطع
+Show (and sort by) the album artist under album names	إظهار (والترتيب حسب) فنان الألبوم تحت أسماء الألبومات
+Inside Album Artists, show the album artist under track titles	داخل فناني الألبومات، إظهار فنان الألبوم تحت عناوين المقاطع
+Don't show "Unknown album" in track labels	عدم إظهار "ألبوم مجهول" في نصوص المقاطع
+Don't show "Unknown artist" in track labels	عدم إظهار "فنان مجهول" في نصوص المقاطع
+Besides each split artist / composer / genre, also show the full combined name (see Scanner)	بجانب كل فنان / ملحن / نوع مفصول، إظهار الاسم المجمّع الكامل أيضًا (انظر الفاحص)
+Skip the top folders that only contain one folder and open where the music starts	تخطي المجلدات العلوية التي تحتوي مجلدًا واحدًا فقط والفتح حيث تبدأ الموسيقى
+If disabled, "The", "A" and "An" at the start are skipped when sorting (The Beatles → B)	عند التعطيل، تُتخطى "The" و"A" و"An" في البداية عند الترتيب (The Beatles ← B)
+Sorting and zoom of each list are in its ⋮ menu	ترتيب وتكبير كل قائمة في قائمة ⋮ الخاصة بها
+Show on the Library page	الإظهار في صفحة المكتبة
+Play / Shuffle in Search play only the found tracks. If disabled, also the songs of the found albums, artists …	التشغيل / الخلط في البحث يشغّل المقاطع الموجودة فقط. عند التعطيل، يشمل أيضًا أغاني الألبومات والفنانين … الموجودين
+Find tracks by their title only, not by artist or album	البحث عن المقاطع بعنوانها فقط، لا بالفنان أو الألبوم
+Search looks in all categories	البحث يشمل كل الفئات
+{n} of {n} categories	{n} من {n} فئات
+"Add to queue" puts the songs at the end in their order, or mixed	"إضافة إلى قائمة الانتظار" تضع الأغاني في النهاية بترتيبها، أو مخلوطة
+Normal	عادي
+Shuffled	مخلوط
+"Play next" puts the songs after the current one in their order, or mixed	"تشغيل التالي" تضع الأغاني بعد الحالية بترتيبها، أو مخلوطة
+In PowerSound the queue is the list that is playing, so songs you add join it directly. Open it from Library → Queue or the ⋮ menu.	في PowerSound قائمة الانتظار هي القائمة التي تُشغَّل، فالأغاني التي تضيفها تنضم إليها مباشرة. افتحها من المكتبة ← قائمة الانتظار أو من قائمة ⋮.
+Copy the playlists saved in the phone's music library (new ones only)	نسخ قوائم التشغيل المحفوظة في مكتبة موسيقى الهاتف (الجديدة فقط)
+Pick one or more playlist files; their songs are matched to your library	اختر ملف قائمة تشغيل أو أكثر؛ تُطابَق أغانيها مع مكتبتك
+Save every playlist as an .m3u8 file in a folder you choose	حفظ كل قائمة تشغيل كملف ‎.m3u8 في مجلد تختاره
+Where songs added to a playlist go	أين تذهب الأغاني المضافة إلى قائمة تشغيل
+Start	البداية
+End	النهاية
+A deleted file also leaves every playlist	الملف المحذوف يُزال أيضًا من كل قوائم التشغيل
+Songs already in a playlist are not added again	الأغاني الموجودة في قائمة التشغيل لا تُضاف مرة أخرى
+The text encoding of .m3u files is set in Library → Scanner	ترميز نص ملفات ‎.m3u يُضبط في المكتبة ← الفاحص
+Shuffle on the list that is already playing shuffled keeps its order instead of mixing again	الخلط على قائمة تُشغَّل مخلوطة بالفعل يحافظ على ترتيبها بدل خلطها مجددًا
+The same, only for lists of 500 songs or more	نفس الشيء، فقط للقوائم ذات 500 أغنية أو أكثر
+Shuffle songs (all mixed)	خلط الأغاني (كلها مختلطة)
+Shuffle categories (songs keep their order)	خلط الفئات (الأغاني تحافظ على ترتيبها)
+Shuffle songs inside each category	خلط الأغاني داخل كل فئة
+Shuffle button on Albums, Artists, Folders …:	زر الخلط في الألبومات والفنانين والمجلدات …:
+Shuffle in Folders Hierarchy also takes the songs of the subfolders	الخلط في تسلسل المجلدات يشمل أيضًا أغاني المجلدات الفرعية
+The shuffle modes themselves (songs, categories …) are chosen with the shuffle button on the Player Screen	أوضاع الخلط نفسها (الأغاني، الفئات …) تُختار بزر الخلط في شاشة التشغيل
+Pick up new, changed and deleted music files by themselves	التقاط ملفات الموسيقى الجديدة والمعدّلة والمحذوفة تلقائيًا
+Rescan right after a change (otherwise PowerSound waits a little for copying to finish)	إعادة الفحص مباشرة بعد التغيير (وإلا ينتظر PowerSound قليلًا حتى ينتهي النسخ)
+Disabled — tap to set, e.g.  ; / &	معطّل — اضغط للتعيين، مثلًا  ; / &
+Split by:  {t}	الفصل حسب:  {t}
+These names are never split, even if they contain a split symbol. Tap a name to remove it	هذه الأسماء لا تُفصل أبدًا، حتى لو احتوت رمز فصل. اضغط على اسم لإزالته
+Add	إضافة
+Add an artist name that must stay whole	إضافة اسم فنان يجب أن يبقى كاملًا
+Encoding	الترميز
+For old tags that are not Unicode:	للوسوم القديمة غير المرمّزة بـ Unicode:
+If disabled, .m3u files are read with the Tag Encoding above (.m3u8 is always UTF-8)	عند التعطيل، تُقرأ ملفات ‎.m3u بترميز الوسوم أعلاه (‎.m3u8 دائمًا UTF-8)
+Find songs whose Arabic title, artist or album shows as strange letters (like ÇáíÓÇ) and write them correctly into the files	العثور على الأغاني التي يظهر عنوانها أو فنانها أو ألبومها العربي بحروف غريبة (مثل ÇáíÓÇ) وكتابتها بشكل صحيح في الملفات
+Symbols separated by spaces, for example:  ;  /  &  feat.	رموز مفصولة بمسافات، مثلًا:  ;  /  &  feat.
+Split Multiple Artists	فصل الفنانين المتعددين
+Split Multiple Composers	فصل الملحنين المتعددين
+Split Multiple Genres	فصل الأنواع المتعددة
+Add Unsplit Artist	إضافة فنان بلا فصل
+Artist name, e.g. AC/DC	اسم الفنان، مثلًا AC/DC
+Remove "{t}"?	إزالة "{t}"؟
+This name can then be split like any other.	يمكن بعدها فصل هذا الاسم مثل أي اسم آخر.
+Connection	الاتصال
+Resume playing when a wired headset is connected	استئناف التشغيل عند توصيل سماعة سلكية
+Resume playing when a Bluetooth device is connected	استئناف التشغيل عند اتصال جهاز بلوتوث
+Pause when a wired / Bluetooth headset or USB DAC is disconnected	الإيقاف عند فصل سماعة سلكية / بلوتوث أو USB DAC
+Pause when a USB DAC is connected. This helps prevent loud noise while some USB DACs start up	الإيقاف عند توصيل USB DAC. يساعد على تجنب الضجيج العالي أثناء تشغيل بعض أجهزة USB DAC
+Resume after calls and other play/resume options are in Audio → Audio Focus	الاستئناف بعد المكالمات وخيارات التشغيل/الاستئناف الأخرى في الصوت ← التركيز الصوتي
+Enable headset / Bluetooth controls	تفعيل أزرار السماعة / البلوتوث
+Single press	ضغطة واحدة
+Double/triple press for next/prev. track	ضغطتان/ثلاث للمقطع التالي/السابق
+Long press for next track (when playing)	ضغطة مطوّلة للمقطع التالي (أثناء التشغيل)
+What the play button of a wired headset does	ماذا يفعل زر التشغيل في السماعة السلكية
+What the play button of a Bluetooth device does	ماذا يفعل زر التشغيل في جهاز البلوتوث
+Double press = next track, triple press = previous track. Many earbuds (like the Soundcore Liberty) send next/previous by themselves; those always work	ضغطتان = المقطع التالي، ثلاث = المقطع السابق. كثير من السماعات (مثل Soundcore Liberty) ترسل التالي/السابق بنفسها؛ وتلك تعمل دائمًا
+Play only plays and Pause only pauses. Turn off for headsets/devices that send stray play/pause/stop commands, which are then treated as play/pause toggle	التشغيل يشغّل فقط والإيقاف المؤقت يوقف فقط. عطّله للسماعات/الأجهزة التي ترسل أوامر تشغيل/إيقاف عشوائية، فتُعامل كتبديل تشغيل/إيقاف
+Off	إيقاف
+Ignore all Bluetooth commands for {t} s after a connection	تجاهل كل أوامر البلوتوث لمدة {t} ث بعد الاتصال
+Ignore repeat and shuffle commands from Bluetooth devices and other apps completely	تجاهل أوامر التكرار والخلط من أجهزة البلوتوث والتطبيقات الأخرى تمامًا
+Short beep when a double/triple or long press changed the track	صفارة قصيرة عندما تغيّر ضغطتان/ثلاث أو ضغطة مطوّلة المقطع
+Beep on all button commands	صفارة مع كل أوامر الأزرار
+Short vibration on button commands	اهتزاز قصير مع أوامر الأزرار
+See which buttons PowerSound received and what it did	شاهد الأزرار التي استقبلها PowerSound وماذا فعل
+No button commands since the app started.	لا توجد أوامر أزرار منذ بدء التطبيق.
+The album art on the lock screen and in the notification is blurred. Some smart watches and apps that use the album art also get the blurred image	غلاف الألبوم على شاشة القفل وفي الإشعار مموّه. بعض الساعات الذكية والتطبيقات التي تستخدم الغلاف تحصل أيضًا على الصورة المموّهة
+Send a PowerSound placeholder image when a track has no album art (lock screen, notification, watches, car)	إرسال صورة PowerSound بديلة عندما لا يكون للمقطع غلاف (شاشة القفل، الإشعار، الساعات، السيارة)
+The media buttons of the lock screen are the notification buttons: Look and Feel → Notifications → Buttons	أزرار الوسائط في شاشة القفل هي أزرار الإشعار: المظهر ← الإشعارات ← الأزرار
+PowerSound Lock Screen	شاشة قفل PowerSound
+When the screen turns off while music is playing, PowerSound shows its player on top of the lock screen. Settings, delete, tag editing and similar actions still ask to unlock	عندما تنطفئ الشاشة أثناء تشغيل الموسيقى، يعرض PowerSound مشغّله فوق شاشة القفل. الإعدادات والحذف وتعديل الوسوم وما شابهها لا تزال تطلب فتح القفل
+Allowed. PowerSound can open itself when the screen turns off	مسموح. يمكن لـ PowerSound فتح نفسه عند انطفاء الشاشة
+Needed on this Android version: allow "Display over other apps" for PowerSound, otherwise it only stays on the lock screen when it was open	مطلوب في إصدار أندرويد هذا: اسمح لـ PowerSound "بالظهور فوق التطبيقات الأخرى"، وإلا يبقى على شاشة القفل فقط إذا كان مفتوحًا
+Send the playing tracks to the Last.fm app	إرسال المقاطع المشغَّلة إلى تطبيق Last.fm
+Scrobble to Last.fm / Libre.fm with the Simple Scrobbler app	Scrobble إلى Last.fm / Libre.fm بتطبيق Simple Scrobbler
+Most other scrobbler apps work without any setting, through the media notification or Metachanged Intent below	معظم تطبيقات Scrobbler الأخرى تعمل بدون أي إعداد، عبر إشعار الوسائط أو إشارة Metachanged أدناه
+Tweaks	تعديلات
+Tell other apps (widgets, watches, scrobblers) which track is playing	إخبار التطبيقات الأخرى (الأدوات، الساعات، تطبيقات Scrobbler) بالمقطع المشغَّل
+Keeps the phone awake enough to play. Turn on if music stops when the screen is off	يبقي الهاتف صاحيًا بما يكفي للتشغيل. فعّله إذا توقفت الموسيقى عند انطفاء الشاشة
+Not set. Other apps (e.g. automation apps) can send this action to make PowerSound pause and keep its state	غير معيّن. يمكن للتطبيقات الأخرى (مثل تطبيقات الأتمتة) إرسال هذا الإجراء ليوقف PowerSound مؤقتًا ويحتفظ بحالته
+PowerSound pauses when it receives: {t}	يتوقف PowerSound مؤقتًا عندما يستقبل: {t}
+Experiment — pause the music when the screen turns off	تجريبي — إيقاف الموسيقى عند انطفاء الشاشة
+Experiment — ask for the highest refresh rate of the screen (smoother lists and visualizations, uses more battery)	تجريبي — طلب أعلى معدل تحديث للشاشة (قوائم ومؤثرات مرئية أنعم، يستهلك بطارية أكثر)
+From the recent apps screen	من شاشة التطبيقات الأخيرة
+Show a confirmation first	إظهار تأكيد أولًا
+Network Streams	البث عبر الشبكة
+Small	صغير
+A bigger buffer also makes streams take longer to start. Used the next time PowerSound starts	الذاكرة الأكبر تجعل البث يأخذ وقتًا أطول للبدء. تُستخدم في المرة القادمة التي يبدأ فيها PowerSound
+Default (PowerSound Player)	الافتراضي (PowerSound Player)
+Errors	الأخطاء
+Saves crash details on the phone	يحفظ تفاصيل الأعطال على الهاتف
+See, share or clear the last crash	عرض آخر عطل أو مشاركته أو مسحه
+An intent action, e.g. com.example.SHUTDOWN. Leave empty to turn off	إجراء Intent، مثلًا com.example.SHUTDOWN. اتركه فارغًا للتعطيل
+User Agent header used for network streams. Leave empty for the default	ترويسة User Agent المستخدمة للبث عبر الشبكة. اتركها فارغة للافتراضي
+Version {t} — what changed in each version	الإصدار {t} — ما تغيّر في كل إصدار
+Look for a newer version on GitHub	البحث عن إصدار أحدث على GitHub
+Report a problem or ask for a feature on GitHub	الإبلاغ عن مشكلة أو طلب ميزة على GitHub
+Libraries and services PowerSound uses	المكتبات والخدمات التي يستخدمها PowerSound
+What PowerSound does with your data	ماذا يفعل PowerSound ببياناتك
+Folders	المجلدات
+Artists	الفنانون
+Recently added	المضافة مؤخرًا
+1 song	أغنية واحدة
+Saved. Keep this file to restore your EQ, presets, playlists and settings later.	تم الحفظ. احتفظ بهذا الملف لاستعادة المعادل والإعدادات المسبقة وقوائم التشغيل والإعدادات لاحقًا.
+Couldn't save the file: {t}	تعذّر حفظ الملف: {t}
+Imported {n} AutoEq preset(s). Pick them in the Equalizer → Preset list.	تم استيراد {n} من إعدادات AutoEq. اخترها من المعادل ← قائمة الإعدادات المسبقة.
+No AutoEq presets found. Choose a "ParametricEQ.txt" file (or a zip with them).	لم يُعثر على إعدادات AutoEq. اختر ملف "ParametricEQ.txt" (أو ملف zip يحتويها).
+This file is not a PowerSound backup.	هذا الملف ليس نسخة احتياطية من PowerSound.
+Imported {t} playlist(s) with {t} song(s).	تم استيراد {t} قائمة تشغيل فيها {t} أغنية.
+No songs of these playlists were found in your library.	لم يُعثر على أي أغنية من هذه القوائم في مكتبتك.
+Exported {n} playlist(s) as .m3u8 files.	تم تصدير {n} قائمة تشغيل كملفات ‎.m3u8.
+Nothing was exported.	لم يُصدَّر شيء.
+Folders: {t}, Playlists: {t}, Songs: {t}	المجلدات: {t}، قوائم التشغيل: {t}، الأغاني: {t}
+Full rescan finished: {t} songs.	انتهت إعادة الفحص الكامل: {t} أغنية.
+Imported {n} playlist(s) from the phone's music library.	تم استيراد {n} قائمة تشغيل من مكتبة موسيقى الهاتف.
+No new playlists were found in the phone's music library.	لم يُعثر على قوائم تشغيل جديدة في مكتبة موسيقى الهاتف.
+No broken Arabic names were found. 👍	لم يُعثر على أسماء عربية معطوبة. 👍
+No duplicate songs were found. 👍	لم يُعثر على أغانٍ مكررة. 👍
+Tags saved	تم حفظ الوسوم
+Tags saved in {t} songs	تم حفظ الوسوم في {t} أغنية
+Saved in {t} songs. Not saved:\n	تم الحفظ في {t} أغنية. لم يُحفظ:\n
+\n… and {t} more	\n… و{t} أخرى
+Android didn't allow PowerSound to change this file	لم يسمح أندرويد لـ PowerSound بتغيير هذا الملف
+Saving failed	فشل الحفظ
+Swipe the page in any direction to go back. Pinch to zoom the list. ⋮ → list options for sorting and zoom. Long press a song for its menu.	اسحب الصفحة في أي اتجاه للرجوع. قرّب بإصبعين لتكبير القائمة. ⋮ ← خيارات القائمة للترتيب والتكبير. اضغط مطولًا على أغنية لقائمتها.
+Tap to open the player. Swipe ◀ ▶ to change tracks. Long press for the track's list.	اضغط لفتح المشغّل. اسحب ◀ ▶ لتغيير المقطع. اضغط مطولًا لقائمة المقطع.
+Your settings and data were restored. PowerSound will restart now.	تمت استعادة إعداداتك وبياناتك. سيُعاد تشغيل PowerSound الآن.
+Restart	إعادة التشغيل
+{t} min left	متبقٍ {t} دقيقة
+When the list ends	عند انتهاء القائمة
+Fix {n} songs?	إصلاح {n} أغنية؟
+These names will be written correctly into the files:	ستُكتب هذه الأسماء بشكل صحيح في الملفات:
+… and {n} more	… و{n} أخرى
+Fix all	إصلاح الكل
+Saving tags	جارٍ حفظ الوسوم
+Delete {n} files?	حذف {n} ملف؟
+The selected songs will be deleted from your phone.	ستُحذف الأغاني المحددة من هاتفك.
+Delete	حذف
+There is no picture to save.	لا توجد صورة لحفظها.
+Delete file?	حذف الملف؟
+"{t}" will be deleted from your phone.	سيُحذف "{t}" من هاتفك.
+New playlist	قائمة تشغيل جديدة
+No favorite songs yet.\nTap ♥ in a song's menu, or select songs and tap ♥.	لا توجد أغانٍ مفضلة بعد.\nاضغط ♥ في قائمة أغنية، أو حدّد أغاني واضغط ♥.
+Nothing here yet	لا شيء هنا بعد
+This playlist is empty.\nAdd songs from the ⋮ menu of any song.	قائمة التشغيل هذه فارغة.\nأضف أغاني من قائمة ⋮ لأي أغنية.
+No songs	لا توجد أغانٍ
+Rename playlist	إعادة تسمية قائمة التشغيل
+Delete playlist	حذف قائمة التشغيل
+Choose cover	اختيار الغلاف
+Add all to a playlist	إضافة الكل إلى قائمة تشغيل
+Remove from playlist	إزالة من قائمة التشغيل
+Select	تحديد
+Song menu…	قائمة الأغنية…
+EQ {n} bands ({t})	المعادل {n} نطاق ({t})
+Bass/Treble	الجهير/الحدّة
+Limiter	المحدِّد
+3D Surround	صوت محيطي 3D
+Reverb ({t})	الصدى ({t})
+Tempo %.2fx	السرعة %.2fx
+Mono	أحادي
+Stereo expand	توسيع الستيريو
+Balance	التوازن
+Volume {n}%	مستوى الصوت {n}%
+16-bit with dither	16-بت مع Dither
+32-bit float output	إخراج 32-بت عشري
+Off — bit-exact pass-through	معطّل — تمرير مطابق بت ببت
+• 64-bit DSP, {t}	• معالجة 64-بت، {t}
+PowerSound Player needs access to your music files to build your library.	يحتاج PowerSound Player للوصول إلى ملفات الموسيقى لبناء مكتبتك.
+Allow access	السماح بالوصول
+Playback error in "{t}" at {n}s	خطأ في التشغيل في "{t}" عند {n} ث
+Tap play to listen	اضغط تشغيل للاستماع
+Now playing	يُشغَّل الآن
+Unknown	مجهول
+Unknown artist	فنان مجهول
+Other output	مخرج آخر
+{t} — ignored (Respond To Buttons is off)	{t} — تم تجاهله (الاستجابة للأزرار معطّلة)
+{t} — ignored (just connected)	{t} — تم تجاهله (اتصل للتو)
+×3 previous	×3 السابق
+×2 next	×2 التالي
+long press → next	ضغطة مطوّلة ← التالي
+pause (not strict)	إيقاف مؤقت (غير صارم)
+play (not strict)	تشغيل (غير صارم)
+Nothing played yet	لم يُشغَّل شيء بعد
+Play All Categories	تشغيل كل الفئات
+Play the current song and repeat	تشغيل الأغنية الحالية وتكرارها
+Play the current category and repeat	تشغيل الفئة الحالية وتكرارها
+Play all categories and repeat	تشغيل كل الفئات وتكرارها
+Play the current song and stop	تشغيل الأغنية الحالية ثم الإيقاف
+Play the current category and stop	تشغيل الفئة الحالية ثم الإيقاف
+Shuffle off	الخلط معطّل
+Shuffle songs	خلط الأغاني
+Shuffle categories	خلط الفئات
+Shuffle songs and categories	خلط الأغاني والفئات
+Audio file	ملف صوتي
+Folders Hierarchy	تسلسل المجلدات
+Album Artists	فنانو الألبومات
+Genres	الأنواع
+Years	السنوات
+Composers	الملحنون
+Stream	بث
+Network	الشبكة
+Couldn't reach GitHub. Check your internet connection and try again.	تعذّر الوصول إلى GitHub. تحقق من اتصالك بالإنترنت وحاول مجددًا.
+Download failed: {t}	فشل التنزيل: {t}
+Couldn't open the installer: {t}	تعذّر فتح المثبّت: {t}
+Playlist	قائمة التشغيل
+Shuffle on	الخلط مفعّل
+Repeat song	تكرار الأغنية
+Repeat all	تكرار الكل
+Repeat off	التكرار معطّل
+Pause	إيقاف مؤقت
+Play	تشغيل
+no image	بدون صورة
+Custom	مخصص
+Medium	متوسط
+Strong	قوي
+Peak	ذروة
+Low shelf	رفّ منخفض
+High shelf	رفّ مرتفع
+Flat	مسطّح
+Bass Boost	تعزيز الجهير
+Deep Bass	جهير عميق
+Treble Boost	تعزيز الحدّة
+V-Shape	شكل V
+Vocal	صوتي
+Rock	روك
+Pop	بوب
+Jazz	جاز
+Classical	كلاسيكي
+Electronic	إلكتروني
+Hip-Hop	هيب هوب
+Arabic	عربي
+Vocal Clarity	وضوح الصوت
+Liberty 4 NC + Vocal	Liberty 4 NC + صوت
+Preset	إعداد مسبق
+Studio	استوديو
+Small Room	غرفة صغيرة
+Medium Room	غرفة متوسطة
+Plate	صفيحة
+Large Hall	قاعة كبيرة
+Church	كنيسة
+Stadium	ملعب
+None (fastest)	بدون (الأسرع)
+Rectangular (fast)	مستطيلي (سريع)
+Triangular (fast)	مثلثي (سريع)
+Triangular with high pass (fast)	مثلثي مع تمرير عالٍ (سريع)
+F-weighted noise shaping (slow)	تشكيل ضوضاء F-weighted (بطيء)
+Modified-e-weighted noise shaping (slow)	تشكيل ضوضاء Modified-e-weighted (بطيء)
+Improved-e-weighted noise shaping (slow)	تشكيل ضوضاء Improved-e-weighted (بطيء)
+Unknown album	ألبوم مجهول
+Adaptive icon	أيقونة متكيّفة
+Black	أسود
+White	أبيض
+Blue	أزرق
+Disc	أسطوانة
+Gold	ذهبي
+Grid - 1 line small	شبكة - سطر واحد صغير
+1 line extra small	سطر واحد صغير جدًا
+1 line	سطر واحد
+List - no images	قائمة - بدون صور
+List - compact	قائمة - مضغوطة
+List - small	قائمة - صغيرة
+List	قائمة
+Grid - extra small	شبكة - صغيرة جدًا
+Grid - small	شبكة - صغيرة
+Grid	شبكة
+All Songs	كل الأغاني
+Favorite Songs	الأغاني المفضلة
+Favorite Albums	الألبومات المفضلة
+Favorite Artists	الفنانون المفضلون
+Favorite Folders	المجلدات المفضلة
+Streams	البث
+Videos	الفيديوهات
+Bookmarks	العلامات
+Most Played	الأكثر تشغيلًا
+Top Rated	الأعلى تقييمًا
+Low Rated	الأقل تقييمًا
+Recently Played	المشغّلة مؤخرًا
+Recently Added	المضافة مؤخرًا
+Long	الطويلة
+Music	الموسيقى
+Various artists	فنانون متعددون
+Unknown genre	نوع مجهول
+Unknown year	سنة مجهولة
+Unknown composer	ملحن مجهول
+Arabic (Windows-1256)	العربية (Windows-1256)
+Arabic (ISO-8859-6)	العربية (ISO-8859-6)
+Chinese Traditional (Big5)	الصينية التقليدية (Big5)
+Chinese Simplified (GBK)	الصينية المبسطة (GBK)
+Cyrillic (Windows-1251)	السيريلية (Windows-1251)
+Eastern European (Windows-1250)	أوروبا الشرقية (Windows-1250)
+Greek (Windows-1253)	اليونانية (Windows-1253)
+Hebrew (Windows-1255)	العبرية (Windows-1255)
+Japanese (Shift_JIS)	اليابانية (Shift_JIS)
+Korean (EUC-KR)	الكورية (EUC-KR)
+Turkish (Windows-1254)	التركية (Windows-1254)
+Western (Windows-1252)	الغربية (Windows-1252)
+Repeat	التكرار
+Like	إعجاب
+Unlike	إلغاء الإعجاب
+Rating	التقييم
+Prev. category	الفئة السابقة
+Next category	الفئة التالية
+Add to Playlist	إضافة إلى قائمة تشغيل
+Info/Tags	المعلومات/الوسوم
+Browser via custom URL	المتصفح عبر رابط مخصص
+Google (Web)	Google (الويب)
+PowerSound couldn't read this file	لم يتمكن PowerSound من قراءة هذا الملف
+PowerSound couldn't write this file	لم يتمكن PowerSound من كتابة هذا الملف
+This file's content doesn't match its type, so it was left as it is	محتوى هذا الملف لا يطابق نوعه، لذا تُرك كما هو
+This file type can't be edited yet (FLAC and MP3 can)	لا يمكن تعديل هذا النوع من الملفات بعد (يمكن تعديل FLAC و MP3)
+Not a FLAC file	ليس ملف FLAC
+The FLAC file is damaged	ملف FLAC تالف
+A tag is too big for FLAC	وسم كبير جدًا على FLAC
+Writing the new file failed	فشلت كتابة الملف الجديد
+The FLAC tags are damaged	وسوم FLAC تالفة
+This MP3 has an old tag version (ID3v2.{t}) that can't be edited yet	ملف MP3 هذا فيه إصدار وسم قديم (ID3v2.{t}) لا يمكن تعديله بعد
+This MP3 tag uses unsynchronisation, which can't be edited yet	وسم MP3 هذا يستخدم unsynchronisation، ولا يمكن تعديله بعد
+The MP3 tag is damaged	وسم MP3 تالف
+This MP3 tag has parts that can't be read safely, so it was left as it is	وسم MP3 هذا فيه أجزاء لا يمكن قراءتها بأمان، لذا تُرك كما هو
+The tags are too big	الوسوم كبيرة جدًا
+The file ended too early	انتهى الملف قبل أوانه
+Play/Pause	تشغيل/إيقاف مؤقت
+Menu	القائمة
+Bass & Treble	الجهير والحدّة
+Reverb	الصدى
+Tempo	السرعة
+Casting needs Google Play services, and this phone doesn't have them (or they need an update).	البث إلى التلفاز يحتاج خدمات Google Play، وهذا الهاتف لا يملكها (أو تحتاج تحديثًا).
+Playing on {t}	يُشغَّل على {t}
+Cast to a device	البث إلى جهاز
+Volume on the device	مستوى الصوت على الجهاز
+The phone's volume buttons work too. The Chromecast plays the original file, so the equalizer and effects are not heard there.	أزرار الصوت في الهاتف تعمل أيضًا. يشغّل Chromecast الملف الأصلي، لذا لا يُسمع المعادل والمؤثرات هناك.
+Chromecasts on your Wi-Fi	أجهزة Chromecast على شبكة Wi-Fi
+Move to another device	النقل إلى جهاز آخر
+Connecting…	جارٍ الاتصال…
+Looking for Chromecasts…	جارٍ البحث عن أجهزة Chromecast…
+No Chromecast found. Check that the phone and the Chromecast are on the same Wi-Fi.	لم يُعثر على Chromecast. تأكد أن الهاتف وChromecast على نفس شبكة Wi-Fi.
+Stop casting	إيقاف البث
+Selected	محدد
+Favorite	المفضلة
+Choose the cover	اختيار الغلاف
+Tap the picture that should stand for "{t}"	اضغط على الصورة التي تمثّل "{t}"
+{n} songs you have more than once	{n} أغنية لديك منها أكثر من نسخة
+Ticked files will be deleted. The best copy of each is kept.	الملفات المؤشَّر عليها ستُحذف. تُحفظ أفضل نسخة من كل واحدة.
+Delete {n}	حذف {n}
+Effects	المؤثرات
+Around	المحيط
+Room	الغرفة
+For headphones and earbuds: the song plays on virtual speakers in front of you, beside and behind you and above you, in a studio. The voice stays clear in the middle. Around = how much comes from around and above, Room = studio echo.	للسماعات: تُشغَّل الأغنية على سماعات افتراضية أمامك وبجانبك وخلفك وفوقك، في استوديو. يبقى الصوت واضحًا في المنتصف. المحيط = كم يأتي من حولك ومن الأعلى، الغرفة = صدى الاستوديو.
+For headphones and earbuds: each ear also hears a soft, slightly later copy of the other side, like speakers in a room. Sounds stop sitting inside one ear, the singer's voice locks into the centre and long listening is less tiring. Voice level and tone stay the same. Not used together with 3D Surround or Mono.	للسماعات: كل أذن تسمع أيضًا نسخة خفيفة ومتأخرة قليلًا من الجهة الأخرى، مثل السماعات في غرفة. لا تبقى الأصوات داخل أذن واحدة، ويثبت صوت المغني في المنتصف، ويصبح الاستماع الطويل أقل إرهاقًا. يبقى مستوى الصوت ونبرته كما هما. لا يُستخدم مع الصوت المحيطي 3D أو الأحادي.
+Stereo Expand	توسيع الستيريو
+Reset	إعادة الضبط
+Turn a knob by dragging up or down • double-tap a knob to reset it	أدر المقبض بالسحب للأعلى أو للأسفل • اضغط مرتين على المقبض لإعادة ضبطه
+Damp	الإخماد
+Filter	المرشح
+Fade	التلاشي
+Pre-Delay	التأخير المسبق
+Pre-Delay Mix	مزج التأخير المسبق
+Size	الحجم
+Mix	المزج
+Reverb is off — tap Reverb or pick a preset	الصدى معطّل — اضغط على الصدى أو اختر إعدادًا مسبقًا
+Save reverb preset	حفظ إعداد الصدى
+My sound	صوتي الخاص
+This song	هذه الأغنية
+This album	هذا الألبوم
+Artist: {t}	الفنان: {t}
+EQ preset	إعداد المعادل
+None (keep the current equalizer)	لا شيء (الإبقاء على المعادل الحالي)
+Done	تم
+Preamp	التضخيم المسبق
+Equ	المعادل
+Limit	المحدِّد
+MusicFX (Android audio effects)	MusicFX (مؤثرات صوت أندرويد)
+Save as preset	حفظ كإعداد مسبق
+Reset to flat	إعادة الضبط إلى مسطّح
+Bass	الجهير
+Treble	الحدّة
+Drag a slider up or down • double-tap to reset • tap a frequency to change its type, frequency and width	اسحب المنزلق للأعلى أو للأسفل • اضغط مرتين لإعادة الضبط • اضغط على تردد لتغيير نوعه وتردده وعرضه
+Band {n} • {t} Hz	النطاق {n} • {t} Hz
+Save current sound as preset	حفظ الصوت الحالي كإعداد مسبق
+Save preset	حفظ الإعداد
+EQ OFF • BIT-PERFECT PASS-THROUGH	المعادل معطّل • تمرير BIT-PERFECT
+EQ {n}	المعادل {n}
+HEADROOM %.1f dB	هامش الأمان %.1f dB
+Gain: %.1f dB	الكسب: %.1f dB
+Frequency: {t} Hz	التردد: {t} Hz
+Width (Q): %.2f	العرض (Q): %.2f
+Low Q = wide and smooth, high Q = narrow and precise.	Q منخفض = واسع وناعم، Q مرتفع = ضيق ودقيق.
+Rescan library	إعادة فحص المكتبة
+Library settings	إعدادات المكتبة
+{n} selected • {n} songs	{n} محدد • {n} أغنية
+Added to favorites ♥	أُضيف إلى المفضلة ♥
+Removed from favorites	أُزيل من المفضلة
+Pinned to the top	مثبّت في الأعلى
+Unpinned	أُلغي التثبيت
+Add all to queue	إضافة الكل إلى قائمة الانتظار
+This home screen doesn't accept app shortcuts	هذه الشاشة الرئيسية لا تقبل اختصارات التطبيقات
+List options • sort	خيارات القائمة • الترتيب
+Default order	الترتيب الافتراضي
+Title	العنوان
+Longest first	الأطول أولًا
+Newest year	الأحدث سنةً
+Zoom (or pinch the list)	التكبير (أو قرّب بإصبعين على القائمة)
+Bigger rows	صفوف أكبر
+Smaller rows	صفوف أصغر
+Added to Favorite Songs ♥	أُضيفت إلى الأغاني المفضلة ♥
+Removed from Favorite Songs	أُزيلت من الأغاني المفضلة
+1 song selected	أغنية واحدة محددة
+{n} songs selected	{n} أغنية محددة
+Unfavorite	إزالة من المفضلة
+Unpin	إلغاء التثبيت
+Pin to top	التثبيت في الأعلى
+All	الكل
+Play next	تشغيل التالي
+Remove	إزالة
+Add a bookmark from the ⋮ menu on the player. Tap to play from that moment, long press to remove.	أضف علامة من قائمة ⋮ في المشغّل. اضغط للتشغيل من تلك اللحظة، ومطولًا للإزالة.
+No bookmarks yet	لا توجد علامات بعد
+Add stream	إضافة بث
+No streams yet.\nTap "Add stream" and paste a radio address (http… .mp3, .aac or .m3u8).	لا يوجد بث بعد.\nاضغط "إضافة بث" والصق عنوان إذاعة (http… .mp3 أو .aac أو .m3u8).
+Edit stream	تعديل البث
+Name	الاسم
+Address (http…)	العنوان (http…)
+Select Folders	اختيار المجلدات
+Add to Launcher	إضافة إلى الشاشة الرئيسية
+List Options	خيارات القائمة
+By name	حسب الاسم
+By path (case sensitive)	حسب المسار (حساس لحالة الأحرف)
+By path	حسب المسار
+By date added to Library	حسب تاريخ الإضافة إلى المكتبة
+By date added/modified	حسب تاريخ الإضافة/التعديل
+Filesystem date/time	تاريخ/وقت نظام الملفات
+By number of tracks	حسب عدد المقاطع
+List Options: {t}	خيارات القائمة: {t}
+Sort	الترتيب
+Reverse	عكس
+Show titles only	إظهار العناوين فقط
+View As	العرض كـ
+Pinch-to-zoom for zooming	قرّب بإصبعين للتكبير
+Play the list	تشغيل القائمة
+The icon also starts target list playback	الأيقونة تبدأ أيضًا تشغيل القائمة المستهدفة
+Open the list	فتح القائمة
+The list is played in the shuffle mode	تُشغَّل القائمة في وضع الخلط
+Select All	تحديد الكل
+No music folders found yet. Rescan first.	لم يُعثر على مجلدات موسيقى بعد. أعد الفحص أولًا.
+Unselect All	إلغاء تحديد الكل
+Save and Scan	حفظ وفحص
+Searching…	جارٍ البحث…
+Search again	البحث مجددًا
+Looking for media servers on the Wi-Fi…	جارٍ البحث عن خوادم الوسائط على شبكة Wi-Fi…
+The phone is not on Wi-Fi.\nConnect to the same Wi-Fi as the computer, then tap Search again.	الهاتف غير متصل بـ Wi-Fi.\nاتصل بنفس شبكة Wi-Fi التي عليها الكمبيوتر، ثم اضغط البحث مجددًا.
+No media server answered.\n\nA media server (DLNA) shares a computer's music and videos with the home network:\n\n• Windows: Control Panel → Network and Sharing Center → Media streaming options → Turn on media streaming. It shares the Music and Videos folders.\n• A router or NAS with a disk: turn on "Media server" / "DLNA" in its settings.\n• Plex, Jellyfin, Kodi, Serviio: turn on their DLNA option.\n\nThe phone and the server have to be on the same Wi-Fi. Then tap Search again.	لم يستجب أي خادم وسائط.\n\nخادم الوسائط (DLNA) يشارك موسيقى الكمبيوتر وفيديوهاته مع شبكة المنزل:\n\n• ويندوز: لوحة التحكم ← مركز الشبكة والمشاركة ← خيارات تدفق الوسائط ← تشغيل تدفق الوسائط. يشارك مجلدَي الموسيقى والفيديو.\n• راوتر أو NAS فيه قرص: فعّل "Media server" / "DLNA" في إعداداته.\n• Plex أو Jellyfin أو Kodi أو Serviio: فعّل خيار DLNA فيها.\n\nيجب أن يكون الهاتف والخادم على نفس شبكة Wi-Fi. ثم اضغط البحث مجددًا.
+{t} didn't answer.\nIs it still on, and on the same Wi-Fi?	لم يستجب {t}.\nهل لا يزال يعمل، وعلى نفس شبكة Wi-Fi؟
+Try again	حاول مجددًا
+No folders, music or videos here.	لا توجد مجلدات أو موسيقى أو فيديوهات هنا.
+Video	فيديو
+Sleep timer	مؤقت النوم
+Add bookmark	إضافة علامة
+Add to playlist	إضافة إلى قائمة تشغيل
+Track counter	عدّاد المقاطع
+Favorite (♥)	المفضلة (♥)
+Long press for more options	اضغط مطولًا لخيارات أكثر
+Previous category	الفئة السابقة
+No other category	لا توجد فئة أخرى
+Swipe further to change category	اسحب أكثر لتغيير الفئة
+Bookmark added	أُضيفت العلامة
+Library → Bookmarks	المكتبة ← العلامات
+Library → Favorite Songs	المكتبة ← الأغاني المفضلة
+Long press here to add buttons	اضغط مطولًا هنا لإضافة أزرار
+Back to 0:00	الرجوع إلى 0:00
+Long press the elapsed time	اضغط مطولًا على الوقت المنقضي
+Long press ⏮ / ⏭ to change category	اضغط مطولًا على ⏮ / ⏭ لتغيير الفئة
+Built-in • tap for list	مدمج • اضغط للقائمة
+Previous preset	الإعداد السابق
+Next preset	الإعداد التالي
+Swipe the cover ◀ ▶ to change tracks, swipe further to change category. Swipe down or tap the cover for the track's list. Swipe up for lyrics. Long press the cover for the track menu. Tap or drag the seek bar above the buttons to seek (or long press between the buttons). Long press ⏮ ⏭ for previous / next category. Long press the empty space between the small buttons to edit them.	اسحب الغلاف ◀ ▶ لتغيير المقطع، واسحب أكثر لتغيير الفئة. اسحب للأسفل أو اضغط على الغلاف لقائمة المقطع. اسحب للأعلى للكلمات. اضغط مطولًا على الغلاف لقائمة المقطع. اضغط أو اسحب شريط التقديم فوق الأزرار للتقديم (أو اضغط مطولًا بين الأزرار). اضغط مطولًا على ⏮ ⏭ للفئة السابقة / التالية. اضغط مطولًا على الفراغ بين الأزرار الصغيرة لتعديلها.
+Remove from favorites	إزالة من المفضلة
+Add to favorites	إضافة إلى المفضلة
+Add to queue	إضافة إلى قائمة الانتظار
+Bookmark	علامة
+EQ Preset	إعداد المعادل
+Sleep Timer:	مؤقت النوم:
+%d h %02d min	%d س %02d د
+Turn to set	أدِر للتعيين
+Play last song to end	تشغيل الأغنية الأخيرة حتى النهاية
+Fade out slowly	تلاشٍ بطيء
+Over the last 20 seconds of the song	خلال آخر 20 ثانية من الأغنية
+Over the last 2 minutes	خلال آخر دقيقتين
+Disable	تعطيل
+Album artist	فنان الألبوم
+Year	السنة
+Composer	الملحن
+Duration	المدة
+Format	الصيغة
+File size	حجم الملف
+Added	تاريخ الإضافة
+Info / Tags	المعلومات / الوسوم
+Edit	تعديل
+Decoder	المفكّك
+Perfect Bit Perfect: no processing	Bit Perfect الكامل: بدون معالجة
+{t} • 64-bit floating point	{t} • 64-بت عشري
+Equalizer: {t}, {n} bands ({t})	المعادل: {t}، {n} نطاق ({t})
+Preamp %+.1f dB	التضخيم المسبق %+.1f dB
+Tone: Bass {n} Hz %+.1f dB, Treble %.1f kHz %+.1f dB	النغمة: الجهير {n} Hz %+.1f dB، الحدّة %.1f kHz %+.1f dB
+Look-ahead limiter (only above 0 dB)	محدِّد استباقي (فقط فوق 0 dB)
+Headroom %.1f dB	هامش الأمان %.1f dB
+Equalizer off for this output	المعادل معطّل لهذا المخرج
+3D Surround (around {n}%, room {n}%)	صوت محيطي 3D (المحيط {n}%، الغرفة {n}%)
+Balance %+d%%	التوازن %+d%%
+Effects:	المؤثرات:
+Nothing switched on — bit-exact pass-through	لا شيء مفعّل — تمرير مطابق بت ببت
+{n} → {n} (the output's own rate),	{n} ← {n} (المعدل الخاص بالمخرج)،
+very high quality, 160 dB	جودة عالية جدًا، 160 dB
+high quality, 130 dB	جودة عالية، 130 dB
+No resampling	بدون تحويل تردد
+Output	الإخراج
+Save in the file	الحفظ في الملف
+Save for the album	الحفظ للألبوم
+No lyrics found for this track.\nLyrics inside FLAC (LYRICS tag) / MP3 (USLT) files, an .lrc file with the same name,	لم يُعثر على كلمات لهذا المقطع.\nتظهر هنا الكلمات داخل ملفات FLAC (وسم LYRICS) / MP3 (USLT)، أو ملف ‎.lrc بنفس الاسم،
+or lyrics found on the internet are shown here.	أو الكلمات الموجودة على الإنترنت.
+are shown here. Turn on Settings → Lyrics → Download Lyrics to look on the internet.	فعّل الإعدادات ← كلمات الأغاني ← تنزيل الكلمات للبحث على الإنترنت.
+Search lyrics: {t}	البحث عن الكلمات: {t}
+Songs	الأغاني
+Player {t}	المشغّل {t}
+Sleep timer ({t})	مؤقت النوم ({t})
+Cast (playing on {t})	Cast (يُشغَّل على {t})
+Cast to Chromecast	البث إلى Chromecast
+Statistics	الإحصائيات
+Queue • {n}	قائمة الانتظار • {n}
+The queue is empty	قائمة الانتظار فارغة
+Drag to move	اسحب للتحريك
+Go to album	الذهاب إلى الألبوم
+Go to artist	الذهاب إلى الفنان
+Go to folder	الذهاب إلى المجلد
+This month	هذا الشهر
+This year	هذه السنة
+All time	كل الأوقات
+Nothing played yet.	لم يُشغَّل شيء بعد.
+Nothing counted yet for this time. Plays are counted from this version on.	لم يُحتسب شيء بعد لهذه الفترة. يُحتسب التشغيل بدءًا من هذا الإصدار.
+Top artists	أكثر الفنانين
+Top songs	أكثر الأغاني
+Top albums	أكثر الألبومات
+Your library	مكتبتك
+{t} songs • {t} artists • {t} hours of music\nLossless (FLAC / WAV / ALAC): {t} songs	{t} أغنية • {t} فنان • {t} ساعة من الموسيقى\nبدون فقدان (FLAC / WAV / ALAC): {t} أغنية
+This picture can't be used	لا يمكن استخدام هذه الصورة
+Edit tags	تعديل الوسوم
+Editing tags works for FLAC and MP3 files for now. This file is {t}.	تعديل الوسوم يعمل حاليًا لملفات FLAC و MP3. هذا الملف {t}.
+New cover	غلاف جديد
+No cover	بدون غلاف
+Change cover	تغيير الغلاف
+Remove cover	إزالة الغلاف
+Saving…	جارٍ الحفظ…
+Edit tags of {t} songs	تعديل وسوم {t} أغنية
+Fill in only what should be the same for all of them	املأ فقط ما يجب أن يكون متطابقًا لها جميعًا
+{t} of them can't be edited (only FLAC and MP3 can)	{t} منها لا يمكن تعديلها (فقط FLAC و MP3)
+Keep	إبقاء
+Same cover for all	نفس الغلاف للكل
+Remove covers	إزالة الأغلفة
+Orange	برتقالي
+Red	أحمر
+Green	أخضر
+Purple	بنفسجي
+Pink	وردي
+Dark blue-black skin with the blurred album art behind every screen	سمة زرقاء داكنة مع غلاف الألبوم المموّه خلف كل الشاشات
+Pure black (AMOLED) skin: saves battery on OLED screens like the Galaxy A55	سمة سوداء تمامًا (AMOLED): توفر البطارية في شاشات OLED مثل Galaxy A55
+Checking for updates…	جارٍ البحث عن تحديثات…
+You're up to date	لديك آخر إصدار
+PowerSound Player is on the latest version.	PowerSound Player على آخر إصدار.
+New update available	تحديث جديد متاح
+Do you want to update now?	هل تريد التحديث الآن؟
+Update	تحديث
+Later	لاحقًا
+Downloading update…	جارٍ تنزيل التحديث…
+Ready to install	جاهز للتثبيت
+Allow "Install unknown apps" for PowerSound on the page that opened, then come back and tap Install.	اسمح لـ PowerSound "بتثبيت التطبيقات غير المعروفة" في الصفحة التي فُتحت، ثم ارجع واضغط تثبيت.
+Tap Install to update PowerSound Player. Your library, EQ and presets are kept.	اضغط تثبيت لتحديث PowerSound Player. تبقى مكتبتك والمعادل والإعدادات المسبقة.
+Install	تثبيت
+Update failed	فشل التحديث
+All videos	كل الفيديوهات
+Newest first	الأحدث أولًا
+Refresh	تحديث
+PowerSound needs permission to see the videos on this phone.\nIt is used only for this page.	يحتاج PowerSound إذنًا لرؤية الفيديوهات على هذا الهاتف.\nيُستخدم لهذه الصفحة فقط.
+Allow videos	السماح بالفيديوهات
+No videos found on this phone.	لم يُعثر على فيديوهات على هذا الهاتف.
+1 video	فيديو واحد
+Disable Visualization	تعطيل المؤثرات المرئية
+Visualization - Fade Controls	المؤثرات المرئية - أزرار باهتة
+Visualization - Full Screen	المؤثرات المرئية - ملء الشاشة
+Spectrum Centered	طيف في المنتصف
+Spectrum Bars	أشرطة الطيف
+Oscilloscope	راسم الذبذبات
+Circle Spectrum	طيف دائري
+Mirror Wave	موجة معكوسة
+HW decoder	مفكّك HW
+The phone's video chip: smooth, saves battery	شريحة الفيديو في الهاتف: سلس، يوفر البطارية
+HW+ decoder	مفكّك HW+
+Hardware, and when it fails on a file, software takes over	العتاد، وعندما يفشل في ملف يتولى البرنامج
+SW decoder	مفكّك SW
+Software: plays odd files the chip refuses, uses more battery	البرنامج: يشغّل الملفات الغريبة التي ترفضها الشريحة، يستهلك بطارية أكثر
+By the video	حسب الفيديو
+Auto (turn with the phone)	تلقائي (يدور مع الهاتف)
+Landscape	أفقي
+Portrait	عمودي
+The server refused the video (it may need the app that sent it, or the link expired).	رفض الخادم الفيديو (قد يحتاج التطبيق الذي أرسله، أو انتهت صلاحية الرابط).
+No connection to the video. Check the internet.	لا يوجد اتصال بالفيديو. تحقق من الإنترنت.
+The video file wasn't found.	لم يُعثر على ملف الفيديو.
+PowerSound isn't allowed to open this file.	PowerSound غير مسموح له بفتح هذا الملف.
+This phone can't decode this video's format. Try another decoder (the HW button at the top).	هذا الهاتف لا يستطيع فك صيغة هذا الفيديو. جرّب مفكّكًا آخر (زر HW في الأعلى).
+This video file isn't supported or is damaged.	ملف الفيديو هذا غير مدعوم أو تالف.
+Can't play this video ({t}).	تعذّر تشغيل هذا الفيديو ({t}).
+A set — press again at the end	تم تعيين A — اضغط مجددًا عند النهاية
+A-B repeat off	تكرار A-B معطّل
+Repeating A ↔ B	تكرار A ↔ B
+Screenshots need Android 10 or newer	لقطات الشاشة تحتاج أندرويد 10 أو أحدث
+No picture to capture	لا توجد صورة لالتقاطها
+Couldn't capture the picture	تعذّر التقاط الصورة
+Saved in Pictures/PowerSound	حُفظت في Pictures/PowerSound
+Couldn't save the picture	تعذّر حفظ الصورة
+Sending to {t}…	جارٍ الإرسال إلى {t}…
+The phone needs to be on Wi-Fi to pass the video to the TV	يجب أن يكون الهاتف على Wi-Fi لتمرير الفيديو إلى التلفاز
+The phone needs to be on Wi-Fi to cast its videos	يجب أن يكون الهاتف على Wi-Fi لبث فيديوهاته
+Subtitles {n}	الترجمة {n}
+The Chromecast didn't accept the video	لم يقبل Chromecast الفيديو
+Subtitles	الترجمة
+The TV couldn't open it directly — sending it through the phone…	لم يستطع التلفاز فتحه مباشرة — جارٍ إرساله عبر الهاتف…
+The TV couldn't play this video (its site refused, or the Chromecast doesn't know this format)	لم يستطع التلفاز تشغيل هذا الفيديو (رفضه موقعه، أو أن Chromecast لا يعرف هذه الصيغة)
+The TV couldn't play this file (the Chromecast doesn't know this format)	لم يستطع التلفاز تشغيل هذا الملف (Chromecast لا يعرف هذه الصيغة)
+File	الملف
+Address	العنوان
+Length	المدة
+%.3f fps	%.3f إطار/ث
+Dropped frames	الإطارات المفقودة
+Audio {t}	الصوت {t}
+Subtitle {t}	الترجمة {t}
+Stereo	ستيريو
+Left only	اليسار فقط
+Right only	اليمين فقط
+Reverse (swap left/right)	عكس (تبديل اليسار/اليمين)
+Video in the background	الفيديو في الخلفية
+Playing in the background	يُشغَّل في الخلفية
+Paused	متوقف مؤقتًا
+Cutting needs Android 10 or newer	القص يحتاج أندرويد 10 أو أحدث
+The end must be after the start	يجب أن تكون النهاية بعد البداية
+Couldn't create the new file	تعذّر إنشاء الملف الجديد
+Couldn't write the new file	تعذّرت كتابة الملف الجديد
+This video's format can't be cut	لا يمكن قص صيغة هذا الفيديو
+(some tracks MP4 can't hold were left out)	(بعض المسارات التي لا يحملها MP4 تُركت)
+Saved in Movies/PowerSound{t}	حُفظ في Movies/PowerSound{t}
+Saved the sound only in Movies/PowerSound{t}	حُفظ الصوت فقط في Movies/PowerSound{t}
+Couldn't cut this video ({t})	تعذّر قص هذا الفيديو ({t})
+Width	العرض
+Height	الارتفاع
+Apply to all videos	تطبيق على كل الفيديوهات
+Speed FF (Long Press)	سرعة التقديم (ضغط مطوّل)
+Press and hold the video to watch at this speed; let go to come back to normal.	اضغط مع الاستمرار على الفيديو للمشاهدة بهذه السرعة؛ ارفع إصبعك للعودة للعادي.
+Speed FF\n(Long Press)	سرعة التقديم\n(ضغط مطوّل)
+Display Settings	إعدادات العرض
+Network Stream	بث عبر الشبكة
+Information	المعلومات
+Cut	قص
+Tutorial	شرح
+Shortcuts	الاختصارات
+Screen Rotation	تدوير الشاشة
+Playback Speed	سرعة التشغيل
+Background Play	التشغيل في الخلفية
+Loop	التكرار
+Mute	كتم الصوت
+Sleep Timer	مؤقت النوم
+A - B Repeat	تكرار A - B
+Night Mode	الوضع الليلي
+Screenshot	لقطة شاشة
+Style	النمط
+Screen	الشاشة
+Controls	أزرار التحكم
+Navigation	التنقل
+Text	النص
+Condensed	مضغوط
+Light frame	إطار خفيف
+Frame	إطار
+Buttons background	خلفية الأزرار
+Progress bar	شريط التقدم
+Progress bar style	نمط شريط التقدم
+Place progress bar below buttons	وضع شريط التقدم تحت الأزرار
+Orientation	الاتجاه
+Use video orientation	استخدام اتجاه الفيديو
+Full Screen	ملء الشاشة
+Auto Switch	تبديل تلقائي
+On	مفعّل
+Soft buttons	الأزرار البرمجية
+Auto hide	إخفاء تلقائي
+Hide	إخفاء
+Show	إظهار
+Brightness	السطوع
+Always on screen	دائمًا على الشاشة
+Elapsed time	الوقت المنقضي
+Battery/clock	البطارية/الساعة
+Corner offset	إزاحة الزاوية
+Interface	الواجهة
+Screen rotation button	زر تدوير الشاشة
+Display battery/clock in title bar	عرض البطارية/الساعة في شريط العنوان
+Show Remaining Time	إظهار الوقت المتبقي
+Keep Screen On (also when paused)	إبقاء الشاشة مضاءة (حتى عند الإيقاف المؤقت)
+Pause playback if obstructed by another window	إيقاف التشغيل مؤقتًا إذا غطّته نافذة أخرى
+Show interface at the startup	إظهار الواجهة عند البدء
+Touch action	إجراء اللمس
+Show/hide interface	إظهار/إخفاء الواجهة
+Show interface → Pause/Resume	إظهار الواجهة ← إيقاف/استئناف
+Show interface + pause/resume	إظهار الواجهة + إيقاف/استئناف
+Pause/resume	إيقاف/استئناف
+Lock mode	وضع القفل
+Lock	قفل
+Kids lock	قفل الأطفال
+Kids lock (+Touch effects)	قفل الأطفال (+مؤثرات اللمس)
+Gestures	الإيماءات
+Seek position	موضع التقديم
+Zoom and Pan	التكبير والتحريك
+Video zoom	تكبير الفيديو
+Video pan	تحريك الفيديو
+Play/Pause (Double tap)	تشغيل/إيقاف (ضغطتان)
+Video zoom (Double tap)	تكبير الفيديو (ضغطتان)
+FF/RW (Double tap)	تقديم/ترجيع (ضغطتان)
+Speed FF (Long press)	سرعة التقديم (ضغط مطوّل)
+Playback Speed (middle swipe)	سرعة التشغيل (سحب في المنتصف)
+Subtitle up/down	الترجمة للأعلى/للأسفل
+Subtitle zoom	تكبير الترجمة
+Quick Shortcuts	اختصارات سريعة
+Interface auto hide	إخفاء الواجهة تلقائيًا
+%.1f sec	%.1f ث
+Show interface when locked screen is touched	إظهار الواجهة عند لمس الشاشة المقفلة
+Seek Speed (sec/inch)	سرعة التقديم (ث/إنش)
+Forward/backward moving button	زر التحرك للأمام/للخلف
+Move Interval (sec.)	فترة التحرك (ث)
+Previous/next button	زر السابق/التالي
+Display the current position while changing position	عرض الموضع الحالي أثناء تغيير الموضع
+Scale	الحجم
+Color	اللون
+Background Color	لون الخلفية
+Border	الحدود
+Border color	لون الحدود
+Shadow	الظل
+Use styles from SSA/ASS subtitles	استخدام أنماط ترجمات SSA/ASS
+Use font sizes from the subtitles	استخدام أحجام الخطوط من الترجمة
+Border and Shadow can't be used together (the subtitle renderer draws one edge style).	لا يمكن استخدام الحدود والظل معًا (أداة الترجمة ترسم نمط حافة واحدًا).
+Alignment	المحاذاة
+Left	اليسار
+Center	المنتصف
+Right	اليمين
+Bottom margins	الهوامش السفلية
+Box color	لون المربع
+Fit subtitles into video size	ملاءمة الترجمة لحجم الفيديو
+This phone has no equalizer for videos.	هذا الهاتف لا يملك معادلًا للفيديوهات.
+Large Room	غرفة كبيرة
+Medium Hall	قاعة متوسطة
+Video {n}	فيديو {n}
+Address (http… .mp4, .m3u8, .mpd)	العنوان (http… .mp4، .m3u8، .mpd)
+Add here	إضافة هنا
+No bookmarks yet. "Add here" saves this moment of the video.	لا توجد علامات بعد. "إضافة هنا" تحفظ هذه اللحظة من الفيديو.
+Saves this part as a new MP4 in Movies/PowerSound, with the same quality. It starts at the nearest key frame.	يحفظ هذا الجزء كملف MP4 جديد في Movies/PowerSound، بنفس الجودة. يبدأ من أقرب إطار رئيسي.
+Start  {t}	البداية  {t}
+Set to now	التعيين إلى الآن
+End    {t}	النهاية    {t}
+Length {n}	المدة {n}
+Tap	ضغطة
+Show / hide the controls (Display Settings → Controls → Touch action)	إظهار / إخفاء الأزرار (إعدادات العرض ← أزرار التحكم ← إجراء اللمس)
+Double tap left / right	ضغطتان يسارًا / يمينًا
+Back / forward (Navigation → Move Interval)	للخلف / للأمام (التنقل ← فترة التحرك)
+Double tap middle	ضغطتان في المنتصف
+Play / pause	تشغيل / إيقاف مؤقت
+Press and hold	اضغط مع الاستمرار
+Fast speed while you hold (⋮ → Speed FF)	سرعة عالية طالما تضغط (⋮ ← سرعة التقديم)
+Slide sideways	سحب جانبي
+Jump in the video	القفز داخل الفيديو
+Left side up / down	الجانب الأيسر للأعلى / للأسفل
+Right side up / down	الجانب الأيمن للأعلى / للأسفل
+Middle up / down	المنتصف للأعلى / للأسفل
+Playback speed	سرعة التشغيل
+Two fingers	إصبعان
+Zoom and move the picture	تكبير الصورة وتحريكها
+Drag the subtitles up / down	اسحب الترجمة للأعلى / للأسفل
+Move them	لتحريكها
+Pinch on the subtitles	قرّب بإصبعين على الترجمة
+Make them bigger or smaller	لتكبيرها أو تصغيرها
+Lock button	زر القفل
+Lock the screen (Kids lock: hold the lock icon 2 seconds to unlock)	قفل الشاشة (قفل الأطفال: اضغط على أيقونة القفل ثانيتين لفتحه)
+Fit to screen	ملاءمة للشاشة
+Crop	قص
+Stretch	تمديد
+Speed	السرعة
+Subtitles added	أُضيفت الترجمة
+Playing {t}	يُشغَّل {t}
+Unlock first	افتح القفل أولًا
+Hold the lock 2 seconds to unlock	اضغط على القفل ثانيتين لفتحه
+Night mode on	الوضع الليلي مفعّل
+Night mode off	الوضع الليلي معطّل
+Loop this video	تكرار هذا الفيديو
+Loop all	تكرار الكل
+Loop off	التكرار معطّل
+Muted	مكتوم
+Sound on	الصوت مفعّل
+Background play on: leave the video, the sound goes on	التشغيل في الخلفية مفعّل: اخرج من الفيديو، ويستمر الصوت
+Background play off	التشغيل في الخلفية معطّل
+Next	التالي
+Retry	إعادة المحاولة
+Unlock	فتح القفل
+Unlocked	تم فتح القفل
+Hold to unlock	اضغط مع الاستمرار لفتح القفل
+Customise Items	تخصيص العناصر
+Sleep: end of video	النوم: نهاية الفيديو
+Sleep {n}	النوم {n}
+Loop 1	تكرار 1
+Audio {n}{n} ms	الصوت {n}{n} ms
+Zoom {n}%	التكبير {n}%
+Zoom	التكبير
+Lock the screen	قفل الشاشة
+Locked	مقفل
+Kids lock: hold the lock 2 seconds to unlock	قفل الأطفال: اضغط على القفل ثانيتين لفتحه
+Rotate	تدوير
+Previous	السابق
+Back {t} s	رجوع {t} ث
+Forward {t} s	تقديم {t} ث
+Last video	آخر فيديو
+Picture size	حجم الصورة
+Small window	نافذة صغيرة
+Open subtitle file (.srt / .ass / .vtt)…	فتح ملف ترجمة (.srt / .ass / .vtt)…
+Subtitle look (Display Settings → Text)…	شكل الترجمة (إعدادات العرض ← النص)…
+Select decoder	اختيار المفكّك
+At the end of this video	في نهاية هذا الفيديو
+15 minutes	15 دقيقة
+30 minutes	30 دقيقة
+45 minutes	45 دقيقة
+1 hour	ساعة
+1 hour 30	ساعة ونصف
+2 hours	ساعتان
+Screen rotation	تدوير الشاشة
+Back 10 seconds	رجوع 10 ثوانٍ
+Forward 10 seconds	تقديم 10 ثوانٍ
+Subtitles on the TV	الترجمة على التلفاز
+Size {n}%	الحجم {n}%
+How the TV gets the video	كيف يحصل التلفاز على الفيديو
+Directly	مباشرة
+Through the phone	عبر الهاتف
+Through the phone: for videos whose site refuses the TV (the picture doesn't start). The phone fetches the video and hands it to the TV, so it has to stay on, on the same Wi-Fi.\n	عبر الهاتف: للفيديوهات التي يرفض موقعها التلفاز (الصورة لا تبدأ). يجلب الهاتف الفيديو ويسلّمه للتلفاز، لذا يجب أن يبقى شغّالًا وعلى نفس شبكة Wi-Fi.\n
+Back takes you to the other app (to pick another episode, say): the TV keeps playing, the controls stay in the notification, and the next video you open with PowerSound goes straight to the TV.\nThe phone's volume buttons change the TV's volume. Subtitle files (SRT, ASS, WebVTT) go to the TV; subtitles inside the video file itself (MKV), the audio settings and the equalizer are not used there.	زر الرجوع يأخذك للتطبيق الآخر (لاختيار حلقة أخرى مثلًا): يستمر التلفاز في التشغيل، وتبقى الأزرار في الإشعار، والفيديو التالي الذي تفتحه بـ PowerSound يذهب مباشرة إلى التلفاز.\nأزرار الصوت في الهاتف تغيّر صوت التلفاز. ملفات الترجمة (SRT، ASS، WebVTT) تذهب إلى التلفاز؛ أما الترجمة داخل ملف الفيديو نفسه (MKV) وإعدادات الصوت والمعادل فلا تُستخدم هناك.
+Stereo mode	وضع الستيريو
+Synchronization	المزامنة
+Audio track	مسار الصوت
+Move the sound when it doesn't match the lips. + makes the sound later, − earlier.	حرّك الصوت عندما لا يطابق الشفاه. + يؤخر الصوت، − يقدّمه.
+Use SW audio decoder	استخدام مفكّك الصوت البرمجي
+Open	فتح
+Play another sound file with this video	تشغيل ملف صوتي آخر مع هذا الفيديو
+In sync	متزامن
+Customise items	تخصيص العناصر
+Track {n}	المسار {n}
+Crossfeed ({t})	Crossfeed ({t})

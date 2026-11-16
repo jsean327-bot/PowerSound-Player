@@ -68,7 +68,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
+import com.powersound.player.ui.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -418,7 +418,9 @@ private fun SettingsContent(
                 searching -> {
                     val q = query.trim().lowercase()
                     val hits = if (q.isEmpty()) emptyList() else SEARCH_INDEX.filter { (p, t) ->
-                        t.lowercase().contains(q) || p.title.lowercase().contains(q)
+                        t.lowercase().contains(q) || p.title.lowercase().contains(q) ||
+                            // in Arabic, search the Arabic names too
+                            com.powersound.player.data.Lang.tr(t).contains(q) || com.powersound.player.data.Lang.tr(p.title).contains(q)
                     }
                     hits.forEach { (p, t) ->
                         val path = generateSequence(p) { it.parent }.toList().reversed().joinToString(" › ") { it.title }
@@ -1279,7 +1281,15 @@ private fun SettingsPage1(page: SettingsPage?, args: PageArgs) {
     Hint("List options like Filename As Title and Show Track Number are in Library → Lists")
 
     SectionLabel("Misc")
-    ChoiceRow("Language", listOf("Auto", "English"), st.language) { v -> set { it.copy(language = v) } }
+    val langContext = LocalContext.current
+    ChoiceRow("Language", listOf("Auto", "English", "العربية"), st.language) { v ->
+        if (v != st.language) {
+            set { it.copy(language = v) }
+            // the whole screen is drawn again in the new language (and direction)
+            com.powersound.player.data.Lang.init(langContext, v)
+            (langContext as? android.app.Activity)?.recreate()
+        }
+    }
     PlainRow("Icon", "Set launcher icon") { onPage(SettingsPage.ICON) }
     ChipRow("Screen Orientation", null, listOf("Default", "Portrait (Vertical)", "Landscape (Horizontal)"), st.orientation) { v ->
         set { it.copy(orientation = v) }

@@ -23,7 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import com.powersound.player.ui.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -90,7 +90,7 @@ fun TagEditorDialog(song: Song, saving: Boolean, onSave: (TagEdits) -> Unit, onD
                     newCover = bytes
                     removeCover = false
                 } else {
-                    Toast.makeText(context, "This picture can't be used", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, com.powersound.player.data.Lang.tr("This picture can't be used"), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -227,7 +227,7 @@ fun BatchTagDialog(songs: List<Song>, saving: Boolean, onSave: (TagEdits) -> Uni
         if (uri != null) scope.launch {
             val bytes = TagEditor.coverFrom(context, uri)
             if (bytes != null) { newCover = bytes; removeCover = false }
-            else Toast.makeText(context, "This picture can't be used", Toast.LENGTH_SHORT).show()
+            else Toast.makeText(context, com.powersound.player.data.Lang.tr("This picture can't be used"), Toast.LENGTH_SHORT).show()
         }
     }
     val preview = remember(newCover) { newCover?.let { b -> BitmapFactory.decodeByteArray(b, 0, b.size)?.asImageBitmap() } }

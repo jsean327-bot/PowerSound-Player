@@ -177,6 +177,7 @@ class VideoActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // opened straight from another app: the settings may not be loaded yet
         SettingsStore.init(this)
+        com.powersound.player.data.Lang.init(this)
         VideoPrefsStore.init(this)
         // opened from a file manager / another app: crashes are saved too (Settings → Misc → View error log)
         com.powersound.player.data.CrashLog.install(this)
@@ -223,7 +224,12 @@ class VideoActivity : ComponentActivity() {
 
         setContent {
             PowerSoundTheme {
-                VideoScreen(activity = this, onBack = { leave() })
+                // the video player keeps left to right in every language (seek bar, gestures), only its texts change
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr
+                ) {
+                    VideoScreen(activity = this, onBack = { leave() })
+                }
             }
         }
         runCatching { registerPipReceiver() }
