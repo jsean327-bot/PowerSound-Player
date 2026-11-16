@@ -30,6 +30,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -306,6 +307,7 @@ class VideoActivity : ComponentActivity() {
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(20_000)
             .setDefaultRequestProperties(headers.filterKeys { !it.equals("User-Agent", true) })
+        httpFactory = http
         dataSources = DefaultDataSource.Factory(this, http)
         val swAudio = st.videoSwAudio
         // HW: the phone's chip first; SW: software first (for the picture, and for the sound when chosen)
@@ -346,6 +348,7 @@ class VideoActivity : ComponentActivity() {
     }
 
     private var dataSources: DefaultDataSource.Factory? = null
+    private var httpFactory: DefaultHttpDataSource.Factory? = null
 
     /** HW / HW+ / SW, or "Use SW audio decoder": the player is built again at the same spot. */
     fun rebuildPlayer() {
@@ -753,68 +756,223 @@ class VideoActivity : ComponentActivity() {
         return false
     }
 
-    private fun castVideo(session: CastSession) {
+    /** True while the TV gets the web video through the phone (with the site's headers). */
+    val castViaPhone = mutableStateOf(false)
+    /** The video is a web address (the "through the phone / directly" choice makes sense). */
+    val castIsWeb = mutableStateOf(false)
+    /** Subtitles the TV can show: track id and name. */
+    val castSubs = mutableStateOf<List<Pair<Long, String>>>(emptyList())
+    /** The subtitle shown on the TV (track id), or -1. */
+    val castSub = mutableLongStateOf(-1L)
+    val castSubScale = mutableFloatStateOf(1f)
+    /** A line under the controls: what is going on / what went wrong. */
+    val castNote = mutableStateOf<String?>(null)
+    private var castJob: Job? = null
+    private var castTriedPhone = false
+    private var castLoadedAt = 0L
+
+    /**
+     * Sends the video to the TV.
+     * - a file of the phone: the phone's little server gives it to the Chromecast
+     * - a web video: directly when its app sent no headers; through the phone when it did (Referer, Cookie…) or when
+     *   the Chromecast could not play it directly ([viaPhone] null = decide here)
+     * - subtitle files (SRT / ASS / WebVTT) go along as WebVTT
+     */
+    private fun castVideo(session: CastSession, viaPhone: Boolean? = null, startMs: Long? = null) {
         val p = playerOrNull() ?: return
         val item = p.currentMediaItem ?: return
         val uri = item.localConfiguration?.uri ?: return
         val web = uri.scheme == "http" || uri.scheme == "https"
-        val url: String
-        val mime: String
-        if (web) {
-            url = uri.toString()
-            mime = item.localConfiguration?.mimeType
-                ?: when {
-                    url.contains(".m3u8", true) -> "application/x-mpegURL"
-                    url.contains(".mpd", true) -> "application/dash+xml"
-                    url.contains(".webm", true) -> "video/webm"
-                    else -> "video/mp4"
-                }
-        } else {
-            val server = castServer ?: MediaServer(openSong = { id -> openForCast(id) }, cover = { null }).also { castServer = it }
-            server.start()
-            val id = (castFiles.keys.maxOrNull() ?: 0L) + 1
-            castFiles[id] = uri
-            url = server.songUrl(id) ?: run {
-                castError("The phone needs to be on Wi-Fi to cast its videos")
-                return
-            }
-            mime = runCatching { contentResolver.getType(uri) }.getOrNull() ?: "video/mp4"
-        }
-        val md = com.google.android.gms.cast.MediaMetadata(com.google.android.gms.cast.MediaMetadata.MEDIA_TYPE_MOVIE)
-        md.putString(com.google.android.gms.cast.MediaMetadata.KEY_TITLE, item.mediaMetadata.title?.toString() ?: "Video")
-        val info = MediaInfo.Builder(url)
-            .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
-            .setContentType(mime)
-            .setContentUrl(url)
-            .setMetadata(md)
-            .build()
-        val load = MediaLoadRequestData.Builder()
-            .setMediaInfo(info)
-            .setAutoplay(true)
-            .setCurrentTime(p.currentPosition)
-            .build()
-        val client = session.remoteMediaClient ?: return
-        runCatching { client.load(load) }.onFailure { castError("The Chromecast didn't accept the video"); return }
+        val start = startMs ?: p.currentPosition
+        val server = castServer ?: MediaServer(openSong = { id -> openForCast(id) }, cover = { null }).also { castServer = it }
+        server.start()
         p.pause()
         val name = session.castDevice?.friendlyName ?: "Chromecast"
         castingTo.value = name
+        castIsWeb.value = web
+        castNote.value = "Sending to $name…"
         CastControl.setDevice(name)
-        castPoll?.cancel()
-        castPoll = lifecycleScope.launch {
-            while (isActive) {
-                val c = CastControl.context(this@VideoActivity)?.sessionManager?.currentCastSession?.remoteMediaClient
-                if (c != null) {
-                    castPosition.longValue = c.approximateStreamPosition
-                    castDuration.longValue = c.streamDuration.coerceAtLeast(0L)
-                    if (castPlaying.value != c.isPlaying) {
-                        castPlaying.value = c.isPlaying
-                        VideoBackgroundService.refresh()
-                    }
+        if (viaPhone == null) castTriedPhone = false
+        val site = headers
+        castJob?.cancel()
+        castJob = lifecycleScope.launch {
+            var url: String
+            var mime: String
+            var fmp4 = false
+            var phone = false
+            if (web) {
+                val address = uri.toString()
+                phone = viaPhone ?: site.isNotEmpty()
+                val probe = withContext(Dispatchers.IO) { com.powersound.player.cast.CastWeb.probe(address, site) }
+                mime = probe?.mime ?: item.localConfiguration?.mimeType ?: when {
+                    address.contains(".m3u8", true) -> "application/x-mpegURL"
+                    address.contains(".mpd", true) -> "application/dash+xml"
+                    address.contains(".webm", true) -> "video/webm"
+                    else -> "video/mp4"
                 }
-                delay(500)
+                fmp4 = probe?.fmp4 == true
+                url = address
+                if (phone) {
+                    val through = server.proxyUrl(com.powersound.player.cast.ProxyTarget(address, site))
+                    if (through == null) {
+                        if (viaPhone == true) {
+                            castNote.value = "The phone needs to be on Wi-Fi to pass the video to the TV"
+                            return@launch
+                        }
+                        phone = false
+                    } else url = through
+                }
+            } else {
+                val id = (castFiles.keys.maxOrNull() ?: 0L) + 1
+                castFiles[id] = uri
+                url = server.songUrl(id) ?: run {
+                    castNote.value = "The phone needs to be on Wi-Fi to cast its videos"
+                    return@launch
+                }
+                mime = runCatching { contentResolver.getType(uri) }.getOrNull() ?: "video/mp4"
+            }
+            castViaPhone.value = phone
+            if (phone) castTriedPhone = true
+
+            // subtitle files → WebVTT tracks for the TV
+            val tracks = ArrayList<com.google.android.gms.cast.MediaTrack>()
+            var active = -1L
+            item.localConfiguration?.subtitleConfigurations.orEmpty().forEachIndexed { i, sub ->
+                if (sub.mimeType == MimeTypes.APPLICATION_TTML) return@forEachIndexed
+                val address = server.textUrl { subtitleAsVtt(sub.uri, site) } ?: return@forEachIndexed
+                val id = 1000L + i
+                tracks += com.google.android.gms.cast.MediaTrack.Builder(id, com.google.android.gms.cast.MediaTrack.TYPE_TEXT)
+                    .setName(sub.label?.toString() ?: "Subtitles ${i + 1}")
+                    .setSubtype(com.google.android.gms.cast.MediaTrack.SUBTYPE_SUBTITLES)
+                    .setContentId(address)
+                    .setContentType("text/vtt")
+                    .setLanguage(sub.language ?: "und")
+                    .build()
+                if (active < 0 && (sub.selectionFlags and C.SELECTION_FLAG_DEFAULT) != 0) active = id
+            }
+            if (active < 0 && tracks.isNotEmpty()) active = tracks[0].id
+
+            val md = com.google.android.gms.cast.MediaMetadata(com.google.android.gms.cast.MediaMetadata.MEDIA_TYPE_MOVIE)
+            md.putString(com.google.android.gms.cast.MediaMetadata.KEY_TITLE, item.mediaMetadata.title?.toString() ?: "Video")
+            val info = MediaInfo.Builder(url)
+                .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+                .setContentType(mime)
+                .setContentUrl(url)
+                .setMetadata(md)
+                .setTextTrackStyle(castTextStyle())
+            if (tracks.isNotEmpty()) info.setMediaTracks(tracks)
+            if (fmp4) {
+                // HLS in fragmented MP4: the Chromecast expects MPEG-TS unless told
+                info.setHlsSegmentFormat("fmp4")
+                info.setHlsVideoSegmentFormat("fmp4")
+            }
+            val load = MediaLoadRequestData.Builder()
+                .setMediaInfo(info.build())
+                .setAutoplay(true)
+                .setCurrentTime(start)
+            if (active >= 0) load.setActiveTrackIds(longArrayOf(active))
+            val client = session.remoteMediaClient ?: return@launch
+            castLoadedAt = android.os.SystemClock.elapsedRealtime()
+            runCatching {
+                client.load(load.build()).setResultCallback { r ->
+                    if (!r.status.isSuccess) castFailed(start)
+                    else castNote.value = null
+                }
+            }.onFailure {
+                castNote.value = "The Chromecast didn't accept the video"
+                return@launch
+            }
+            castPoll?.cancel()
+            castPoll = lifecycleScope.launch {
+                while (isActive) {
+                    val c = CastControl.context(this@VideoActivity)?.sessionManager?.currentCastSession?.remoteMediaClient
+                    if (c != null) {
+                        castPosition.longValue = c.approximateStreamPosition
+                        castDuration.longValue = c.streamDuration.coerceAtLeast(0L)
+                        if (castPlaying.value != c.isPlaying) {
+                            castPlaying.value = c.isPlaying
+                            VideoBackgroundService.refresh()
+                        }
+                        // subtitles the TV has (ours, and the ones inside an HLS video)
+                        val texts = c.mediaInfo?.mediaTracks.orEmpty()
+                            .filter { it.type == com.google.android.gms.cast.MediaTrack.TYPE_TEXT }
+                            .map { it.id to (it.name ?: it.language ?: "Subtitles") }
+                        if (texts != castSubs.value) castSubs.value = texts
+                        val on = c.mediaStatus?.activeTrackIds?.firstOrNull { id -> texts.any { it.first == id } } ?: -1L
+                        if (castSub.longValue != on) castSub.longValue = on
+                        // the TV gave up on the video a moment after taking it (the site refused the Chromecast)
+                        val st = c.mediaStatus
+                        if (st != null && st.playerState == com.google.android.gms.cast.MediaStatus.PLAYER_STATE_IDLE &&
+                            st.idleReason == com.google.android.gms.cast.MediaStatus.IDLE_REASON_ERROR &&
+                            android.os.SystemClock.elapsedRealtime() - castLoadedAt in 1_500..60_000
+                        ) {
+                            castLoadedAt = 0L
+                            castFailed(castPosition.longValue.takeIf { it > 0 } ?: start)
+                        }
+                    }
+                    delay(500)
+                }
             }
         }
     }
+
+    /** The TV could not play it: a web video sent directly is tried once more through the phone. */
+    private fun castFailed(startMs: Long) {
+        val session = CastControl.context(this)?.sessionManager?.currentCastSession
+        if (castIsWeb.value && !castTriedPhone && session != null && session.isConnected) {
+            castTriedPhone = true
+            castNote.value = "The TV couldn't open it directly — sending it through the phone…"
+            castVideo(session, viaPhone = true, startMs = startMs)
+        } else {
+            castNote.value = if (castIsWeb.value) "The TV couldn't play this video (its site refused, or the Chromecast doesn't know this format)"
+                else "The TV couldn't play this file (the Chromecast doesn't know this format)"
+        }
+    }
+
+    /** Cast panel: send the web video through the phone (true) or let the TV fetch it itself (false). */
+    fun castRoute(viaPhone: Boolean) {
+        val session = CastControl.context(this)?.sessionManager?.currentCastSession ?: return
+        if (!session.isConnected) return
+        castTriedPhone = true
+        castVideo(session, viaPhone = viaPhone, startMs = castPosition.longValue)
+    }
+
+    /** Cast panel: the subtitle shown on the TV (null = none). */
+    fun castSetSubtitle(id: Long?) {
+        runCatching { remote()?.setActiveMediaTracks(if (id == null) longArrayOf() else longArrayOf(id)) }
+        castSub.longValue = id ?: -1L
+    }
+
+    /** Cast panel: subtitle size on the TV. */
+    fun castSubtitleSize(scale: Float) {
+        castSubScale.floatValue = scale.coerceIn(0.5f, 2.5f)
+        runCatching { remote()?.setTextTrackStyle(castTextStyle()) }
+    }
+
+    private fun castTextStyle() = com.google.android.gms.cast.TextTrackStyle().apply {
+        foregroundColor = android.graphics.Color.WHITE
+        backgroundColor = android.graphics.Color.TRANSPARENT
+        edgeType = com.google.android.gms.cast.TextTrackStyle.EDGE_TYPE_OUTLINE
+        edgeColor = android.graphics.Color.BLACK
+        fontScale = castSubScale.floatValue
+    }
+
+    /** A subtitle file (of the phone, or from the web with the site's headers) as WebVTT for the TV. */
+    private fun subtitleAsVtt(uri: Uri, site: Map<String, String>): ByteArray? = runCatching {
+        val bytes = if (uri.scheme == "http" || uri.scheme == "https") {
+            val c = com.powersound.player.cast.CastWeb.open(uri.toString(), site)
+            try {
+                if (c.responseCode >= 400) return null
+                com.powersound.player.cast.CastWeb.readText(c.inputStream)
+            } finally {
+                c.disconnect()
+            }
+        } else {
+            (if (uri.scheme == "file") java.io.FileInputStream(uri.path ?: return null) else contentResolver.openInputStream(uri))
+                ?.use { com.powersound.player.cast.CastWeb.readText(it) } ?: return null
+        }
+        com.powersound.player.cast.CastWeb.toVtt(bytes)?.toByteArray(Charsets.UTF_8)
+    }.getOrNull()
 
     private fun castError(msg: String) {
         error.value = msg
@@ -855,6 +1013,9 @@ class VideoActivity : ComponentActivity() {
             return
         }
         castPoll?.cancel()
+        castJob?.cancel()
+        castNote.value = null
+        castSubs.value = emptyList()
         val at = castPosition.longValue
         castingTo.value = null
         // the casting notification goes (the screen is behind: nothing is playing any more)
@@ -1164,6 +1325,15 @@ class VideoActivity : ComponentActivity() {
         savePosition()
         request = req
         keys = req.keys.toMutableList()
+        // the new video's own headers (Referer, Cookie…): for playing here and for the TV
+        headers = req.headers
+        httpFactory?.let { f ->
+            f.setUserAgent(
+                headers.entries.firstOrNull { it.key.equals("User-Agent", true) }?.value
+                    ?: "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}) PowerSound"
+            )
+            f.setDefaultRequestProperties(headers.filterKeys { !it.equals("User-Agent", true) })
+        }
         ended = false
         abA.value = null
         abB.value = null

@@ -122,8 +122,38 @@ class VideoBackgroundService : Service() {
         }
     }
 
+    private var wake: android.os.PowerManager.WakeLock? = null
+    private var wifi: android.net.wifi.WifiManager.WifiLock? = null
+
+    /** Casting with the screen off: the phone still hands the video (and subtitles) to the TV over Wi-Fi. */
+    private fun stayAwake() {
+        if (wake == null) runCatching {
+            wake = (getSystemService(POWER_SERVICE) as android.os.PowerManager)
+                .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "PowerSound:cast").apply {
+                    setReferenceCounted(false)
+                    acquire(6 * 60 * 60 * 1000L)
+                }
+        }
+        if (wifi == null) runCatching {
+            @Suppress("DEPRECATION")
+            wifi = (applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager)
+                .createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "PowerSound:cast").apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+        }
+    }
+
+    private fun sleepAgain() {
+        runCatching { wake?.takeIf { it.isHeld }?.release() }
+        runCatching { wifi?.takeIf { it.isHeld }?.release() }
+        wake = null
+        wifi = null
+    }
+
     /** Casting: the TV's controls (−10 s, play / pause, +10 s, stop) while you are in another app. */
     private fun showCasting(activity: VideoActivity, device: String) {
+        stayAwake()
         val playing = activity.castPlaying.value
         val title = activity.playerOrNull()?.mediaMetadata?.title?.toString() ?: "Video"
         val nm = getSystemService(NotificationManager::class.java)
@@ -164,6 +194,7 @@ class VideoBackgroundService : Service() {
 
     override fun onDestroy() {
         running = null
+        sleepAgain()
         runCatching {
             if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE)
             else @Suppress("DEPRECATION") stopForeground(true)

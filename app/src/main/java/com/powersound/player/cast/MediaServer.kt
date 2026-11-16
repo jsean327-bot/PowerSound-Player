@@ -25,6 +25,9 @@ class ServedFile(val channel: FileChannel, val size: Long, val mime: String, pri
  * Supports `Range` requests, which the Chromecast uses to start in the middle of a song and to jump.
  *
  * [openSong] gives the file of a song id; [cover] gives a JPEG of its cover (or null).
+ *
+ * For videos it can also fetch a web video for the Chromecast with the headers its site wants ([proxyUrl]) and
+ * give subtitles as WebVTT ([textUrl]).
  */
 class MediaServer(
     private val openSong: (Long) -> ServedFile?,
@@ -36,6 +39,24 @@ class MediaServer(
     private var server: ServerSocket? = null
     private var pool: ExecutorService? = null
 
+    private val proxies = java.util.concurrent.ConcurrentHashMap<Long, ProxyTarget>()
+    private val texts = java.util.concurrent.ConcurrentHashMap<Long, () -> ByteArray?>()
+    private val ids = java.util.concurrent.atomic.AtomicLong(0)
+
+    /** Address through the phone of a web video: the phone fetches it with [target]'s headers. Null without Wi-Fi. */
+    fun proxyUrl(target: ProxyTarget): String? {
+        val id = ids.incrementAndGet()
+        proxies[id] = target
+        return base()?.let { "$it/p/$id" }
+    }
+
+    /** Address of a text made when asked (a subtitle as WebVTT). Null without Wi-Fi. */
+    fun textUrl(text: () -> ByteArray?): String? {
+        val id = ids.incrementAndGet()
+        texts[id] = text
+        return base()?.let { "$it/t/$id.vtt" }
+    }
+
     val port: Int get() = server?.localPort ?: 0
     val running: Boolean get() = server?.isClosed == false
 
@@ -43,7 +64,7 @@ class MediaServer(
     fun start(): Boolean {
         if (running) return true
         return runCatching {
-            val s = ServerSocket(0, 16)
+            val s = ServerSocket(0, 64)
             val p = Executors.newCachedThreadPool { r -> Thread(r, "PowerSound-cast").apply { isDaemon = true } }
             server = s
             pool = p
@@ -114,6 +135,21 @@ class MediaServer(
                 }
                 when (path[1]) {
                     "s" -> sendSong(out, id, headers["range"], head)
+                    // a web video through the phone: /p/<id> itself, /x/<id>?u=<address> a piece of it (HLS)
+                    "p", "x" -> {
+                        val target = proxies[id]
+                        val url = if (path[1] == "p") target?.url else query(parts[1], "u")
+                        if (target == null || url == null) status(out, 404, "Not Found", listOf("Content-Length" to "0"))
+                        else sendProxy(out, id, target, url, headers["range"], head)
+                    }
+                    "t" -> {
+                        val vtt = runCatching { texts[id]?.invoke() }.getOrNull()
+                        if (vtt == null) status(out, 404, "Not Found", listOf("Content-Length" to "0"))
+                        else {
+                            status(out, 200, "OK", listOf("Content-Type" to "text/vtt; charset=utf-8", "Content-Length" to vtt.size.toString()))
+                            if (!head) out.write(vtt)
+                        }
+                    }
                     "a" -> {
                         val jpg = cover(id)
                         if (jpg == null) status(out, 404, "Not Found", listOf("Content-Length" to "0"))
@@ -178,6 +214,64 @@ class MediaServer(
             }
         } finally {
             f.close()
+        }
+    }
+
+    private fun query(target: String, name: String): String? =
+        target.substringAfter('?', "").split('&').firstOrNull { it.startsWith("$name=") }
+            ?.substringAfter('=')?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrNull() }
+
+    /** Fetches [url] with the site's headers and hands it to the Chromecast; HLS playlists are rewritten on the way. */
+    private fun sendProxy(out: OutputStream, id: Long, target: ProxyTarget, url: String, range: String?, head: Boolean) {
+        val c = try {
+            // HEAD is asked as one byte with GET: many video sites answer HEAD with an error
+            CastWeb.open(url, target.headers, if (head) "bytes=0-0" else range)
+        } catch (e: Exception) {
+            status(out, 502, "Bad Gateway", listOf("Content-Length" to "0")); return
+        }
+        try {
+            val code = c.responseCode
+            val type = c.contentType
+            if (code >= 400) {
+                status(out, code, c.responseMessage ?: "Error", listOf("Content-Length" to "0")); return
+            }
+            if (head) {
+                val h = ArrayList<Pair<String, String>>()
+                h += "Content-Type" to (if (CastWeb.looksLikeHls(type, c.url.toString())) CastWeb.HLS_MIME else type ?: "application/octet-stream")
+                val total = c.getHeaderField("Content-Range")?.substringAfter('/', "")?.toLongOrNull()
+                    ?: c.getHeaderField("Content-Length")?.toLongOrNull()?.takeIf { code == 200 }
+                if (total != null) h += "Content-Length" to total.toString()
+                h += "Accept-Ranges" to "bytes"
+                status(out, 200, "OK", h); return
+            }
+            val input = java.io.BufferedInputStream(c.inputStream, 64 * 1024)
+            val final = c.url.toString()
+            if (CastWeb.looksLikeHls(type, final) || CastWeb.startsAsHls(input)) {
+                // relative to this playlist's own address (…/<key>/p/<id> or …/<key>/x/<id>): …/<key>/x/<id>?u=…
+                val text = CastWeb.rewriteHls(String(CastWeb.readText(input), Charsets.UTF_8), final) { u ->
+                    "../x/$id?u=" + java.net.URLEncoder.encode(u, "UTF-8")
+                }.toByteArray(Charsets.UTF_8)
+                status(
+                    out, 200, "OK",
+                    listOf("Content-Type" to CastWeb.HLS_MIME, "Content-Length" to text.size.toString(), "Cache-Control" to "no-cache")
+                )
+                out.write(text)
+                return
+            }
+            val h = ArrayList<Pair<String, String>>()
+            h += "Content-Type" to (type ?: "application/octet-stream")
+            c.getHeaderField("Content-Length")?.let { h += "Content-Length" to it }
+            c.getHeaderField("Content-Range")?.let { h += "Content-Range" to it }
+            h += "Accept-Ranges" to (c.getHeaderField("Accept-Ranges") ?: "bytes")
+            status(out, code, if (code == 206) "Partial Content" else "OK", h)
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                out.write(buf, 0, n)
+            }
+        } finally {
+            runCatching { c.disconnect() }
         }
     }
 

@@ -1119,6 +1119,21 @@ private fun FlatBar(fraction: Float, color: Color, enabled: Boolean, modifier: M
     }
 }
 
+@Composable
+private fun CastChip(label: String, on: Boolean, accent: Color, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .heightIn(min = 36.dp)
+            .clip(RoundedCornerShape(50))
+            .background(if (on) accent.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = if (on) accent else Color.White.copy(alpha = 0.85f), fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
 /** While the video plays on a Chromecast: its name, the time bar, play / pause, ±10 s, stop. */
 @Composable
 private fun CastPanel(activity: VideoActivity, device: String, title: String) {
@@ -1128,7 +1143,10 @@ private fun CastPanel(activity: VideoActivity, device: String, title: String) {
     val playing by activity.castPlaying
     var seeking by remember { mutableStateOf<Float?>(null) }
     Box(Modifier.fillMaxSize().background(Color(0xFF0E0E13)).safeDrawingPadding(), contentAlignment = Alignment.Center) {
-        Column(Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(24.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Icon(Icons.Rounded.CastConnected, contentDescription = null, tint = primary, modifier = Modifier.size(56.dp))
             Spacer(Modifier.height(10.dp))
             Text("Playing on $device", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -1154,13 +1172,56 @@ private fun CastPanel(activity: VideoActivity, device: String, title: String) {
                 RoundIcon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play", big = true) { activity.castToggle() }
                 RoundIcon(Icons.Rounded.Forward10, "Forward 10 seconds") { activity.castSeek(pos + 10_000) }
             }
-            Spacer(Modifier.height(16.dp))
+            // what is going on / what went wrong
+            activity.castNote.value?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(it, color = primary, fontSize = 13.sp, textAlign = TextAlign.Center)
+            }
+            // subtitles on the TV
+            val subs by activity.castSubs
+            val sub by activity.castSub
+            if (subs.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Text("Subtitles on the TV", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CastChip("Off", sub < 0, primary) { activity.castSetSubtitle(null) }
+                    subs.forEach { (id, name) -> CastChip(name, sub == id, primary) { activity.castSetSubtitle(id) } }
+                }
+                if (sub >= 0) {
+                    val scale by activity.castSubScale
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CastChip("A−", false, primary) { activity.castSubtitleSize(scale - 0.1f) }
+                        Text("Size ${(scale * 100).toInt()}%", color = Color.White, fontSize = 13.sp)
+                        CastChip("A+", false, primary) { activity.castSubtitleSize(scale + 0.1f) }
+                    }
+                }
+            }
+            // a web video: let the TV fetch it itself, or pass it through the phone (with the site's headers)
+            if (activity.castIsWeb.value) {
+                val via by activity.castViaPhone
+                Spacer(Modifier.height(14.dp))
+                Text("How the TV gets the video", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CastChip("Directly", !via, primary) { if (via) activity.castRoute(false) }
+                    CastChip("Through the phone", via, primary) { if (!via) activity.castRoute(true) }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
             TextButton(onClick = { activity.stopCasting() }) { Text("Stop casting") }
             Text(
+                (if (activity.castIsWeb.value) "Through the phone: for videos whose site refuses the TV (the picture doesn't start). The phone " +
+                    "fetches the video and hands it to the TV, so it has to stay on, on the same Wi-Fi.\n" else "") +
                 "Back takes you to the other app (to pick another episode, say): the TV keeps playing, the controls " +
                     "stay in the notification, and the next video you open with PowerSound goes straight to the TV.\n" +
-                    "The phone's volume buttons change the TV's volume. The Chromecast plays the file itself, " +
-                    "so subtitles, audio settings and the equalizer are not used there.",
+                    "The phone's volume buttons change the TV's volume. Subtitle files (SRT, ASS, WebVTT) go to the TV; " +
+                    "subtitles inside the video file itself (MKV), the audio settings and the equalizer are not used there.",
                 color = Color.White.copy(alpha = 0.5f),
                 fontSize = 12.sp,
                 textAlign = TextAlign.Center
