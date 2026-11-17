@@ -883,18 +883,19 @@ fun NowPlayingScreen(
                         .alpha(buttonsAlpha)
                         .onGloballyPositioned { rowBounds = it.boundsInParent() },
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(if (showPro) 6.dp else 18.dp)
+                    horizontalArrangement = Arrangement.spacedBy(if (showPro) 4.dp else 18.dp)
                 ) {
-                    TransportButton(Icons.Rounded.SkipPrevious, 50, st.buttonsBg, onPrevious, onLongClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showToast(if (prevCat()) "Previous category" else "No other category", "Long press ⏮ / ⏭ to change category")
-                    })
+                    // Like Poweramp: ⏪⏪ category | ⏪ song | ▶ | song ⏩ | category ⏩⏩
                     if (showPro) {
                         // Pro Buttons: category change, or -10 s in long tracks
-                        TransportButton(if (proSeeks) Icons.Rounded.FastRewind else Icons.Rounded.FirstPage, 58, st.buttonsBg, {
+                        TransportButton(if (proSeeks) Icons.Rounded.FastRewind else TripleArrowLeft, 50, st.buttonsBg, {
                             if (proSeeks) onSeekBy(-10_000) else showToast(if (prevCat()) "Previous category" else "No other category", "Pro Buttons")
                         })
                     }
+                    TransportButton(DoubleArrowLeft, 64, st.buttonsBg, onPrevious, onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showToast(if (prevCat()) "Previous category" else "No other category", "Long press ⏮ / ⏭ to change category")
+                    })
                     Box(
                         Modifier
                             .size(84.dp)
@@ -911,15 +912,15 @@ fun NowPlayingScreen(
                             modifier = Modifier.size(if (st.buttonsBg) 50.dp else 64.dp)
                         )
                     }
-                    if (showPro) {
-                        TransportButton(if (proSeeks) Icons.Rounded.FastForward else Icons.Rounded.LastPage, 58, st.buttonsBg, {
-                            if (proSeeks) onSeekBy(10_000) else showToast(if (nextCat()) "Next category" else "No other category", "Pro Buttons")
-                        })
-                    }
-                    TransportButton(Icons.Rounded.SkipNext, 50, st.buttonsBg, onNext, onLongClick = {
+                    TransportButton(DoubleArrowRight, 64, st.buttonsBg, onNext, onLongClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         showToast(if (nextCat()) "Next category" else "No other category", "Long press ⏮ / ⏭ to change category")
                     })
+                    if (showPro) {
+                        TransportButton(if (proSeeks) Icons.Rounded.FastForward else TripleArrowRight, 50, st.buttonsBg, {
+                            if (proSeeks) onSeekBy(10_000) else showToast(if (nextCat()) "Next category" else "No other category", "Pro Buttons")
+                        })
+                    }
                 }
             }
 
@@ -1206,6 +1207,35 @@ private fun SmallPill(icon: ImageVector, active: Boolean, background: Boolean = 
         Icon(icon, contentDescription = null, tint = if (active) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = if (background) 0.6f else 0.85f), modifier = Modifier.size(22.dp))
     }
 }
+
+// ---- Poweramp-style arrows: two for the song, three (smaller) for the category ----
+
+/** Filled triangles pointing right ([right]) or left, with rounded corners (a round stroke of the same white). */
+private fun arrows(name: String, tips: List<Pair<Float, Float>>, right: Boolean, h: Float): androidx.compose.ui.graphics.vector.ImageVector {
+    val b = androidx.compose.ui.graphics.vector.ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
+    for ((from, to) in tips) {
+        fun x(v: Float) = if (right) v else 24f - v
+        b.addPath(
+            pathData = androidx.compose.ui.graphics.vector.PathBuilder().apply {
+                moveTo(x(from), 12f - h)
+                lineTo(x(to), 12f)
+                lineTo(x(from), 12f + h)
+                close()
+            }.nodes,
+            fill = androidx.compose.ui.graphics.SolidColor(Color.White),
+            stroke = androidx.compose.ui.graphics.SolidColor(Color.White),
+            strokeLineWidth = 2.2f,
+            strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round,
+            strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+    }
+    return b.build()
+}
+
+private val DoubleArrowRight = arrows("DoubleArrowRight", listOf(3.5f to 12f, 12f to 20.5f), right = true, h = 6f)
+private val DoubleArrowLeft = arrows("DoubleArrowLeft", listOf(3.5f to 12f, 12f to 20.5f), right = false, h = 6f)
+private val TripleArrowRight = arrows("TripleArrowRight", listOf(1.5f to 8.5f, 8.5f to 15.5f, 15.5f to 22.5f), right = true, h = 5.5f)
+private val TripleArrowLeft = arrows("TripleArrowLeft", listOf(1.5f to 8.5f, 8.5f to 15.5f, 15.5f to 22.5f), right = false, h = 5.5f)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
