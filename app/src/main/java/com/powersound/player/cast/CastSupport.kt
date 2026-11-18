@@ -97,13 +97,16 @@ class CastItems(private val context: Context, private val server: MediaServer) :
         val local = mediaItem.localConfiguration?.uri ?: mediaItem.requestMetadata.mediaUri
         val url: String
         val mime: String
-        if (songId != null) {
+        val web = local?.scheme == "http" || local?.scheme == "https"
+        if (songId != null && !(songId < 0 && web)) {
+            // the phone's songs and shared-folder songs: through the phone's server
             url = server.songUrl(songId) ?: ""
-            mime = mimeOf(songId)
+            mime = if (songId < 0) com.powersound.player.net.NetLibrary.song(context, songId)?.mimeType ?: "audio/mpeg" else mimeOf(songId)
         } else {
             // a radio stream: the Chromecast fetches it straight from the internet
             url = local?.toString() ?: ""
             mime = mediaItem.localConfiguration?.mimeType
+                ?: songId?.takeIf { it < 0 }?.let { com.powersound.player.net.NetLibrary.song(context, it)?.mimeType }
                 ?: if (url.contains(".m3u8", ignoreCase = true)) "application/x-mpegURL" else "audio/mpeg"
         }
         val m = mediaItem.mediaMetadata

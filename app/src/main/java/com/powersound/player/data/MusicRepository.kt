@@ -105,6 +105,8 @@ object MusicRepository {
                 )
             }
         }
+        // Library → Network → Add to Library: songs of media servers and shared folders
+        songs.addAll(com.powersound.player.net.NetLibrary.songs(context))
         songs
     }
 

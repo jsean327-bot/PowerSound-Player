@@ -449,7 +449,12 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         if (result.resultCode == Activity.RESULT_OK && ids.isNotEmpty()) vm.onSongsDeleted(ids)
         pendingDeleteIds = emptyList()
     }
-    fun deleteSongs(songs: List<Song>) {
+    fun deleteSongs(all: List<Song>) {
+        // network songs stay on their computer: they are only taken out of the library (Network → Remove from Library)
+        val songs = all.filter { it.id >= 0 }
+        if (songs.size < all.size) {
+            android.widget.Toast.makeText(context, com.powersound.player.data.Lang.tr("Songs from the network can't be deleted from the phone"), android.widget.Toast.LENGTH_SHORT).show()
+        }
         if (songs.isEmpty()) return
         pendingDeleteIds = songs.map { it.id }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -1457,6 +1462,7 @@ private fun ScreenContent(
                         playingId = player.queue.getOrNull(player.currentIndex)?.mediaId,
                         onBack = { vm.pop() },
                         onPlayAudio = { list, i, shuffle -> vm.playNetwork(list, i, shuffle) },
+                        onLibraryChanged = { vm.loadLibrary(force = true) },
                         onPlayVideo = { list, i ->
                             com.powersound.player.video.VideoActivity.openNetwork(
                                 netContext, list.mapNotNull { it.url }, list.filter { it.url != null }.map { it.title }, i

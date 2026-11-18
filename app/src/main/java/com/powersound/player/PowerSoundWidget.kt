@@ -94,10 +94,10 @@ object WidgetUpdater {
             mode(v, R.id.wl_shuffle, s.shuffle, accent)
             v.setImageViewResource(R.id.wl_repeat, if (s.repeat == 2) R.drawable.ic_n_repeat_one else R.drawable.ic_n_repeat)
             mode(v, R.id.wl_repeat, s.repeat != 0, accent)
-            v.setContentDescription(R.id.wl_shuffle, if (s.shuffle) "Shuffle on" else "Shuffle off")
+            v.setContentDescription(R.id.wl_shuffle, com.powersound.player.data.Lang.tr(if (s.shuffle) "Shuffle on" else "Shuffle off"))
             v.setContentDescription(
                 R.id.wl_repeat,
-                when (s.repeat) { 2 -> "Repeat song"; 1 -> "Repeat all"; else -> "Repeat off" }
+                com.powersound.player.data.Lang.tr(when (s.repeat) { 2 -> "Repeat song"; 1 -> "Repeat all"; else -> "Repeat off" })
             )
             v.setOnClickPendingIntent(R.id.wl_shuffle, command(context, ACTION_SHUFFLE, 15))
             v.setOnClickPendingIntent(R.id.wl_repeat, command(context, ACTION_REPEAT, 16))
@@ -151,7 +151,7 @@ object WidgetUpdater {
             v.setViewPadding(art, pad, pad, pad, pad)
         }
         v.setImageViewResource(play, if (s.playing) R.drawable.ic_w_pause else R.drawable.ic_w_play)
-        v.setContentDescription(play, if (s.playing) "Pause" else "Play")
+        v.setContentDescription(play, com.powersound.player.data.Lang.tr(if (s.playing) "Pause" else "Play"))
         v.setOnClickPendingIntent(play, command(context, ACTION_PLAY_PAUSE, 11))
         v.setOnClickPendingIntent(next, command(context, ACTION_NEXT, 12))
         v.setOnClickPendingIntent(prev, command(context, ACTION_PREV, 13))
@@ -160,13 +160,15 @@ object WidgetUpdater {
 
     /** The last song the widget showed (used when the app isn't running). */
     fun showSaved(context: Context) {
+        com.powersound.player.data.SettingsStore.init(context)
+        com.powersound.player.data.Lang.init(context)
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val modes = context.getSharedPreferences("powersound_player", Context.MODE_PRIVATE)
         show(
             context,
             WidgetState(
                 p.getString("title", null) ?: "PowerSound",
-                p.getString("artist", null) ?: "Tap play to listen",
+                p.getString("artist", null) ?: com.powersound.player.data.Lang.tr("Tap play to listen"),
                 playing = false,
                 positionMs = p.getLong("pos", 0L),
                 durationMs = p.getLong("dur", 0L),

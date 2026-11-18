@@ -29,8 +29,10 @@ data class Song(
     val fileName: String
         get() = path.substringAfterLast('/').substringBeforeLast('.').ifBlank { title }
 
+    /** The phone's songs: their MediaStore entry. Network songs (negative id): their http… / smb://… address. */
     val uri: Uri
-        get() = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+        get() = if (id < 0 && (path.startsWith("http") || path.startsWith("smb:"))) Uri.parse(path)
+            else ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
 
     val formatLabel: String
         get() = formatFromMime(mimeType)

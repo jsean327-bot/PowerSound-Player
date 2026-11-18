@@ -103,6 +103,8 @@ class PlaybackService : MediaLibraryService() {
 
         AudioEngine.init(this)
         SettingsStore.init(this)
+        // the notification, lock screen, widget and car in the app's language
+        com.powersound.player.data.Lang.init(this)
         StatsStore.init(this)
         com.powersound.player.data.LibraryStores.init(this)
         com.powersound.player.data.CrashLog.install(this)
@@ -489,6 +491,13 @@ class PlaybackService : MediaLibraryService() {
 
     /** A song file for the Chromecast (runs on the web server's thread). */
     private fun openSongFile(id: Long): com.powersound.player.cast.ServedFile? = runCatching {
+        // a shared-folder song in the library: read from the shared folder
+        if (id < 0) {
+            val s = com.powersound.player.net.NetLibrary.song(this, id) ?: return null
+            val (server, path) = com.powersound.player.net.Smb.resolve(this, s.uri) ?: return null
+            val ch = com.powersound.player.net.Smb.open(server, path)
+            return com.powersound.player.cast.ServedFile(ch, ch.size(), s.mimeType) { ch.close() }
+        }
         val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
         val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return null
         val stream = java.io.FileInputStream(pfd.fileDescriptor)
@@ -712,7 +721,7 @@ class PlaybackService : MediaLibraryService() {
             // the same channel and id as Media3's player notification, so it simply replaces this one
             if (nm.getNotificationChannel("default_channel_id") == null) {
                 nm.createNotificationChannel(
-                    android.app.NotificationChannel("default_channel_id", "Now playing", android.app.NotificationManager.IMPORTANCE_LOW)
+                    android.app.NotificationChannel("default_channel_id", com.powersound.player.data.Lang.tr("Now playing"), android.app.NotificationManager.IMPORTANCE_LOW)
                 )
             }
             val title = main?.currentMediaItem?.mediaMetadata?.title?.toString() ?: "PowerSound"
@@ -828,7 +837,8 @@ class PlaybackService : MediaLibraryService() {
         return ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(
                 androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
-                    androidx.media3.datasource.DefaultDataSource.Factory(this, http),
+                    // smb:// (Library → Network → Windows shared folders) and everything else as before
+                    com.powersound.player.net.NetDataSourceFactory(this, androidx.media3.datasource.DefaultDataSource.Factory(this, http)),
                     com.powersound.player.audio.flac.SafeExtractors()
                 )
             )
@@ -1432,7 +1442,7 @@ class PlaybackService : MediaLibraryService() {
     private fun customLayout(): List<CommandButton> =
         SettingsStore.value.notifButtons.filter { it in 1 until NOTIF_ACTIONS.size }.map { a ->
             CommandButton.Builder()
-                .setDisplayName(NOTIF_ACTIONS[a])
+                .setDisplayName(com.powersound.player.data.Lang.tr(NOTIF_ACTIONS[a]))
                 .setIconResId(iconFor(a))
                 .setSessionCommand(commandFor(a))
                 .build()

@@ -1558,3 +1558,29 @@ Year Songs	أغاني السنة
 Composer Songs	أغاني الملحن
 Playlist Songs	أغاني قائمة التشغيل
 Playlist order	ترتيب قائمة التشغيل
+{n} songs	{n} أغنية
+Added {n} songs to the library	تمت إضافة {n} أغنية إلى المكتبة
+Songs from the network can't be deleted from the phone	أغاني الشبكة ما تنحذف من الجوال
+Songs from the network can't be edited here (edit them on the computer)	أغاني الشبكة ما تتعدّل هنا (عدّلها على الكمبيوتر)
+Taken out of the library	تمت إزالتها من المكتبة
+Add to Library	إضافة إلى المكتبة
+Remove from Library	إزالة من المكتبة
+Stop	إيقاف
+Reading folders… {n}	جارٍ قراءة المجلدات… {n}
+Adding to the library… {n} / {n}	جارٍ الإضافة إلى المكتبة… {n} / {n}
+Windows shared folders	مجلدات ويندوز المشتركة
+Add shared folder	إضافة مجلد مشترك
+\\\\PC\\Music, with its Windows user	\\\\PC\\Music مع مستخدم ويندوز
+It is only taken out of PowerSound. Nothing changes on the computer.	تنشال من PowerSound بس. ما يتغير شي على الكمبيوتر.
+The address of a shared folder on the computer, like \\\\192.168.1.10\\Music. The computer's IP address works best (Windows: Settings → Network → Properties). User and password: the Windows account's (a Microsoft account: its e-mail). Leave them empty for a folder shared with everyone.	عنوان المجلد المشترك على الكمبيوتر، مثل \\\\192.168.1.10\\Music. الأفضل تكتب عنوان IP للكمبيوتر (ويندوز: الإعدادات ← الشبكة ← الخصائص). المستخدم وكلمة المرور: حق حساب ويندوز (حساب مايكروسوفت: إيميله). خلّهم فاضيين إذا المجلد مشترك للكل.
+Address  (\\\\PC\\Music)	العنوان  (\\\\PC\\Music)
+User	المستخدم
+Password	كلمة المرور
+Name (optional)	الاسم (اختياري)
+Write the computer and the shared folder, like \\\\192.168.1.10\\Music	اكتب الكمبيوتر والمجلد المشترك، مثل \\\\192.168.1.10\\Music
+Wrong user name or password	اسم المستخدم أو كلمة المرور غلط
+There is no shared folder with this name on that computer	ما فيه مجلد مشترك بهذا الاسم على هذا الكمبيوتر
+This Windows account can't sign in from the network (an account without a password, for example)	حساب ويندوز هذا ما يقدر يدخل من الشبكة (مثلاً حساب بدون كلمة مرور)
+Computer not found. Use its IP address (e.g. 192.168.1.10)	ما لقينا الكمبيوتر. استخدم عنوان IP حقه (مثل 192.168.1.10)
+The computer didn't answer. Is it on, on the same Wi-Fi, with file sharing turned on?	الكمبيوتر ما رد. هل هو شغّال، وعلى نفس الواي فاي، ومشاركة الملفات مفعّلة؟
+Reading the subtitles inside the video… {n}%	جارٍ قراءة الترجمة اللي داخل الفيديو… {n}%

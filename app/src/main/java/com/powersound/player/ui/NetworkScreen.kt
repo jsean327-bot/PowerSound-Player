@@ -18,6 +18,16 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.RemoveCircleOutline
+import androidx.compose.material.icons.rounded.LibraryAdd
+import kotlinx.coroutines.launch
+import com.powersound.player.net.SmbStore
+import com.powersound.player.net.SmbServer
+import com.powersound.player.net.Smb
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.rounded.FolderShared
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -90,7 +100,9 @@ fun NetworkScreen(
     playingId: String?,
     onBack: () -> Unit,
     onPlayAudio: (List<DlnaItem>, Int, Boolean) -> Unit,
-    onPlayVideo: (List<DlnaItem>, Int) -> Unit
+    onPlayVideo: (List<DlnaItem>, Int) -> Unit,
+    /** Songs were added to / taken out of the library: read it again. */
+    onLibraryChanged: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val primary = MaterialTheme.colorScheme.primary
@@ -134,12 +146,21 @@ fun NetworkScreen(
     var items by remember { mutableStateOf<List<DlnaItem>?>(null) }
     var failed by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
+    var failReason by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(server, folderId, reload) {
         val s = server
         items = null
         failed = false
+        failReason = null
         if (s != null) {
-            val list = withContext(Dispatchers.IO) { Dlna.browse(s, folderId) }
+            val shared = s.controlUrl.takeIf { it.startsWith("smb:") }?.let { SmbStore.get(context, it.removePrefix("smb:")) }
+            val list = withContext(Dispatchers.IO) {
+                if (shared != null) {
+                    // a Windows shared folder: "0" is where it starts
+                    runCatching { Smb.items(shared, if (folderId == "0") shared.root else folderId) }
+                        .onFailure { e -> failReason = Smb.explain(e) }.getOrNull()
+                } else Dlna.browse(s, folderId)
+            }
             if (list == null) failed = true else items = list
         }
     }
@@ -148,6 +169,28 @@ fun NetworkScreen(
         if (path.isNotEmpty()) NetworkStore.path.value = path.dropLast(1) else NetworkStore.server.value = null
     }
     BackHandler(enabled = server != null) { up() }
+
+    // Windows shared folders you added; adding and removing one
+    val shares by SmbStore.servers.collectAsState()
+    LaunchedEffect(Unit) { SmbStore.load(context) }
+    var addShare by remember { mutableStateOf(false) }
+    var removeShare by remember { mutableStateOf<SmbServer?>(null) }
+    if (addShare) AddShareDialog(onDismiss = { addShare = false })
+    removeShare?.let { sh ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { removeShare = null },
+            containerColor = Color(0xFF1B1B22),
+            title = { Text("Remove \"${sh.name}\"?", color = Color.White) },
+            text = { Text("It is only taken out of PowerSound. Nothing changes on the computer.", color = Color.White.copy(alpha = 0.7f)) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { SmbStore.remove(context, sh.id); removeShare = null }) { Text("Remove") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { removeShare = null }) { Text("Cancel") } }
+        )
+    }
+
+    // Add to Library: progress, and the folders already added
+    val adding by com.powersound.player.net.NetLibrary.progress.collectAsState()
+    val origins by com.powersound.player.net.NetLibrary.origins.collectAsState()
+    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { com.powersound.player.net.NetLibrary.songs(context) } }
 
     val list = items.orEmpty()
     val audio = remember(items) { list.filter { it.kind == 1 } }
@@ -165,11 +208,58 @@ fun NetworkScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (s == null) {
                         PillButton(icon = Icons.Rounded.Refresh, text = if (searching) "Searching…" else "Search again", onClick = { if (!searching) search++ })
-                    } else if (audio.isNotEmpty()) {
-                        PillButton(icon = Icons.Rounded.PlayArrow, text = "Play", onClick = { onPlayAudio(audio, 0, false) })
-                        Spacer(Modifier.width(8.dp))
-                        PillButton(icon = Icons.Rounded.Shuffle, text = "Shuffle", onClick = { onPlayAudio(audio, 0, true) })
+                    } else {
+                        if (audio.isNotEmpty()) {
+                            PillButton(icon = Icons.Rounded.PlayArrow, text = "Play", onClick = { onPlayAudio(audio, 0, false) })
+                            Spacer(Modifier.width(8.dp))
+                            PillButton(icon = Icons.Rounded.Shuffle, text = "Shuffle", onClick = { onPlayAudio(audio, 0, true) })
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        // this folder (and its subfolders) into Folders, Albums, Artists, Favorites…
+                        val origin = s.controlUrl + "|" + folderId
+                        if (items != null && (audio.isNotEmpty() || list.any { it.kind == 0 })) {
+                            val added = origin in origins
+                            PillButton(
+                                icon = if (added) Icons.Rounded.RemoveCircleOutline else Icons.Rounded.LibraryAdd,
+                                text = if (added) "Remove from Library" else "Add to Library",
+                                onClick = {
+                                    if (adding != null) return@PillButton
+                                    if (added) {
+                                        com.powersound.player.net.NetLibrary.remove(context, origin) {
+                                            android.widget.Toast.makeText(context, com.powersound.player.data.Lang.tr("Taken out of the library"), android.widget.Toast.LENGTH_SHORT).show()
+                                            onLibraryChanged()
+                                        }
+                                    } else {
+                                        val shared = s.controlUrl.takeIf { it.startsWith("smb:") }?.let { SmbStore.get(context, it.removePrefix("smb:")) }
+                                        val label = (listOf("Network", s.name) + path.map { it.second }).joinToString("/")
+                                        com.powersound.player.net.NetLibrary.add(
+                                            context, origin, label, list,
+                                            children = { f -> if (shared != null) runCatching { Smb.items(shared, f.id) }.getOrNull() else Dlna.browse(s, f.id) },
+                                            smb = shared
+                                        ) { n ->
+                                            android.widget.Toast.makeText(
+                                                context, com.powersound.player.data.Lang.tr("Added $n songs to the library"), android.widget.Toast.LENGTH_LONG
+                                            ).show()
+                                            onLibraryChanged()
+                                        }
+                                    }
+                                }
+                            )
+                        }
                     }
+                }
+            }
+        }
+        adding?.let { p ->
+            item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(color = primary, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(p, color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text(
+                        "Stop", color = primary, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                        modifier = Modifier.clickable { com.powersound.player.net.NetLibrary.cancel() }.padding(8.dp)
+                    )
                 }
             }
         }
@@ -208,13 +298,36 @@ fun NetworkScreen(
             if (servers.isNotEmpty() && searching) item {
                 Text("Searching…", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
             }
+            // ---- Windows shared folders (SMB)
+            item {
+                Text(
+                    "Windows shared folders",
+                    color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 20.dp, top = 18.dp, bottom = 4.dp)
+                )
+            }
+            itemsIndexed(shares, key = { _, it -> "smb:" + it.id }) { _, sh ->
+                NetRow(
+                    Icons.Rounded.FolderShared, Color(0xFF5B8DEF), sh.name,
+                    "\\\\${sh.host}\\${sh.share}" + (if (sh.root.isNotEmpty()) "\\" + sh.root.replace('/', '\\') else "") +
+                        (if (sh.user.isNotEmpty()) "  •  ${sh.user}" else ""),
+                    false,
+                    onLongClick = { removeShare = sh }
+                ) {
+                    NetworkStore.path.value = emptyList()
+                    NetworkStore.server.value = DlnaServer(sh.name, "smb:" + sh.id, "smb://${sh.host}/${sh.share}")
+                }
+            }
+            item {
+                NetRow(Icons.Rounded.Add, primary, "Add shared folder", "\\\\PC\\Music, with its Windows user", false) { addShare = true }
+            }
         } else {
             // ---- a folder of the server
             when {
                 failed -> item {
                     Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            "${s.name} didn't answer.\nIs it still on, and on the same Wi-Fi?",
+                            failReason?.let { "${s.name}:\n$it" } ?: "${s.name} didn't answer.\nIs it still on, and on the same Wi-Fi?",
                             color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center
                         )
                         Spacer(Modifier.size(12.dp))
@@ -267,14 +380,23 @@ fun NetworkScreen(
 fun netId(item: DlnaItem): String = "net:" + (item.url ?: item.id).hashCode()
 
 @Composable
-private fun NetRow(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, title: String, sub: String, current: Boolean, onClick: () -> Unit) {
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun NetRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    title: String,
+    sub: String,
+    current: Boolean,
+    onLongClick: (() -> Unit)? = null,
+    onClick: () -> Unit
+) {
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 6.dp, vertical = 2.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(if (current) Color.White.copy(alpha = 0.10f) else Color.Transparent)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -289,4 +411,89 @@ private fun NetRow(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: 
             if (sub.isNotEmpty()) Text(sub, color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
+}
+
+/** Library → Network → Add shared folder: \\PC\Music and its Windows user; checked before it is kept. */
+@Composable
+private fun AddShareDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var address by remember { mutableStateOf("") }
+    var user by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        containerColor = Color(0xFF1B1B22),
+        title = { Text("Add shared folder", color = Color.White) },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                Text(
+                    "The address of a shared folder on the computer, like \\\\192.168.1.10\\Music. The computer's IP address works best " +
+                        "(Windows: Settings → Network → Properties). User and password: the Windows account's (a Microsoft account: its e-mail). " +
+                        "Leave them empty for a folder shared with everyone.",
+                    color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp
+                )
+                ShareField(address, { address = it; error = null }, "Address  (\\\\PC\\Music)")
+                ShareField(user, { user = it; error = null }, "User")
+                ShareField(password, { password = it; error = null }, "Password", secret = true)
+                ShareField(name, { name = it }, "Name (optional)")
+                if (busy) Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Connecting…", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                }
+                error?.let { Text(it, color = Color(0xFFFF8A80), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp)) }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(enabled = !busy, onClick = {
+                val parts = SmbStore.parse(address)
+                if (parts == null) {
+                    error = "Write the computer and the shared folder, like \\\\192.168.1.10\\Music"
+                    return@TextButton
+                }
+                val (host, share, root) = parts
+                // DOMAIN\user or user@domain stay as written; "PC\user" gives the domain
+                val dom = if (user.contains('\\')) user.substringBefore('\\') else ""
+                val usr = if (user.contains('\\')) user.substringAfter('\\') else user.trim()
+                val server = SmbServer(
+                    id = System.currentTimeMillis().toString(36),
+                    name = name.trim().ifEmpty { if (root.isNotEmpty()) root.substringAfterLast('/') else share },
+                    host = host, share = share, user = usr, password = password, domain = dom, root = root
+                )
+                busy = true
+                scope.launch {
+                    val problem = withContext(Dispatchers.IO) {
+                        Smb.test(server) ?: if (root.isNotEmpty()) runCatching { Smb.list(server, root); null }.getOrElse { Smb.explain(it) } else null
+                    }
+                    busy = false
+                    if (problem != null) error = problem
+                    else {
+                        SmbStore.add(context, server)
+                        onDismiss()
+                    }
+                }
+            }) { Text("Add") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun ShareField(value: String, onChange: (String) -> Unit, label: String, secret: Boolean = false) {
+    androidx.compose.material3.OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label) },
+        singleLine = true,
+        visualTransformation = if (secret) androidx.compose.ui.text.input.PasswordVisualTransformation()
+            else androidx.compose.ui.text.input.VisualTransformation.None,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = if (secret) androidx.compose.ui.text.input.KeyboardType.Password else androidx.compose.ui.text.input.KeyboardType.Uri
+        ),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+    )
 }

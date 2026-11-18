@@ -124,7 +124,8 @@ object CastWeb {
             } else {
                 val path = final.substringBefore('?').lowercase()
                 val mime = when {
-                    type.startsWith("video/") || type == "application/dash+xml" -> type
+                    looksLikeDash(type, final) || startsAsDash(input) -> DASH_MIME
+                    type.startsWith("video/") -> type
                     path.endsWith(".mpd") -> "application/dash+xml"
                     path.endsWith(".webm") -> "video/webm"
                     path.endsWith(".mkv") -> "video/x-matroska"
@@ -165,6 +166,75 @@ object CastWeb {
             out.append('\n')
         }
         return out.toString()
+    }
+
+    // ---------------------------------------------------------------- DASH manifests (.mpd)
+
+    const val DASH_MIME = "application/dash+xml"
+
+    fun looksLikeDash(contentType: String?, url: String): Boolean {
+        val t = contentType.orEmpty().lowercase()
+        return t.contains("dash+xml") || url.substringBefore('?').substringBefore('#').endsWith(".mpd", true)
+    }
+
+    /** True when the stream is an XML file with an <MPD> in its first bytes (the stream is left where it was). */
+    fun startsAsDash(input: BufferedInputStream): Boolean {
+        input.mark(2048)
+        val b = ByteArray(2048)
+        var n = 0
+        while (n < b.size) {
+            val r = input.read(b, n, b.size - n)
+            if (r <= 0) break
+            n += r
+        }
+        input.reset()
+        val s = String(b, 0, n, Charsets.ISO_8859_1).removePrefix("ï»¿").trimStart()
+        return s.startsWith("<") && s.contains("<MPD")
+    }
+
+    private val DASH_ATTR = Regex("\\b(media|initialization|sourceURL|index)=\"([^\"]*)\"")
+    private val DASH_TEXT = Regex("<(BaseURL|Location)([^>]*)>([^<]*)</\\1>")
+
+    private fun unXml(s: String) = s.replace("&quot;", "\"").replace("&apos;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    private fun xml(s: String) = s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+
+    /**
+     * A DASH manifest whose every address goes through the phone: [wrap] turns a full web address into the phone's
+     * address of it, keeping its path, so the Chromecast can still put the pieces' names together ($Number$, …)
+     * after it. [base] is the manifest's own address: the top <BaseURL> (or a new one) is made full from it, so the
+     * relative names under it come to the phone too.
+     */
+    fun rewriteDash(text: String, base: String, wrap: (String) -> String): String {
+        fun absolute(u: String) = u.startsWith("http://", true) || u.startsWith("https://", true)
+        fun full(u: String): String = runCatching { URL(URL(base), u).toString() }.getOrDefault(u)
+        val period = text.indexOf("<Period").let { if (it < 0) text.length else it }
+        var topBase = false
+        // <BaseURL> / <Location>: the full ones go through the phone; the relative ones before the first <Period>
+        // (the manifest's own) are counted from the manifest's address first
+        var out = DASH_TEXT.replace(text) { m ->
+            val v = unXml(m.groupValues[3].trim())
+            val top = m.range.first < period
+            if (top && m.groupValues[1] == "BaseURL") topBase = true
+            val f = when {
+                absolute(v) -> v
+                top || m.groupValues[1] == "Location" -> full(v)
+                else -> return@replace m.value
+            }
+            "<${m.groupValues[1]}${m.groupValues[2]}>${xml(wrap(f))}</${m.groupValues[1]}>"
+        }
+        out = DASH_ATTR.replace(out) { m ->
+            val v = unXml(m.groupValues[2])
+            if (absolute(v)) "${m.groupValues[1]}=\"${xml(wrap(v))}\"" else m.value
+        }
+        if (!topBase) {
+            // no address of its own: the pieces are counted from the manifest's folder → that folder through the phone
+            val start = Regex("<MPD\\b[^>]*>").find(out)
+            if (start != null) {
+                val dir = full(".")
+                out = out.substring(0, start.range.last + 1) + "\n<BaseURL>${xml(wrap(dir))}</BaseURL>" + out.substring(start.range.last + 1)
+            }
+        }
+        return out
     }
 
     // ---------------------------------------------------------------- subtitles → WebVTT (what the Chromecast shows)

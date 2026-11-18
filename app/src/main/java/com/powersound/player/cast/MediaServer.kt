@@ -14,7 +14,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /** One file the server can send: its bytes (a channel that can jump to any position), size and type. */
-class ServedFile(val channel: FileChannel, val size: Long, val mime: String, private val closer: () -> Unit) {
+class ServedFile(val channel: java.nio.channels.SeekableByteChannel, val size: Long, val mime: String, private val closer: () -> Unit) {
     fun close() = runCatching { closer() }
 }
 
@@ -123,6 +123,21 @@ class MediaServer(
                 }
                 if (method != "GET" && !head) {
                     status(out, 405, "Method Not Allowed", listOf("Content-Length" to "0")); return
+                }
+                // a piece of a DASH video through the phone: /<key>/d/<id>/<https>/<site>/<its path>?<its query>
+                val dash = "/$key/d/"
+                if (parts[1].startsWith(dash)) {
+                    val rest = parts[1].removePrefix(dash)
+                    val id = rest.substringBefore('/').toLongOrNull()
+                    val web = rest.substringAfter('/', "")
+                    val scheme = web.substringBefore('/')
+                    val target = id?.let { proxies[it] }
+                    if (target == null || (scheme != "http" && scheme != "https") || !web.contains('/')) {
+                        status(out, 404, "Not Found", listOf("Content-Length" to "0")); return
+                    }
+                    sendProxy(out, id, target, scheme + "://" + web.substringAfter('/'), headers["range"], head)
+                    out.flush()
+                    return
                 }
                 // /<key>/s/<id>  or  /<key>/a/<id>.jpg
                 val path = parts[1].substringBefore('?').trim('/').split('/')
@@ -237,7 +252,11 @@ class MediaServer(
             }
             if (head) {
                 val h = ArrayList<Pair<String, String>>()
-                h += "Content-Type" to (if (CastWeb.looksLikeHls(type, c.url.toString())) CastWeb.HLS_MIME else type ?: "application/octet-stream")
+                h += "Content-Type" to when {
+                    CastWeb.looksLikeHls(type, c.url.toString()) -> CastWeb.HLS_MIME
+                    CastWeb.looksLikeDash(type, c.url.toString()) -> CastWeb.DASH_MIME
+                    else -> type ?: "application/octet-stream"
+                }
                 val total = c.getHeaderField("Content-Range")?.substringAfter('/', "")?.toLongOrNull()
                     ?: c.getHeaderField("Content-Length")?.toLongOrNull()?.takeIf { code == 200 }
                 if (total != null) h += "Content-Length" to total.toString()
@@ -248,8 +267,9 @@ class MediaServer(
             val final = c.url.toString()
             if (CastWeb.looksLikeHls(type, final) || CastWeb.startsAsHls(input)) {
                 // relative to this playlist's own address (…/<key>/p/<id> or …/<key>/x/<id>): …/<key>/x/<id>?u=…
+                // (a full address when it can: an HLS list can also be reached from a DASH piece's long address)
                 val text = CastWeb.rewriteHls(String(CastWeb.readText(input), Charsets.UTF_8), final) { u ->
-                    "../x/$id?u=" + java.net.URLEncoder.encode(u, "UTF-8")
+                    (base()?.let { "$it/x/$id?u=" } ?: "../x/$id?u=") + java.net.URLEncoder.encode(u, "UTF-8")
                 }.toByteArray(Charsets.UTF_8)
                 status(
                     out, 200, "OK",
@@ -257,6 +277,23 @@ class MediaServer(
                 )
                 out.write(text)
                 return
+            }
+            if (code == 200 && range == null && (CastWeb.looksLikeDash(type, final) && !type.orEmpty().startsWith("video/") || CastWeb.startsAsDash(input))) {
+                // a DASH manifest: every address in it through the phone, path kept (/d/<id>/https/<site>/<path>)
+                val home = base()
+                if (home != null) {
+                    val text = CastWeb.rewriteDash(String(CastWeb.readText(input), Charsets.UTF_8), final) { u ->
+                        "$home/d/$id/" + u.substringBefore("://").lowercase() + "/" + u.substringAfter("://").let { r ->
+                            // "https://site" / "https://site?x" → "https/site/" / "https/site/?x"
+                            val q = r.indexOf('?')
+                            val host = if (q < 0) r else r.substring(0, q)
+                            if (host.contains('/')) r else host + "/" + (if (q < 0) "" else r.substring(q))
+                        }
+                    }.toByteArray(Charsets.UTF_8)
+                    status(out, 200, "OK", listOf("Content-Type" to CastWeb.DASH_MIME, "Content-Length" to text.size.toString(), "Cache-Control" to "no-cache"))
+                    out.write(text)
+                    return
+                }
             }
             val h = ArrayList<Pair<String, String>>()
             h += "Content-Type" to (type ?: "application/octet-stream")

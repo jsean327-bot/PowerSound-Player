@@ -41,6 +41,7 @@ object TagEditor {
         val original = File(dir, "original")
         val edited = File(dir, "edited")
         val resolver = context.contentResolver
+        if (song.id < 0) return@withContext "Songs from the network can't be edited here (edit them on the computer)"
         try {
             val read = resolver.openInputStream(song.uri)?.use { i -> original.outputStream().use { i.copyTo(it, 1 shl 16) } }
             if (read == null || original.length() == 0L) return@withContext "PowerSound couldn't read this file"

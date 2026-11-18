@@ -410,7 +410,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     /** Measures every song without a measurement (keeps going while the app is open; stop with [stopLoudnessScan]). */
     fun scanLoudness() {
         if (loudnessJob?.isActive == true) return
-        val songs = _library.value.songs
+        // the phone's songs (not the network's: that would read every network file through)
+        val songs = _library.value.songs.filter { it.id >= 0 }
         loudnessJob = viewModelScope.launch {
             com.powersound.player.data.LoudnessStore.scan(getApplication(), songs)
             // the playing song gets its new gain

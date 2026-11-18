@@ -76,6 +76,7 @@ import com.powersound.player.data.SettingsStore
 import com.powersound.player.ui.PowerSoundTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -326,7 +327,8 @@ class VideoActivity : ComponentActivity() {
             .setReadTimeoutMs(20_000)
             .setDefaultRequestProperties(headers.filterKeys { !it.equals("User-Agent", true) })
         httpFactory = http
-        dataSources = DefaultDataSource.Factory(this, http)
+        // smb:// (Library → Network → Windows shared folders) and everything else as before
+        dataSources = com.powersound.player.net.NetDataSourceFactory(this, DefaultDataSource.Factory(this, http))
         val swAudio = st.videoSwAudio
         // HW: the phone's chip first; SW: software first (for the picture, and for the sound when chosen)
         val selector = MediaCodecSelector { mime, secure, tunneling ->
@@ -365,7 +367,7 @@ class VideoActivity : ComponentActivity() {
         return p
     }
 
-    private var dataSources: DefaultDataSource.Factory? = null
+    private var dataSources: androidx.media3.datasource.DataSource.Factory? = null
     private var httpFactory: DefaultHttpDataSource.Factory? = null
 
     /** HW / HW+ / SW, or "Use SW audio decoder": the player is built again at the same spot. */
@@ -786,6 +788,33 @@ class VideoActivity : ComponentActivity() {
     /** A line under the controls: what is going on / what went wrong. */
     val castNote = mutableStateOf<String?>(null)
     private var castJob: Job? = null
+    /** Subtitles read from inside the cast files (by address), and the readings going on. */
+    private val embeddedSubs = HashMap<String, List<EmbeddedSubs.Track>>()
+    private var embeddedLate: Job? = null
+    private val embeddedReading = HashMap<String, kotlinx.coroutines.Deferred<List<EmbeddedSubs.Track>>>()
+
+    /** Reads the subtitles inside [uri] once (in the background, with its progress under the cast controls). */
+    private fun embeddedRead(key: String, uri: Uri): kotlinx.coroutines.Deferred<List<EmbeddedSubs.Track>> {
+        embeddedReading[key]?.takeIf { it.isActive }?.let { return it }
+        val factory = dataSources ?: com.powersound.player.net.NetDataSourceFactory(this, DefaultDataSource.Factory(this))
+        val d = lifecycleScope.async(Dispatchers.IO) {
+            val out = runCatching {
+                EmbeddedSubs.extract(uri, factory, progress = { f ->
+                    if (castingTo.value != null) castNote.value = "Reading the subtitles inside the video… ${(f * 100).toInt()}%"
+                }, cancelled = { castingTo.value == null })
+            }.getOrElse { e ->
+                com.powersound.player.data.CrashLog.note(this@VideoActivity, "embedded subtitles", e)
+                emptyList()
+            }
+            withContext(Dispatchers.Main) {
+                if (castingTo.value != null || out.isNotEmpty()) embeddedSubs[key] = out
+                if (castNote.value?.startsWith("Reading the subtitles") == true) castNote.value = null
+            }
+            out
+        }
+        embeddedReading[key] = d
+        return d
+    }
     private var castTriedPhone = false
     private var castLoadedAt = 0L
 
@@ -847,7 +876,8 @@ class VideoActivity : ComponentActivity() {
                     castNote.value = "The phone needs to be on Wi-Fi to cast its videos"
                     return@launch
                 }
-                mime = runCatching { contentResolver.getType(uri) }.getOrNull() ?: "video/mp4"
+                mime = (if (uri.scheme == "smb") android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(uri.path.orEmpty().substringAfterLast('.', "").lowercase())
+                    else runCatching { contentResolver.getType(uri) }.getOrNull()) ?: "video/mp4"
             }
             castViaPhone.value = phone
             if (phone) castTriedPhone = true
@@ -867,6 +897,42 @@ class VideoActivity : ComponentActivity() {
                     .setLanguage(sub.language ?: "und")
                     .build()
                 if (active < 0 && (sub.selectionFlags and C.SELECTION_FLAG_DEFAULT) != 0) active = id
+            }
+            // subtitles inside the file (MKV / WebM): read once on the phone, then sent like subtitle files
+            if (!web && EmbeddedSubs.canHold(uri, mime)) {
+                val key = uri.toString()
+                var inside = embeddedSubs[key]
+                if (inside == null) {
+                    val reading = embeddedRead(key, uri)
+                    // a phone file is read in a few seconds: wait a little so the TV starts with its subtitles
+                    inside = kotlinx.coroutines.withTimeoutOrNull(6_000) { reading.await() }
+                    if (inside == null) {
+                        // a big / far file: the video starts now, its subtitles are added when they are read
+                        embeddedLate?.cancel()
+                        embeddedLate = lifecycleScope.launch {
+                            val got = runCatching { reading.await() }.getOrNull().orEmpty()
+                            if (got.isEmpty() || castingTo.value == null) return@launch
+                            val now = playerOrNull()?.currentMediaItem?.localConfiguration?.uri?.toString()
+                            val s = CastControl.context(this@VideoActivity)?.sessionManager?.currentCastSession
+                            if (now == key && s != null && s.isConnected) castVideo(s, viaPhone = castViaPhone.value, startMs = castPosition.longValue)
+                        }
+                    }
+                }
+                // the subtitle chosen on the phone (by language), if any
+                val phoneLang = p.currentTracks.groups.firstOrNull { it.type == C.TRACK_TYPE_TEXT && it.isSelected }
+                    ?.let { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it).language } }
+                inside.orEmpty().forEachIndexed { i, t ->
+                    val address = server.textUrl { t.vtt.toByteArray(Charsets.UTF_8) } ?: return@forEachIndexed
+                    val id = 2000L + i
+                    tracks += com.google.android.gms.cast.MediaTrack.Builder(id, com.google.android.gms.cast.MediaTrack.TYPE_TEXT)
+                        .setName(t.label)
+                        .setSubtype(com.google.android.gms.cast.MediaTrack.SUBTYPE_SUBTITLES)
+                        .setContentId(address)
+                        .setContentType("text/vtt")
+                        .setLanguage(t.language ?: "und")
+                        .build()
+                    if (active < 0 && phoneLang != null && t.language != null && phoneLang.startsWith(t.language.take(2))) active = id
+                }
             }
             if (active < 0 && tracks.isNotEmpty()) active = tracks[0].id
 
@@ -999,6 +1065,11 @@ class VideoActivity : ComponentActivity() {
 
     private fun openForCast(id: Long): ServedFile? = runCatching {
         val uri = castFiles[id] ?: return null
+        com.powersound.player.net.Smb.resolve(this, uri)?.let { (server, path) ->
+            val ch = com.powersound.player.net.Smb.open(server, path)
+            val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(path.substringAfterLast('.', "").lowercase()) ?: "video/mp4"
+            return ServedFile(ch, ch.size(), mime) { ch.close() }
+        }
         val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return null
         val stream = java.io.FileInputStream(pfd.fileDescriptor)
         val size = pfd.statSize.takeIf { it > 0 } ?: stream.channel.size()
@@ -1032,6 +1103,7 @@ class VideoActivity : ComponentActivity() {
         }
         castPoll?.cancel()
         castJob?.cancel()
+        embeddedLate?.cancel()
         castNote.value = null
         castSubs.value = emptyList()
         val at = castPosition.longValue

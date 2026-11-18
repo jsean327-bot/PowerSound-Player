@@ -143,6 +143,8 @@ object ArtworkLoader {
     }
 
     private fun decodeEmbedded(context: Context, songId: Long, sizePx: Int): Bitmap? {
+        if (songId < 0) return null // a network song: its cover was kept when it was added
+
         val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, songId)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
@@ -215,10 +217,34 @@ object ArtworkLoader {
 
     private fun downloadedFile(context: Context, song: Song) = File(artDir(context), albumKey(song) + ".jpg")
 
+    /** A cover is already kept for [song]'s album (downloaded, or taken from a network file). */
+    fun hasDownloaded(context: Context, song: Song): Boolean = downloadedFile(context, song).exists()
+
+    /** Keeps [bytes] as [song]'s album cover (a network file's own cover, read when it was added to the library). */
+    fun saveDownloaded(context: Context, song: Song, bytes: ByteArray) {
+        runCatching {
+            val f = downloadedFile(context, song)
+            val tmp = File(f.parentFile, f.name + ".tmp")
+            tmp.writeBytes(bytes)
+            tmp.renameTo(f)
+        }
+    }
+
     private suspend fun download(context: Context, songId: Long, sizePx: Int): Bitmap? {
         val st = SettingsStore.value
-        if (!st.artDownload) return null
         val song = songInfo(songId) ?: return null
+        // a media server's song: the cover the server gives (on the home network, so not limited by the settings)
+        if (songId < 0) {
+            val art = com.powersound.player.net.NetLibrary.artUrl(context, songId)
+            if (art != null) {
+                val file = downloadedFile(context, song)
+                withContext(Dispatchers.IO) {
+                    if (!file.exists()) httpBytes(art)?.let { b -> runCatching { file.writeBytes(b) } }
+                }
+                if (file.exists()) return withContext(Dispatchers.IO) { decodeFile(file, sizePx) }
+            }
+        }
+        if (!st.artDownload) return null
         val file = downloadedFile(context, song)
         return withContext(Dispatchers.IO) {
             if (!file.exists()) fetchOnce(context, albumKey(song), file) { itunesArt(song, st) }

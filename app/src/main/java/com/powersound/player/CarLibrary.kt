@@ -35,6 +35,7 @@ class CarLibrary(private val context: Context) {
 
     /** Reads the library again when it is older than a minute (the same filters as the app). */
     private suspend fun ensure() {
+        com.powersound.player.data.Lang.init(context)
         if (songs.isNotEmpty() && System.currentTimeMillis() - loadedAt < 60_000) return
         val st = SettingsStore.value
         songs = MusicRepository.loadSongs(context).filter { s ->
@@ -62,7 +63,8 @@ class CarLibrary(private val context: Context) {
         return when {
             parentId == "root" -> categories.map { (id, name) ->
                 folder(
-                    "cat:$id", name,
+                    // the car's screen in the app's language (Settings → Look and Feel → Language)
+                    "cat:$id", com.powersound.player.data.Lang.tr(name),
                     when (id) {
                         "albums" -> MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS
                         "artists" -> MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS
@@ -85,7 +87,7 @@ class CarLibrary(private val context: Context) {
                                 "playlists" -> MediaMetadata.MEDIA_TYPE_PLAYLIST
                                 else -> MediaMetadata.MEDIA_TYPE_FOLDER_MIXED
                             },
-                            g.subtitle
+                            com.powersound.player.data.Lang.tr(g.subtitle)
                         )
                     }
                 }

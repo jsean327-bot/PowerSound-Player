@@ -61,6 +61,11 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // smbj's libraries (BouncyCastle, slf4j) each bring these; Android doesn't use them
+            excludes += "/META-INF/versions/9/module-info.class"
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/INDEX.LIST"
         }
     }
 
@@ -91,4 +96,5 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.3.1") // video picture and subtitles
     implementation("androidx.media3:media3-exoplayer-dash:1.3.1") // DASH (.mpd) video streams
     implementation("androidx.media3:media3-cast:1.3.1") // Chromecast (brings Google Cast and MediaRouter)
+    implementation("com.hierynomus:smbj:0.14.0") // Library → Network: Windows shared folders (SMB 2/3)
 }
