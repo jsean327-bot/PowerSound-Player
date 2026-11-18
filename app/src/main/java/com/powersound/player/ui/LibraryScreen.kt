@@ -58,6 +58,9 @@ import com.powersound.player.ui.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.PushPin
@@ -572,7 +575,11 @@ data class ListActions(
     /** Multi-select → Tags: edit the tags of all the selected songs at once. */
     val editTags: ((List<Song>) -> Unit)? = null,
     /** Long press: the song menu, with a "Select" item that starts multi-select in this list. */
-    val menuWithSelect: (Song, () -> Unit) -> Unit
+    val menuWithSelect: (Song, () -> Unit) -> Unit,
+    /** Select → Info/Tags (one song). */
+    val info: ((Song) -> Unit)? = null,
+    /** Select → Album Art → ⚙: Settings → Album Art. */
+    val albumArtSettings: (() -> Unit)? = null
 )
 
 /**
@@ -596,33 +603,83 @@ fun SongListScreen(
     listKind: String = "",
     /** Multi-select (null: the list has none). */
     actions: ListActions? = null,
+    /** Which list this is ("album:…", "folder:…", "cat:ALL_SONGS"…): for List Memory and Add to Launcher. */
+    listKey: String = "",
+    /** The name in "List Options: …" (e.g. "Folder Songs"). */
+    listTitle: String = "Songs",
+    /** ⋮ → Select Folders / Rescan / Add to Launcher (null: only List Options and the extras). */
+    menu: ListMenuActions? = null,
+    /** An album / folder page: the top of the ⋮ card. */
+    menuHeader: ListHeader? = null,
+    /** The list's own order, offered first in List Options → Sort (null: none, e.g. All Songs). */
+    defaultOrder: String? = "Default order",
     header: @Composable (pills: @Composable () -> Unit) -> Unit
 ) {
     val state = rememberLazyListState()
     val st by com.powersound.player.data.SettingsStore.settings.collectAsState()
-    var zoom by rememberSaveable { mutableIntStateOf(1) }
-    var sort by rememberSaveable { mutableIntStateOf(0) }
+    // ⋮ → List Options: kept per kind of list (all albums share one, all folders one…), like Poweramp
+    val prefKey = "songs:" + if (listKey.startsWith("cat:") || listKey.isEmpty()) listKey.ifEmpty { "list" }
+        else listKind.ifEmpty { listKey.substringBefore(':') }
+    val allPrefs by com.powersound.player.data.ListPrefs.all.collectAsState()
+    val pref = allPrefs[prefKey] ?: com.powersound.player.data.ListPref(sort = if (defaultOrder != null) 0 else 3, view = 1)
+    fun setPref(f: (com.powersound.player.data.ListPref) -> com.powersound.player.data.ListPref) {
+        com.powersound.player.data.ListPrefs.update(prefKey) { old -> f(if (allPrefs[prefKey] == null) pref else old) }
+    }
+    val zoom = if (pref.view in 0..2) pref.view else 1
+    val sort = if (defaultOrder == null && pref.sort == 0) 3 else pref.sort
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf<String?>(null) }
-    var menu by remember { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf<String?>(null) }
     val songFavs by com.powersound.player.data.Favorites.state.collectAsState()
     val songContext = androidx.compose.ui.platform.LocalContext.current
-    val shown = remember(songs, query, sort) {
+    val stats by com.powersound.player.data.StatsStore.stats.collectAsState()
+    // By date added/modified: the files' own dates, read off the screen's thread
+    val fileDates by androidx.compose.runtime.produceState<Map<Long, Long>?>(null, songs, sort) {
+        value = if (sort != 11) null else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            songs.associate { it.id to runCatching { java.io.File(it.path).lastModified() }.getOrDefault(0L) }
+        }
+    }
+    val shown = remember(songs, query, sort, pref.reverse, if (sort in 12..15) stats else null, fileDates) {
         val q = query?.trim()?.lowercase().orEmpty()
         val list = if (q.isEmpty()) songs else songs.filter {
             it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) || it.album.lowercase().contains(q)
         }
-        when (sort) {
-            1 -> list.sortedBy { it.title.lowercase() }
-            2 -> list.sortedWith(compareBy({ it.artist.lowercase() }, { it.album.lowercase() }, { it.track }))
-            3 -> list.sortedWith(compareBy({ it.album.lowercase() }, { it.track }))
-            4 -> list.sortedByDescending { it.durationMs }
-            5 -> list.sortedByDescending { it.dateAdded }
-            6 -> list.sortedByDescending { it.year }
+        val byTrack = compareBy<Song>({ it.album.lowercase() }, { it.track }, { it.title.lowercase() })
+        val sorted = when (sort) {
+            1 -> list.sortedWith(compareBy({ it.trackNumber }, { it.title.lowercase() }))
+            2 -> list.sortedWith(compareBy({ it.track }, { it.title.lowercase() }))
+            3 -> list.sortedBy { it.title.lowercase() }
+            4 -> list.sortedBy { it.fileName.lowercase() }
+            5 -> list.sortedBy { it.path.lowercase() }
+            6 -> list.sortedWith(compareBy<Song>({ it.artist.lowercase() }).then(byTrack))
+            7 -> list.sortedWith(byTrack)
+            8 -> list.sortedWith(compareBy({ it.year }, { it.title.lowercase() }))
+            9 -> list.sortedWith(compareBy<Song>({ it.year }).then(byTrack))
+            10 -> list.sortedByDescending { it.dateAdded }
+            11 -> fileDates?.let { d -> list.sortedByDescending { d[it.id] ?: 0L } } ?: list
+            12 -> list.sortedByDescending { stats.stars(it.id) }
+            13 -> list.sortedByDescending { it.durationMs }
+            14 -> list.sortedByDescending { stats.lastPlayed[it.id] ?: 0L }
+            15 -> list.sortedByDescending { stats.plays[it.id] ?: 0 }
             else -> list
         }
+        if (pref.reverse) sorted.reversed() else sorted
     }
-    val indexOn = showIndex && st.azScroll && (sort == 0 || sort == 1)
+    // List Memory → List Position: back where you left the list
+    androidx.compose.runtime.LaunchedEffect(listKey) {
+        if (listKey.isNotEmpty() && pref.memory) {
+            val (i, o) = com.powersound.player.data.ListPrefs.position(listKey)
+            if (i > 0 || o > 0) state.scrollToItem(i, o)
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(listKey) {
+        onDispose {
+            if (listKey.isNotEmpty() && com.powersound.player.data.ListPrefs.get(prefKey).memory) {
+                com.powersound.player.data.ListPrefs.savePosition(listKey, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset)
+            }
+        }
+    }
+    val indexOn = showIndex && st.azScroll && (sort == 0 || sort == 3) && !pref.reverse
     val keys = remember(shown, indexOn) { if (indexOn) shown.map { letterKey(it.title) } else emptyList() }
     // a playlist may hold the same song twice
     val lazyKeys = remember(shown) { uniqueKeys(shown) { it.id } }
@@ -631,6 +688,7 @@ fun SongListScreen(
 
     // ---- multi-select: the ids of the selected songs (null = not selecting) ----
     var selected by remember { mutableStateOf<Set<Long>?>(null) }
+    var artFor by remember { mutableStateOf<List<Song>?>(null) }
     val selecting = selected != null && actions != null
     fun toggle(id: Long) {
         val s = selected ?: return
@@ -644,32 +702,11 @@ fun SongListScreen(
                 onShuffle = { onShuffle(shown) },
                 onPlay = { onPlay(shown, 0) },
                 onSearch = { query = if (query == null) "" else null },
-                onMore = { menu = true },
+                onMore = { sheet = "menu" },
                 enabled = shown.isNotEmpty(),
                 searchActive = query != null,
                 onSelect = if (actions != null && shown.isNotEmpty()) ({ selected = emptySet() }) else null
             )
-            Box(Modifier.align(Alignment.TopEnd)) {
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    if (actions != null && shown.isNotEmpty()) {
-                        DropdownMenuItem(text = { Text("Select songs") }, onClick = { menu = false; selected = emptySet() })
-                    }
-                    DropdownMenuItem(text = { Text("Add all to queue") }, onClick = { menu = false; onAddToQueue(shown) })
-                    extraMenu.forEach { (label, action) ->
-                        DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() })
-                    }
-                    MenuHeader("List options • sort")
-                    listOf("Default order", "Title", "Artist", "Album", "Longest first", "Recently added", "Newest year").forEachIndexed { i, label ->
-                        DropdownMenuItem(
-                            text = { Text(if (sort == i) "✓  $label" else "     $label") },
-                            onClick = { sort = i; menu = false }
-                        )
-                    }
-                    MenuHeader("Zoom (or pinch the list)")
-                    DropdownMenuItem(text = { Text("Bigger rows") }, onClick = { if (zoom < 2) zoom++; menu = false })
-                    DropdownMenuItem(text = { Text("Smaller rows") }, onClick = { if (zoom > 0) zoom--; menu = false })
-                }
-            }
         }
     }
 
@@ -678,7 +715,11 @@ fun SongListScreen(
             state = state,
             modifier = Modifier
                 .fillMaxSize()
-                .pinchToZoom(zoom, onZoomIn = { if (zoom < 2) zoom++ }, onZoomOut = { if (zoom > 0) zoom-- }),
+                .pinchToZoom(
+                    zoom,
+                    onZoomIn = { if (zoom < 2) setPref { it.copy(view = zoom + 1) } },
+                    onZoomOut = { if (zoom > 0) setPref { it.copy(view = zoom - 1) } }
+                ),
             contentPadding = PaddingValues(end = if (indexOn) 18.dp else 0.dp, bottom = bottomInset + 70.dp)
         ) {
             item { header(if (st.headerButtons) pills else NoPills) }
@@ -712,7 +753,8 @@ fun SongListScreen(
                     zoom = zoom,
                     extra = rowExtra?.invoke(s),
                     listKind = listKind,
-                    checked = if (selecting) selected?.contains(s.id) == true else null
+                    checked = if (selecting) selected?.contains(s.id) == true else null,
+                    titleOnly = pref.titlesOnly
                 )
             }
         }
@@ -755,12 +797,77 @@ fun SongListScreen(
                 onQueue = { done(actions.addToQueue) },
                 onPlaylist = { done(actions.addToPlaylist) },
                 onTags = actions.editTags?.let { edit -> { done(edit) } },
-                onDelete = { done(actions.delete) }
+                onDelete = { done(actions.delete) },
+                total = shown.size,
+                // Range: everything between the first and the last checked song
+                onRange = {
+                    val idx = shown.indices.filter { shown[it].id in sel }
+                    if (idx.size >= 2) selected = sel + shown.subList(idx.first(), idx.last() + 1).map { it.id }
+                },
+                onShare = { if (chosen.isNotEmpty()) shareSongs(songContext, chosen) },
+                onInfo = actions.info?.let { info -> { chosen.singleOrNull()?.let { selected = null; info(it) } } },
+                onAlbumArt = { if (chosen.isNotEmpty()) { artFor = chosen; selected = null } }
             )
         } else {
             BottomPills(st.bottomButtons, scrolled || !st.headerButtons, bottomInset) { pills() }
         }
     }
+
+    // ---- ⋮ menu and its cards (like Poweramp)
+    when (sheet) {
+        "menu" -> ListMenuCard(
+            title = listTitle,
+            header = menuHeader,
+            onSelectFolders = menu?.allFolders?.let { { sheet = "folders" } },
+            rescanLabel = if (listKind == "folder") "Rescan This Folder" else "Rescan",
+            onRescan = { menu?.onRescan?.invoke() },
+            onAddToLauncher = menu?.category?.let { { sheet = "launcher" } },
+            onListOptions = { sheet = "options" },
+            extra = listOf("Add all to queue" to { onAddToQueue(shown) }) + extraMenu,
+            onDismiss = { if (sheet == "menu") sheet = null }
+        )
+        "options" -> SongListOptionsCard(
+            title = listTitle,
+            pref = pref,
+            defaultOrder = defaultOrder,
+            onChange = { setPref(it) },
+            onSettings = { menu?.onSettings?.invoke() },
+            onDismiss = { sheet = null }
+        )
+        "launcher" -> AddToLauncherCard(
+            onAdd = { play, open, shuffle ->
+                val group = listKey.takeUnless { it.startsWith("cat:") || it.isEmpty() }
+                val ok = pinListShortcut(songContext, menuHeader?.title ?: listTitle, menu?.category ?: "", group, play, open, shuffle)
+                if (!ok) android.widget.Toast.makeText(songContext, com.powersound.player.data.Lang.tr("This home screen doesn't accept app shortcuts"), android.widget.Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { sheet = null }
+        )
+        "folders" -> FoldersSelectionCard(
+            allFolders = menu?.allFolders?.invoke().orEmpty(),
+            excluded = st.excludedFolders,
+            onSave = { out ->
+                com.powersound.player.data.SettingsStore.update { it.copy(excludedFolders = out) }
+                menu?.onRescan?.invoke()
+            },
+            onDismiss = { sheet = null }
+        )
+    }
+    artFor?.let { list ->
+        AlbumArtPicker(list, onSettings = { actions?.albumArtSettings?.invoke() }, onDismiss = { artFor = null })
+    }
+}
+
+/** Select → Share: the song files to another app (WhatsApp, Bluetooth, Drive…). */
+fun shareSongs(context: android.content.Context, songs: List<Song>) {
+    val uris = ArrayList(songs.map { it.uri })
+    val send = if (uris.size == 1) {
+        android.content.Intent(android.content.Intent.ACTION_SEND).putExtra(android.content.Intent.EXTRA_STREAM, uris[0])
+    } else {
+        android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, uris)
+    }
+    send.type = "audio/*"
+    send.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    runCatching { context.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
 /** Multi-select bar at the bottom of a song list: what to do with the selected songs. */
@@ -785,7 +892,15 @@ private fun SelectionBar(
     onFavorite: (() -> Unit)? = null,
     /** 📌: pin / unpin at the top of the list (null: hidden). */
     pinned: Boolean = false,
-    onPin: (() -> Unit)? = null
+    onPin: (() -> Unit)? = null,
+    /** How many there are in the list: the label becomes "1 / 8" (like Poweramp). */
+    total: Int? = null,
+    /** Range: also select everything between the first and the last checked one. */
+    onRange: (() -> Unit)? = null,
+    onShare: (() -> Unit)? = null,
+    /** Info/Tags (only with one selected). */
+    onInfo: (() -> Unit)? = null,
+    onAlbumArt: (() -> Unit)? = null
 ) {
     val primary = MaterialTheme.colorScheme.primary
     Box(Modifier.fillMaxSize()) {
@@ -803,7 +918,7 @@ private fun SelectionBar(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SelIcon(Icons.Rounded.Close, "Done", true, onClose)
                 Text(
-                    label ?: if (count == 1) "1 song selected" else "$count songs selected",
+                    label ?: if (total != null) "$count / $total" else if (count == 1) "1 song selected" else "$count songs selected",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
@@ -814,6 +929,18 @@ private fun SelectionBar(
                 }
                 if (onPin != null) {
                     SelIcon(if (pinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin, if (pinned) "Unpin" else "Pin to top", count > 0, onPin)
+                }
+                if (onRange != null) {
+                    Text(
+                        "Range",
+                        color = if (count >= 2) Color.White else Color.White.copy(alpha = 0.35f),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable(enabled = count >= 2, onClick = onRange)
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                    )
                 }
                 Text(
                     if (allSelected) "None" else "All",
@@ -839,6 +966,13 @@ private fun SelectionBar(
                     on,
                     onDelete
                 )
+            }
+            if (onShare != null || onInfo != null || onAlbumArt != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    if (onShare != null) SelAction(Icons.Rounded.Share, "Share", count > 0, onShare)
+                    if (onInfo != null) SelAction(Icons.Outlined.Info, "Info/Tags", count == 1, onInfo)
+                    if (onAlbumArt != null) SelAction(Icons.Rounded.Image, "Album Art", count > 0, onAlbumArt)
+                }
             }
         }
     }

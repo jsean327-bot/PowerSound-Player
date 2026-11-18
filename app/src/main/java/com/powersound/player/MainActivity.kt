@@ -587,7 +587,10 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         addToPlaylist = { songs -> playlistFor = songs.map { it.id } },
         editTags = { songs -> ui.batchEditFor = songs },
         delete = { songs -> if (appSettings.confirmDelete) ui.confirmDeleteMany = songs else deleteSongs(songs) },
-        menuWithSelect = { s, select -> songMenuInfo = null; ui.songMenuSelect = select; songMenu = s }
+        menuWithSelect = { s, select -> songMenuInfo = null; ui.songMenuSelect = select; songMenu = s },
+        // Select → Info/Tags, and Album Art → ⚙ (Settings → Album Art)
+        info = { s -> tagsFor = s },
+        albumArtSettings = { settingsPage = SettingsPage.ALBUM_ART; settingsOpen = true }
     )
 
     // Settings → Library → Lists → Static Navbar (off: the bar slides away while you scroll down a list)
@@ -1483,7 +1486,17 @@ private fun ScreenContent(
                         onSongMenu = onSongMenu,
                         onAddToQueue = addQueue,
                         rowExtra = if (cat == Category.MOST_PLAYED) { s -> "${stats.plays[s.id] ?: 0}×" } else null,
-                        actions = listActions
+                        actions = listActions,
+                        listKey = "cat:${cat.name}",
+                        listTitle = cat.label,
+                        // the category's own order first (Most Played, Recently Added…); All Songs has none
+                        defaultOrder = if (cat == Category.ALL_SONGS) null else "Default order",
+                        menu = com.powersound.player.ui.ListMenuActions(
+                            onRescan = { vm.loadLibrary(force = true) },
+                            allFolders = null,
+                            category = cat.name,
+                            onSettings = onOpenSettings
+                        )
                     ) { pills ->
                         PageHeader("Library", cat.label, cat.icon(), cat.color(), { vm.pop() }) { pills() }
                     }
@@ -1532,6 +1545,31 @@ private fun ScreenContent(
                     },
                     deleteRemoves = true,
                     menuWithSelect = { s, select -> playlistSongMenu = Triple(playlistId, s, select) }
+                ),
+                listKey = group.key,
+                // "List Options: Folder Songs" (like Poweramp)
+                listTitle = when (group.key.substringBefore(':')) {
+                    "album" -> "Album Songs"; "folder" -> "Folder Songs"; "artist" -> "Artist Songs"; "albumartist" -> "Album Artist Songs"
+                    "genre" -> "Genre Songs"; "year" -> "Year Songs"; "composer" -> "Composer Songs"; "playlist" -> "Playlist Songs"; else -> "Songs"
+                },
+                defaultOrder = if (isPlaylist) "Playlist order" else "Default order",
+                menuHeader = com.powersound.player.ui.ListHeader(
+                    title = group.title,
+                    subtitle = group.subtitle,
+                    coverId = group.coverId,
+                    info = "♪ ${group.songs.size} | ${com.powersound.player.data.formatTime(group.songs.sumOf { it.durationMs })}"
+                ),
+                menu = com.powersound.player.ui.ListMenuActions(
+                    onRescan = { vm.loadLibrary(force = true) },
+                    // Select Folders: on folder pages, like Poweramp
+                    allFolders = if (group.key.startsWith("folder:")) ({ vm.allFolders }) else null,
+                    // Add to Launcher: the category this page belongs to
+                    category = when (group.key.substringBefore(':')) {
+                        "album" -> Category.ALBUMS; "folder" -> Category.FOLDERS; "artist" -> Category.ARTISTS
+                        "albumartist" -> Category.ALBUM_ARTISTS; "genre" -> Category.GENRES; "year" -> Category.YEARS
+                        "composer" -> Category.COMPOSERS; else -> null
+                    }?.name,
+                    onSettings = onOpenSettings
                 )
             ) { pills ->
                 ArtHeader(group, screen.backLabel, { vm.pop() }) { pills() }

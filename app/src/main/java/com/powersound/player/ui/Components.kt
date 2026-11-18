@@ -489,7 +489,9 @@ fun SongRow(
     /** "album", "folder" or "albumartist": the list the row is shown in (Settings → Library → Lists). */
     listKind: String = "",
     /** Multi-select: true / false shows a check mark on the cover; null = not selecting. */
-    checked: Boolean? = null
+    checked: Boolean? = null,
+    /** ⋮ → List Options → Show titles only. */
+    titleOnly: Boolean = false
 ) {
     val artDp = when (zoom) { 0 -> 42; 2 -> 78; else -> 56 }
     val titleSp = when (zoom) { 0 -> 13; 2 -> 17; else -> 15 }
@@ -579,7 +581,7 @@ fun SongRow(
                 overflow = if (marquee) TextOverflow.Clip else TextOverflow.Ellipsis,
                 modifier = if (marquee) Modifier.basicMarquee(iterations = Int.MAX_VALUE) else Modifier
             )
-            if (subLine.isNotEmpty()) Text(
+            if (subLine.isNotEmpty() && !titleOnly) Text(
                 text = subLine,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -587,7 +589,7 @@ fun SongRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(
+            if (!titleOnly) Text(
                 text = "$metaPrefix♪ ${formatTime(song.durationMs)} | ${song.formatLabel.lowercase()}" + (extra?.let { "  •  $it" } ?: ""),
                 fontSize = 10.sp,
                 color = Color.White.copy(alpha = 0.55f),

@@ -144,21 +144,105 @@ fun ListMenuCard(
     onAddToLauncher: (() -> Unit)?,
     onListOptions: () -> Unit,
     extra: List<Pair<String, () -> Unit>>,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** An album / folder page: its cover, name and "♪ 8 | 34:15" on top (like Poweramp), instead of the plain title. */
+    header: ListHeader? = null,
+    rescanLabel: String = "Rescan"
 ) {
     BottomCard(onDismiss) {
-        CardTitle(title)
+        if (header != null) {
+            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Artwork(songId = header.coverId, modifier = Modifier.size(84.dp), sizePx = 240, cornerDp = 12)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(header.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                    if (header.subtitle.isNotEmpty()) Text(header.subtitle, color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp, maxLines = 1)
+                    Text(header.info, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 1)
+                }
+            }
+        } else CardTitle(title)
         Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp).height(1.dp).background(Color.White.copy(alpha = 0.08f)))
         Spacer(Modifier.height(6.dp))
         if (onSelectFolders != null) MenuItemRow(Icons.Rounded.FolderCopy, "Select Folders") { onDismiss(); onSelectFolders() }
-        MenuItemRow(Icons.Rounded.Refresh, "Rescan") { onDismiss(); onRescan() }
+        MenuItemRow(Icons.Rounded.Refresh, rescanLabel) { onDismiss(); onRescan() }
         if (onAddToLauncher != null) MenuItemRow(Icons.Rounded.AddToHomeScreen, "Add to Launcher") { onDismiss(); onAddToLauncher() }
         extra.forEach { (label, action) -> MenuItemRow(Icons.Rounded.PlaylistAdd, label) { onDismiss(); action() } }
         MenuItemRow(Icons.Rounded.Tune, "List Options") { onDismiss(); onListOptions() }
     }
 }
 
+/** The top of an album / folder page's ⋮ card. */
+class ListHeader(val title: String, val subtitle: String, val coverId: Long?, val info: String)
+
 // ================================================================= List Options
+
+/** Sorts of a list of songs (like Poweramp's "List Options: Folder Songs"); the index is kept in [ListPref.sort]. */
+val SONG_SORTS = listOf(
+    "By track #" to null,
+    "By disc and track #" to null,
+    "By title" to null,
+    "By filename" to null,
+    "By path" to null,
+    "By artist" to null,
+    "By album" to null,
+    "By year" to null,
+    "By year/album" to null,
+    "By date added to Library" to null,
+    "By date added/modified" to "Filesystem date/time",
+    "By rating" to null,
+    "By duration" to null,
+    "By time last played" to null,
+    "By play count" to null
+)
+
+/** How big the rows of a list of songs are (pinch-to-zoom changes it too). */
+val SONG_VIEWS = listOf("List - compact", "List", "List - large")
+
+/** ⋮ → List Options of a list of songs: List Memory, Sort (+ Reverse), Show titles only, View As. */
+@Composable
+fun SongListOptionsCard(
+    title: String,
+    pref: ListPref,
+    /** The list has its own order (an album's tracks, a playlist, Most Played…): "Default order" is offered first. */
+    defaultOrder: String?,
+    onChange: ((ListPref) -> ListPref) -> Unit,
+    onSettings: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    BottomCard(onDismiss) {
+        CardTitle("List Options: $title") {
+            Box(Modifier.size(44.dp).clip(CircleShape).clickable { onDismiss(); onSettings() }, contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Settings, contentDescription = "Library settings", tint = Color.White)
+            }
+        }
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            Label("List Memory")
+            CheckLine("List Position", pref.memory, primary, sub = "The list opens where you left it") { v -> onChange { it.copy(memory = v) } }
+            Label("Sort")
+            // sort 0 = the list's own order (when it has one), then SONG_SORTS from 1
+            if (defaultOrder != null) Radio(defaultOrder, null, pref.sort == 0, primary) { onChange { it.copy(sort = 0) } }
+            SONG_SORTS.forEachIndexed { i, (label, sub) ->
+                Radio(label, sub, pref.sort == i + 1, primary) { onChange { it.copy(sort = i + 1) } }
+            }
+            CheckLine("Reverse", pref.reverse, primary) { v -> onChange { it.copy(reverse = v) } }
+            Label("Layout")
+            CheckLine("Show titles only", pref.titlesOnly, primary) { v -> onChange { it.copy(titlesOnly = v) } }
+            Label("View As")
+            Row(Modifier.padding(start = 28.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Info, contentDescription = null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Pinch-to-zoom for zooming", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+            }
+            SONG_VIEWS.forEachIndexed { i, label ->
+                Radio(label, null, pref.view.coerceIn(0, 2) == i, primary) { onChange { it.copy(view = i) } }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) {
+            CardButton("Close", filled = true, onClick = onDismiss)
+        }
+    }
+}
 
 private val GROUP_SORTS = listOf(
     "By name" to null,

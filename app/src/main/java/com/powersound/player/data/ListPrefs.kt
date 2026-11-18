@@ -15,7 +15,9 @@ data class ListPref(
     val reverse: Boolean = false,
     /** See [GROUP_VIEWS]. */
     val view: Int = VIEW_GRID,
-    val titlesOnly: Boolean = false
+    val titlesOnly: Boolean = false,
+    /** List Memory → List Position: open the list where you left it. */
+    val memory: Boolean = false
 )
 
 const val VIEW_GRID = 9
@@ -52,7 +54,7 @@ object ListPrefs {
             val o = JSONObject(f.getString("v", null) ?: "{}")
             o.keys().asSequence().associateWith { k ->
                 val p = o.getJSONObject(k)
-                ListPref(p.optInt("sort", 0), p.optBoolean("reverse", false), p.optInt("view", VIEW_GRID), p.optBoolean("titles", false))
+                ListPref(p.optInt("sort", 0), p.optBoolean("reverse", false), p.optInt("view", VIEW_GRID), p.optBoolean("titles", false), p.optBoolean("mem", false))
             }
         }.getOrDefault(emptyMap())
     }
@@ -64,8 +66,18 @@ object ListPrefs {
         _all.value = next
         val o = JSONObject()
         next.forEach { (k, p) ->
-            o.put(k, JSONObject().put("sort", p.sort).put("reverse", p.reverse).put("view", p.view).put("titles", p.titlesOnly))
+            o.put(k, JSONObject().put("sort", p.sort).put("reverse", p.reverse).put("view", p.view).put("titles", p.titlesOnly).put("mem", p.memory))
         }
         file?.edit()?.putString("v", o.toString())?.apply()
+    }
+
+    /** Where a list was left (List Memory → List Position): first visible row and its offset. */
+    fun position(list: String): Pair<Int, Int> {
+        val v = file?.getString("pos:$list", null) ?: return 0 to 0
+        return (v.substringBefore(',').toIntOrNull() ?: 0) to (v.substringAfter(',', "0").toIntOrNull() ?: 0)
+    }
+
+    fun savePosition(list: String, index: Int, offset: Int) {
+        file?.edit()?.putString("pos:$list", "$index,$offset")?.apply()
     }
 }

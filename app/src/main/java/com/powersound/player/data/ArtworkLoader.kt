@@ -86,6 +86,8 @@ object ArtworkLoader {
         cache.get(key)?.let { return it }
         if (missing.contains(key)) return null
 
+        // Select → Album Art → No album art
+        songInfo(songId)?.let { s -> if (noneFile(context, s).exists()) { missing.add(key); return null } }
         var bitmap = gate.withPermit {
             withContext(Dispatchers.IO) { decodeLocal(context, songId, sizePx) }
         }
@@ -122,6 +124,11 @@ object ArtworkLoader {
     private fun decodeLocal(context: Context, songId: Long, sizePx: Int): Bitmap? {
         val st = SettingsStore.value
         val song = songInfo(songId)
+        // Select → Album Art: the picture chosen for this album comes first
+        if (song != null) {
+            val pick = pickFile(context, song)
+            if (pick.exists()) decodeFile(pick, sizePx)?.let { return it }
+        }
         if (st.artPreferDownloaded && song != null) {
             val f = downloadedFile(context, song)
             if (f.exists()) decodeFile(f, sizePx)?.let { return it }
@@ -258,6 +265,96 @@ object ArtworkLoader {
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
     private fun clean(s: String) = s.replace(Regex("\\s*[(\\[].*?[)\\]]"), "").trim()
+
+    // ---------------------------------------------------------------- chosen album art (Select → Album Art)
+
+    private fun pickFile(context: Context, song: Song) = File(artDir(context), "pick_" + albumKey(song) + ".jpg")
+    private fun noneFile(context: Context, song: Song) = File(artDir(context), "pick_" + albumKey(song) + ".none")
+
+    /** The picture of [songs]' albums becomes [bytes] (for PowerSound only: the files stay as they are). */
+    fun choose(context: Context, songs: List<Song>, bytes: ByteArray) {
+        songs.distinctBy { albumKey(it) }.forEach { s ->
+            noneFile(context, s).delete()
+            val f = pickFile(context, s)
+            val tmp = File(f.parentFile, f.name + ".tmp")
+            tmp.writeBytes(bytes)
+            tmp.renameTo(f)
+        }
+        clear()
+    }
+
+    /** No album art for [songs]' albums. */
+    fun chooseNone(context: Context, songs: List<Song>) {
+        songs.distinctBy { albumKey(it) }.forEach { s ->
+            pickFile(context, s).delete()
+            noneFile(context, s).writeText("1")
+        }
+        clear()
+    }
+
+    /** Back to the album's own picture (inside the file, the folder's cover.jpg or the downloaded one). */
+    fun chooseOwn(context: Context, songs: List<Song>) {
+        songs.distinctBy { albumKey(it) }.forEach { s ->
+            pickFile(context, s).delete()
+            noneFile(context, s).delete()
+        }
+        clear()
+    }
+
+    /** What is chosen for [song]'s album now: "pick", "none" or "" (its own picture). */
+    fun chosen(context: Context, song: Song): String = when {
+        noneFile(context, song).exists() -> "none"
+        pickFile(context, song).exists() -> "pick"
+        else -> ""
+    }
+
+    /** The picture inside the song's file, as it is (null when there is none). */
+    fun embeddedBytes(context: Context, songId: Long): ByteArray? {
+        val r = MediaMetadataRetriever()
+        return try {
+            r.setDataSource(context, ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, songId))
+            r.embeddedPicture
+        } catch (_: Exception) {
+            null
+        } finally {
+            runCatching { r.release() }
+        }
+    }
+
+    /** The folder's cover.jpg / folder.jpg …, as it is. */
+    fun folderBytes(song: Song): ByteArray? = runCatching { folderImage(song)?.readBytes() }.getOrNull()
+
+    /** Album covers iTunes has for [song] (up to [max] addresses, best match first). Not cached. */
+    fun candidates(song: Song, high: Boolean, max: Int = 12): List<String> {
+        val size = if (high) "1200x1200" else "600x600"
+        val out = LinkedHashSet<String>()
+        fun add(json: String?) {
+            val arr = json?.let { runCatching { JSONObject(it).optJSONArray("results") }.getOrNull() } ?: return
+            for (i in 0 until arr.length()) {
+                val u = arr.getJSONObject(i).optString("artworkUrl100")
+                if (u.isNotBlank()) out += u.replace("100x100bb", "${size}bb")
+            }
+        }
+        val artist = if (song.albumArtist.startsWith("Unknown")) song.artist else song.albumArtist
+        val hasAlbum = song.album.isNotBlank() && !song.album.startsWith("Unknown")
+        val hasArtist = !artist.startsWith("Unknown")
+        if (hasAlbum) {
+            val term = listOf(if (hasArtist) clean(artist) else "", clean(song.album)).filter { it.isNotBlank() }.joinToString(" ")
+            add(httpText("https://itunes.apple.com/search?media=music&entity=album&limit=15&term=" + enc(term)))
+        }
+        val title = clean(song.title.ifBlank { song.fileName })
+        val term = listOf(if (hasArtist) clean(song.artist) else "", title).filter { it.isNotBlank() }.joinToString(" ")
+        if (out.size < max && term.isNotBlank()) {
+            add(httpText("https://itunes.apple.com/search?media=music&entity=song&limit=15&term=" + enc(term)))
+        }
+        if (out.size < max && hasArtist) {
+            add(httpText("https://itunes.apple.com/search?media=music&entity=album&limit=10&term=" + enc(clean(artist))))
+        }
+        return out.take(max)
+    }
+
+    /** Downloads one picture (an address from [candidates]). */
+    fun fetch(url: String): ByteArray? = httpBytes(url)
 
     /** iTunes Search: album cover by artist + album, or (Also Search By Title/Filename) by artist + title. */
     private fun itunesArt(song: Song, st: AppSettings): String? {
