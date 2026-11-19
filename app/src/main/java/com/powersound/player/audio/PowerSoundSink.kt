@@ -32,6 +32,13 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
     private var inChannels = 2
     private var inRate = 44100
     private var floatOut = true
+    /** The USB DAC's format while it gets the sound bit-perfect (null: Android's normal output). */
+    private var usbPlan: UsbBitPerfect.Plan? = null
+    private var innerPlan: UsbBitPerfect.Plan? = null
+    private val switch = sink as? SwitchSink
+    /** The last PCM input format, to choose the output path again mid-song ([AudioEngine.outputVersion]). */
+    private var lastInput: Format? = null
+    private var outputVersion = -1
     private var paramsVersion = -1
 
     // output waiting for the wrapped sink, oldest first
@@ -74,11 +81,15 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
             innerFormat = null
             chain = null
             passthrough = true
+            usbPlan = null
+            switch?.direct = null
             super.configure(inputFormat, specifiedBufferSize, outputChannels)
             return
         }
         val wasPassthrough = passthrough
         passthrough = false
+        lastInput = inputFormat
+        outputVersion = AudioEngine.outputVersion
         val bitPerfect = AudioEngine.bitPerfect
         val rate = inputFormat.sampleRate
         val ch = inputFormat.channelCount
@@ -86,6 +97,11 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
         val wantFloat = AudioEngine.outputFloat || (bitPerfect && inputFormat.pcmEncoding != C.ENCODING_PCM_16BIT)
         val quality = AudioEngine.resamplerQuality
         val cutoff = AudioEngine.resamplerCutoff
+        // Perfect Bit Perfect + a USB DAC (Android 14+): the DAC alone, at the song's own rate and bits
+        val usb = if (bitPerfect && AudioEngine.usbExclusive && switch?.canDirect == true) UsbBitPerfect.plan(rate, ch) else {
+            UsbBitPerfect.status.value = null
+            null
+        }
 
         val oldEncoding = inEncoding
         inEncoding = inputFormat.pcmEncoding
@@ -101,7 +117,7 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
 
         val old = chain
         if (old != null && !wasPassthrough && old.inRate == rate && old.channels == ch && old.outRate == outRate &&
-            old.bitPerfect == bitPerfect && old.quality == quality && old.cutoff == cutoff && floatOut == wantFloat
+            old.bitPerfect == bitPerfect && old.quality == quality && old.cutoff == cutoff && floatOut == wantFloat && usb == usbPlan
         ) {
             // same output format: the chain keeps running, so the tracks join without a gap
             return
@@ -116,12 +132,15 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
         chain = c
         paramsVersion = -1
         floatOut = wantFloat
-        encoder = OutputEncoder(ch, wantFloat, AudioEngine.ditherType)
+        usbPlan = usb
+        innerPlan = usb
+        encoder = if (usb != null) OutputEncoder(ch, usb.bits == 0, AudioEngine.ditherType, usb.bits.takeIf { it != 0 } ?: 32, plain = true)
+            else OutputEncoder(ch, wantFloat, AudioEngine.ditherType)
         VisualizerBus.rate = c.rate
-        AudioEngine.reportFormat(rate, c.rate, ch, wantFloat)
+        AudioEngine.reportFormat(rate, c.rate, ch, usb?.let { it.bits == 0 } ?: wantFloat)
         innerFormat = Format.Builder()
             .setSampleMimeType(MimeTypes.AUDIO_RAW)
-            .setPcmEncoding(if (wantFloat) C.ENCODING_PCM_FLOAT else C.ENCODING_PCM_16BIT)
+            .setPcmEncoding(usb?.media3Encoding ?: if (wantFloat) C.ENCODING_PCM_FLOAT else C.ENCODING_PCM_16BIT)
             .setChannelCount(ch)
             .setSampleRate(c.rate)
             .build()
@@ -131,6 +150,7 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
     private fun applyInnerFormat() {
         val f = innerFormat ?: return
         innerFormat = null
+        switch?.direct = innerPlan
         super.configure(f, 0, null)
     }
 
@@ -149,6 +169,7 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
 
     override fun handleBuffer(buffer: ByteBuffer, presentationTimeUs: Long, encodedAccessUnitCount: Int): Boolean {
         if (passthrough) return super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+        if (AudioEngine.outputVersion != outputVersion) rechoose()
         val c = chain ?: return super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
         if (!drainQueue()) return false
         if (!buffer.hasRemaining()) return true
@@ -170,6 +191,24 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
             }
         }
         return true
+    }
+
+    /**
+     * A USB DAC plugged in or out, or Bit Perfect turned on / off, in the middle of a song: the output path is chosen
+     * again now (not at the next song), keeping the song's place (its start trimming is not done again).
+     */
+    private fun rechoose() {
+        outputVersion = AudioEngine.outputVersion
+        val f = lastInput ?: return
+        val t = trimStart
+        val pf = padFrames
+        val hf = holdFrames
+        val data = dataSinceConfigure
+        configure(f, 0, null)
+        trimStart = t
+        padFrames = pf
+        holdFrames = hf
+        dataSinceConfigure = data
     }
 
     override fun playToEndOfStream() {
@@ -216,6 +255,8 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
         innerFormat = null
         chain = null
         encoder = null
+        usbPlan = null
+        lastInput = null
         passthrough = false
         eosDone = false
         holdFrames = 0
@@ -358,10 +399,19 @@ class PowerSoundSink(private val sink: AudioSink) : ForwardingAudioSink(sink) {
 }
 
 /** 64-bit samples → the output format: 32-bit float as they are, or 16-bit with the chosen dither. */
-class OutputEncoder(private val channels: Int, val float: Boolean, ditherType: Int) {
+class OutputEncoder(
+    private val channels: Int,
+    val float: Boolean,
+    ditherType: Int,
+    /** Integer output: 16, 24 (packed) or 32 bits. */
+    private val bits: Int = 16,
+    /** Plain rounding, no dither (bit-perfect: the samples already have these bits). */
+    private val plain: Boolean = false
+) {
     private val dither = Ditherer(channels, ditherType)
     private var floats = FloatArray(0)
     private var shorts = ShortArray(0)
+    private var packed = ByteArray(0)
 
     /**
      * Encodes [frames] frames of [src]. [exact]: the samples are untouched 16-bit values, written back without dither.
@@ -369,18 +419,32 @@ class OutputEncoder(private val channels: Int, val float: Boolean, ditherType: I
      */
     fun encode(src: DoubleArray, frames: Int, exact: Boolean, reuse: ByteBuffer?): ByteBuffer {
         val n = frames * channels
-        val bytes = n * if (float) 4 else 2
+        val bytes = n * if (float) 4 else bits / 8
         val out = if (reuse != null && reuse.capacity() >= bytes) reuse
         else ByteBuffer.allocateDirect(maxOf(bytes, 32768)).order(ByteOrder.LITTLE_ENDIAN)
         out.clear()
         out.order(ByteOrder.LITTLE_ENDIAN)
-        if (float) {
+        if (!float && bits == 24) {
+            if (packed.size < n * 3) packed = ByteArray(n * 3)
+            var j = 0
+            for (i in 0 until n) {
+                val v = Math.round(src[i] * 8388608.0).coerceIn(-8388608L, 8388607L).toInt()
+                packed[j] = v.toByte()
+                packed[j + 1] = (v shr 8).toByte()
+                packed[j + 2] = (v shr 16).toByte()
+                j += 3
+            }
+            out.put(packed, 0, n * 3)
+        } else if (!float && bits == 32) {
+            val ib = out.asIntBuffer()
+            for (i in 0 until n) ib.put(i, Math.round(src[i] * 2147483648.0).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt())
+        } else if (float) {
             if (floats.size < n) floats = FloatArray(n)
             for (i in 0 until n) floats[i] = src[i].toFloat()
             out.asFloatBuffer().put(floats, 0, n)
         } else {
             if (shorts.size < n) shorts = ShortArray(n)
-            if (exact) {
+            if (exact || plain) {
                 for (i in 0 until n) shorts[i] = (src[i] * 32768.0).roundToInt().coerceIn(-32768, 32767).toShort()
             } else {
                 for (i in 0 until n) shorts[i] = dither.quantize(src[i] * 32768.0, i % channels)

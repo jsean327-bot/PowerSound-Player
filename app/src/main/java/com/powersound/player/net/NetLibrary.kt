@@ -119,7 +119,8 @@ object NetLibrary {
         folderLabel: String,
         items: List<DlnaItem>,
         children: (DlnaItem) -> List<DlnaItem>?,
-        smb: SmbServer?,
+        /** Files of a shared folder / FTP / WebDAV server: their tags are read from the files themselves. */
+        fromFiles: Boolean,
         done: (Int) -> Unit
     ) {
         if (job?.isActive == true) return
@@ -155,10 +156,10 @@ object NetLibrary {
                 var track = 0
                 var year = 0
                 var genre = ""
-                if (smb != null) {
+                if (fromFiles) {
                     // a shared folder only has file names: the tags are read from the file over the network
                     runCatching {
-                        val ch = Smb.open(smb, e.id)
+                        val ch = Remote.open(app, android.net.Uri.parse(url)) ?: return@runCatching
                         val r = MediaMetadataRetriever()
                         try {
                             r.setDataSource(ChannelSource(ch))
@@ -208,7 +209,7 @@ object NetLibrary {
 }
 
 /** Lets Android's tag reader read a file of a shared folder. */
-private class ChannelSource(private val ch: SmbChannel) : MediaDataSource() {
+private class ChannelSource(private val ch: RemoteFile) : MediaDataSource() {
     override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
         if (position >= ch.size()) return -1
         ch.position(position)

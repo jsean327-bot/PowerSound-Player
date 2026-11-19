@@ -24,6 +24,9 @@ import kotlinx.coroutines.launch
 import com.powersound.player.net.SmbStore
 import com.powersound.player.net.SmbServer
 import com.powersound.player.net.Smb
+import com.powersound.player.net.FileServer
+import com.powersound.player.net.FileServerStore
+import com.powersound.player.net.Remote
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.rounded.FolderShared
@@ -154,12 +157,17 @@ fun NetworkScreen(
         failReason = null
         if (s != null) {
             val shared = s.controlUrl.takeIf { it.startsWith("smb:") }?.let { SmbStore.get(context, it.removePrefix("smb:")) }
+            val files = s.controlUrl.takeIf { it.startsWith("fs:") }?.let { FileServerStore.get(context, it.removePrefix("fs:")) }
             val list = withContext(Dispatchers.IO) {
-                if (shared != null) {
+                when {
                     // a Windows shared folder: "0" is where it starts
-                    runCatching { Smb.items(shared, if (folderId == "0") shared.root else folderId) }
+                    shared != null -> runCatching { Smb.items(shared, if (folderId == "0") shared.root else folderId) }
                         .onFailure { e -> failReason = Smb.explain(e) }.getOrNull()
-                } else Dlna.browse(s, folderId)
+                    // an FTP / WebDAV server
+                    files != null -> runCatching { Remote.items(files, if (folderId == "0") files.root else folderId) }
+                        .onFailure { e -> failReason = Remote.explain(e) }.getOrNull()
+                    else -> Dlna.browse(s, folderId)
+                }
             }
             if (list == null) failed = true else items = list
         }
@@ -176,6 +184,22 @@ fun NetworkScreen(
     var addShare by remember { mutableStateOf(false) }
     var removeShare by remember { mutableStateOf<SmbServer?>(null) }
     if (addShare) AddShareDialog(onDismiss = { addShare = false })
+    // FTP and WebDAV servers you added
+    val fileServers by FileServerStore.servers.collectAsState()
+    LaunchedEffect(Unit) { FileServerStore.load(context) }
+    var addFiles by remember { mutableStateOf(false) }
+    var removeFiles by remember { mutableStateOf<FileServer?>(null) }
+    if (addFiles) AddFileServerDialog(onDismiss = { addFiles = false })
+    removeFiles?.let { fs ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { removeFiles = null },
+            containerColor = Color(0xFF1B1B22),
+            title = { Text("Remove \"${fs.name}\"?", color = Color.White) },
+            text = { Text("It is only taken out of PowerSound. Nothing changes on the server.", color = Color.White.copy(alpha = 0.7f)) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { FileServerStore.remove(context, fs.id); removeFiles = null }) { Text("Remove") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { removeFiles = null }) { Text("Cancel") } }
+        )
+    }
     removeShare?.let { sh ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { removeShare = null },
@@ -231,11 +255,18 @@ fun NetworkScreen(
                                         }
                                     } else {
                                         val shared = s.controlUrl.takeIf { it.startsWith("smb:") }?.let { SmbStore.get(context, it.removePrefix("smb:")) }
+                                        val files = s.controlUrl.takeIf { it.startsWith("fs:") }?.let { FileServerStore.get(context, it.removePrefix("fs:")) }
                                         val label = (listOf("Network", s.name) + path.map { it.second }).joinToString("/")
                                         com.powersound.player.net.NetLibrary.add(
                                             context, origin, label, list,
-                                            children = { f -> if (shared != null) runCatching { Smb.items(shared, f.id) }.getOrNull() else Dlna.browse(s, f.id) },
-                                            smb = shared
+                                            children = { f ->
+                                                when {
+                                                    shared != null -> runCatching { Smb.items(shared, f.id) }.getOrNull()
+                                                    files != null -> runCatching { Remote.items(files, f.id) }.getOrNull()
+                                                    else -> Dlna.browse(s, f.id)
+                                                }
+                                            },
+                                            fromFiles = shared != null || files != null
                                         ) { n ->
                                             android.widget.Toast.makeText(
                                                 context, com.powersound.player.data.Lang.tr("Added $n songs to the library"), android.widget.Toast.LENGTH_LONG
@@ -320,6 +351,28 @@ fun NetworkScreen(
             }
             item {
                 NetRow(Icons.Rounded.Add, primary, "Add shared folder", "\\\\PC\\Music, with its Windows user", false) { addShare = true }
+            }
+            // ---- FTP and WebDAV (NAS, Nextcloud, phones' and computers' file servers)
+            item {
+                Text(
+                    "FTP and WebDAV servers",
+                    color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 20.dp, top = 18.dp, bottom = 4.dp)
+                )
+            }
+            itemsIndexed(fileServers, key = { _, it -> "fs:" + it.id }) { _, fs ->
+                NetRow(
+                    Icons.Rounded.FolderShared, if (fs.kind == "ftp") Color(0xFF4DB6AC) else Color(0xFF9575CD), fs.name,
+                    fs.label + (if (fs.user.isNotEmpty()) "  •  ${fs.user}" else ""),
+                    false,
+                    onLongClick = { removeFiles = fs }
+                ) {
+                    NetworkStore.path.value = emptyList()
+                    NetworkStore.server.value = DlnaServer(fs.name, "fs:" + fs.id, fs.label)
+                }
+            }
+            item {
+                NetRow(Icons.Rounded.Add, primary, "Add FTP / WebDAV server", "ftp://192.168.1.5:2121 • https://nas.local/dav", false) { addFiles = true }
             }
         } else {
             // ---- a folder of the server
@@ -473,6 +526,88 @@ private fun AddShareDialog(onDismiss: () -> Unit) {
                     if (problem != null) error = problem
                     else {
                         SmbStore.add(context, server)
+                        onDismiss()
+                    }
+                }
+            }) { Text("Add") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/** Library → Network → Add FTP / WebDAV server: its address and user; checked before it is kept. */
+@Composable
+private fun AddFileServerDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var ftp by remember { mutableStateOf(true) }
+    var address by remember { mutableStateOf("") }
+    var user by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val primary = MaterialTheme.colorScheme.primary
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        containerColor = Color(0xFF1B1B22),
+        title = { Text("Add FTP / WebDAV server", color = Color.White) },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                Row {
+                    listOf(true to "FTP", false to "WebDAV").forEach { (k, label) ->
+                        Text(
+                            label,
+                            color = if (ftp == k) Color.Black else Color.White,
+                            fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(if (ftp == k) primary else Color.White.copy(alpha = 0.12f))
+                                .clickable { ftp = k; error = null }
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+                Text(
+                    if (ftp) "The FTP server's address, like 192.168.1.5:2121/Music (a NAS, a router with a disk, a computer or a phone's " +
+                        "\"FTP server\" app). Leave the user empty to sign in as a guest."
+                    else "The WebDAV folder's address, like https://nas.local/dav/Music or http://192.168.1.5:8080/ (NAS, Nextcloud: " +
+                        "…/remote.php/dav/files/USER/, computers' and phones' WebDAV servers).",
+                    color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)
+                )
+                ShareField(address, { address = it; error = null }, if (ftp) "Address  (192.168.1.5:2121/Music)" else "Address  (https://nas.local/dav)")
+                ShareField(user, { user = it; error = null }, "User")
+                ShareField(password, { password = it; error = null }, "Password", secret = true)
+                ShareField(name, { name = it }, "Name (optional)")
+                if (busy) Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Connecting…", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                }
+                error?.let { Text(it, color = Color(0xFFFF8A80), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp)) }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(enabled = !busy, onClick = {
+                val parsed = FileServerStore.parse(address, ftpDefault = ftp)
+                if (parsed == null) {
+                    error = "Write the server's address, like 192.168.1.5:2121"
+                    return@TextButton
+                }
+                val server = parsed.copy(
+                    id = System.currentTimeMillis().toString(36),
+                    name = name.trim().ifEmpty { parsed.root.substringAfterLast('/').ifEmpty { parsed.host } },
+                    user = user.trim(),
+                    password = password
+                )
+                busy = true
+                scope.launch {
+                    val problem = withContext(Dispatchers.IO) { Remote.test(server) }
+                    busy = false
+                    if (problem != null) error = problem
+                    else {
+                        FileServerStore.add(context, server)
                         onDismiss()
                     }
                 }

@@ -138,6 +138,8 @@ data class AppSettings(
     val outFormat: Map<String, Int> = emptyMap(), // 0 32-bit float (default), 1 16-bit
     // ---- Audio → Bit Perfect ----
     val perfectBitPerfect: Boolean = false,
+    /** Perfect Bit Perfect → USB DAC at the song's own rate and bits (Android 14+). */
+    val usbBitPerfect: Boolean = true,
     // ---- Audio → Advanced Tweaks ----
     val pauseOnVolumeZero: Boolean = false,
     val musicFx: Boolean = false,
@@ -436,7 +438,7 @@ object SettingsStore {
         put("artDl", s.artDownload); put("artDlArtist", s.artDownloadArtist); put("artHiRes", s.artHighRes); put("artWifi", s.artWifiOnly)
         put("artDefault", s.artForceDefault); put("art24", s.art24bit); put("artTitle", s.artSearchTitle); put("artPreferDl", s.artPreferDownloaded)
         put("artAspect", s.artAspect)
-        put("bitPerfect", s.perfectBitPerfect); put("volZero", s.pauseOnVolumeZero); put("musicFx", s.musicFx)
+        put("bitPerfect", s.perfectBitPerfect); put("usbBitPerfect", s.usbBitPerfect); put("volZero", s.pauseOnVolumeZero); put("musicFx", s.musicFx)
     }
 
     private fun fromJson(o: JSONObject): AppSettings {
@@ -640,6 +642,7 @@ object SettingsStore {
             outRate = o.optJSONObject("outRate")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: d.outRate,
             outFormat = o.optJSONObject("outFormat")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: d.outFormat,
             perfectBitPerfect = o.optBoolean("bitPerfect", d.perfectBitPerfect),
+            usbBitPerfect = o.optBoolean("usbBitPerfect", d.usbBitPerfect),
             pauseOnVolumeZero = o.optBoolean("volZero", d.pauseOnVolumeZero),
             musicFx = o.optBoolean("musicFx", d.musicFx),
             vizOnPlayer = o.optBoolean("vizOn", d.vizOnPlayer),

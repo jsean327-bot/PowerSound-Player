@@ -492,13 +492,15 @@ class PlaybackService : MediaLibraryService() {
     /** A song file for the Chromecast (runs on the web server's thread). */
     private fun openSongFile(id: Long): com.powersound.player.cast.ServedFile? = runCatching {
         // a shared-folder song in the library: read from the shared folder
-        if (id < 0) {
-            val s = com.powersound.player.net.NetLibrary.song(this, id) ?: return null
-            val (server, path) = com.powersound.player.net.Smb.resolve(this, s.uri) ?: return null
-            val ch = com.powersound.player.net.Smb.open(server, path)
-            return com.powersound.player.cast.ServedFile(ch, ch.size(), s.mimeType) { ch.close() }
+        if (id < 0 && !com.powersound.player.data.CueSheets.isCue(id)) {
+            // a network song of the library, or one played straight from Library → Network
+            val s = com.powersound.player.net.NetLibrary.song(this, id)
+            val uri = s?.uri ?: com.powersound.player.net.Remote.castUri(id) ?: return null
+            val ch = com.powersound.player.net.Remote.open(this, uri) ?: return null
+            return com.powersound.player.cast.ServedFile(ch, ch.size(), s?.mimeType ?: com.powersound.player.net.Remote.mime(uri) ?: "audio/mpeg") { ch.close() }
         }
-        val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+        // a CUE song: its long file (the Chromecast is told where the song starts and ends)
+        val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, com.powersound.player.data.CueSheets.fileId(id))
         val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return null
         val stream = java.io.FileInputStream(pfd.fileDescriptor)
         val size = pfd.statSize.takeIf { it > 0 } ?: stream.channel.size()
@@ -775,9 +777,15 @@ class PlaybackService : MediaLibraryService() {
                 }
             }
         }
-        val known = ids.filter { it in meta }
+        // CUE songs and network songs aren't MediaStore entries: their own lists know them
+        val extra = HashMap<Long, com.powersound.player.data.Song>()
+        ids.distinct().filter { it < 0 }.forEach { id ->
+            (com.powersound.player.data.CueSheets.song(this, id) ?: com.powersound.player.net.NetLibrary.song(this, id))?.let { extra[id] = it }
+        }
+        val known = ids.filter { it in meta || it in extra }
         if (known.isEmpty()) return null
         val items = known.map { id ->
+            extra[id]?.let { return@map car.playable(it) }
             val m = meta[id]
             val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
             fun clean(s: String?) = s?.trim()?.takeUnless { it.isEmpty() || it == "<unknown>" }
@@ -811,8 +819,12 @@ class PlaybackService : MediaLibraryService() {
                 .setEnableFloatOutput(true)
                 .setEnableAudioTrackPlaybackParams(true)
                 .build()
+            // Perfect Bit Perfect + USB DAC (Android 14+): the DAC alone at the song's own rate (UsbBitPerfect)
+            com.powersound.player.audio.UsbBitPerfect.init(this)
+            val usb = if (android.os.Build.VERSION.SDK_INT >= 34) com.powersound.player.audio.DirectUsbSink() else null
             arrayOf<Renderer>(
-                MediaCodecAudioRenderer(this, softwareDecodersFirst, handler, audioListener, PowerSoundSink(androidSink))
+                MediaCodecAudioRenderer(this, softwareDecodersFirst, handler, audioListener,
+                    PowerSoundSink(com.powersound.player.audio.SwitchSink(androidSink, usb)))
             )
         }
         // Settings → Misc → Network Stream Timeout / User Agent (read for every new connection)
@@ -1083,6 +1095,8 @@ class PlaybackService : MediaLibraryService() {
         AudioEngine.outputKey = key
         AudioEngine.outputDelayMs = st.outDelayMs[key] ?: 0
         AudioEngine.nativeRate() // the new output's own rate (Audio Outputs → Sample Rate → Native)
+        if (switched || st.usbBitPerfect != AudioEngine.usbExclusive || st.perfectBitPerfect != AudioEngine.bitPerfect) AudioEngine.outputVersion++
+        AudioEngine.usbExclusive = st.usbBitPerfect
         AudioEngine.applyOptions(
             bitPerfect = st.perfectBitPerfect,
             eqBlocked = key in st.outNoEq,

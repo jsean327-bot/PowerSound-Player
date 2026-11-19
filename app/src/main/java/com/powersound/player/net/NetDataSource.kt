@@ -12,10 +12,10 @@ import androidx.media3.datasource.DataSourceException
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 
-/** Plays smb:// addresses (Library → Network → Windows shared folders) straight from the shared folder. */
+/** Plays network files (Library → Network: Windows shared folders, FTP, WebDAV) straight from their server. */
 @OptIn(UnstableApi::class)
 class SmbDataSource(private val context: Context) : BaseDataSource(true) {
-    private var channel: SmbChannel? = null
+    private var channel: RemoteFile? = null
     private var uri: Uri? = null
     private var left = 0L
     private var opened = false
@@ -23,10 +23,10 @@ class SmbDataSource(private val context: Context) : BaseDataSource(true) {
     override fun open(dataSpec: DataSpec): Long {
         uri = dataSpec.uri
         transferInitializing(dataSpec)
-        val (server, path) = Smb.resolve(context, dataSpec.uri)
-            ?: throw DataSourceException(PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND)
         val ch = try {
-            Smb.open(server, path)
+            Remote.open(context, dataSpec.uri) ?: throw DataSourceException(PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND)
+        } catch (e: DataSourceException) {
+            throw e
         } catch (e: Exception) {
             throw DataSourceException(e, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
         }
@@ -85,7 +85,7 @@ class NetDataSourceFactory(private val context: Context, private val inner: Data
         }
 
         override fun open(dataSpec: DataSpec): Long {
-            val ds = if (dataSpec.uri.scheme == "smb") SmbDataSource(context).also { s -> listeners.forEach { s.addTransferListener(it) } } else inner
+            val ds = if (Remote.isRemote(dataSpec.uri)) SmbDataSource(context).also { s -> listeners.forEach { s.addTransferListener(it) } } else inner
             current = ds
             return ds.open(dataSpec)
         }

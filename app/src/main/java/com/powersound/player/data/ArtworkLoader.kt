@@ -143,9 +143,10 @@ object ArtworkLoader {
     }
 
     private fun decodeEmbedded(context: Context, songId: Long, sizePx: Int): Bitmap? {
-        if (songId < 0) return null // a network song: its cover was kept when it was added
+        val fileId = CueSheets.fileId(songId) // a CUE song: the long file's cover
+        if (fileId < 0) return null // a network song: its cover was kept when it was added
 
-        val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, songId)
+        val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, fileId)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
                 return context.contentResolver.loadThumbnail(uri, Size(sizePx, sizePx), null)
@@ -234,7 +235,7 @@ object ArtworkLoader {
         val st = SettingsStore.value
         val song = songInfo(songId) ?: return null
         // a media server's song: the cover the server gives (on the home network, so not limited by the settings)
-        if (songId < 0) {
+        if (songId < 0 && !CueSheets.isCue(songId)) {
             val art = com.powersound.player.net.NetLibrary.artUrl(context, songId)
             if (art != null) {
                 val file = downloadedFile(context, song)
@@ -338,7 +339,7 @@ object ArtworkLoader {
     fun embeddedBytes(context: Context, songId: Long): ByteArray? {
         val r = MediaMetadataRetriever()
         return try {
-            r.setDataSource(context, ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, songId))
+            r.setDataSource(context, ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, CueSheets.fileId(songId)))
             r.embeddedPicture
         } catch (_: Exception) {
             null

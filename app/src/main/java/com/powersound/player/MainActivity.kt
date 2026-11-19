@@ -453,7 +453,10 @@ fun PowerSoundApp(vm: PlayerViewModel = viewModel()) {
         // network songs stay on their computer: they are only taken out of the library (Network → Remove from Library)
         val songs = all.filter { it.id >= 0 }
         if (songs.size < all.size) {
-            android.widget.Toast.makeText(context, com.powersound.player.data.Lang.tr("Songs from the network can't be deleted from the phone"), android.widget.Toast.LENGTH_SHORT).show()
+            // a CUE song is a part of a long file: deleting it would delete the whole album
+            val msg = if (all.any { it.isCue }) "Songs of a CUE sheet can't be deleted one by one (they are parts of one file)"
+                else "Songs from the network can't be deleted from the phone"
+            android.widget.Toast.makeText(context, com.powersound.player.data.Lang.tr(msg), android.widget.Toast.LENGTH_SHORT).show()
         }
         if (songs.isEmpty()) return
         pendingDeleteIds = songs.map { it.id }

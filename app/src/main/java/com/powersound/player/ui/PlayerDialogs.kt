@@ -406,6 +406,7 @@ fun AudioInfoDialog(song: Song?, audioInfo: String, dspSummary: String, onDismis
         add("Decoder" to (engine.decoderName.ifBlank { "Android MediaCodec" } + "\n" + engine.inputEncoding.ifBlank { "PCM" }))
         if (st.perfectBitPerfect) {
             add("DSP" to "Perfect Bit Perfect: no processing")
+            com.powersound.player.audio.UsbBitPerfect.status.value?.let { add("USB DAC" to it) }
         } else {
             val dsp = ArrayList<String>()
             if (engine.inputRate > 0) dsp.add("${khz(engine.inputRate)} • 64-bit floating point")

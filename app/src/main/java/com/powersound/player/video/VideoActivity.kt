@@ -43,6 +43,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -154,6 +155,15 @@ class VideoActivity : ComponentActivity() {
     val muted = mutableStateOf(false)
     val stereoMode = mutableIntStateOf(0)
     val audioDelayMs = mutableIntStateOf(0)
+    /** Subtitles → Synchronization: + shows them later, − earlier (ms), for this video. */
+    val subDelayMs = mutableIntStateOf(0)
+    /** The chosen subtitle's lines while it is moved (null: the player shows the subtitle itself). */
+    val subLines = mutableStateOf<List<SubSync.Line>?>(null)
+    /** "Reading the subtitle…" / why it can't be moved. */
+    val subSyncNote = mutableStateOf<String?>(null)
+    private var subLinesKey: String? = null
+    private var subLinesJob: Job? = null
+    private var subRecast: Job? = null
     val abA = mutableStateOf<Long?>(null)
     val abB = mutableStateOf<Long?>(null)
     /** Sleep timer: the time it stops (ms), -1 = at the end of this video, null = off. */
@@ -277,6 +287,11 @@ class VideoActivity : ComponentActivity() {
             error.value = null
             abA.value = null
             abB.value = null
+            // the subtitle's time is set for each video
+            subDelayMs.intValue = 0
+            subLines.value = null
+            subLinesKey = null
+            subSyncNote.value = null
             if (!VideoPrefsStore.value.aspectAll) aspect.intValue = 0
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                 // the previous episode was watched to the end
@@ -308,6 +323,8 @@ class VideoActivity : ComponentActivity() {
 
         override fun onTracksChanged(tracks: Tracks) {
             if (pendingExternalAudio) selectExternalAudio(tracks)
+            // another subtitle chosen while moved: read that one
+            if (subDelayMs.intValue != 0) readSubLines()
         }
 
         override fun onPlayerError(e: PlaybackException) {
@@ -491,6 +508,90 @@ class VideoActivity : ComponentActivity() {
     /** Synchronization: + makes the sound later, − earlier (milliseconds). */
     fun setAudioDelay(ms: Int) {
         audioDelayMs.intValue = ms.coerceIn(-5000, 5000)
+    }
+
+    fun setSubDelay(ms: Int) {
+        val v = ms.coerceIn(-600_000, 600_000)
+        subDelayMs.intValue = v
+        if (v == 0) {
+            subLines.value = null
+            subSyncNote.value = null
+        } else readSubLines()
+        // on the TV: the subtitles are sent again, moved (after the last tap)
+        if (castingTo.value != null) {
+            subRecast?.cancel()
+            subRecast = lifecycleScope.launch {
+                kotlinx.coroutines.delay(1200)
+                val session = CastControl.context(this@VideoActivity)?.sessionManager?.currentCastSession ?: return@launch
+                if (session.isConnected) castVideo(session, viaPhone = castViaPhone.value, startMs = castPosition.longValue)
+            }
+        }
+    }
+
+    /** The chosen subtitle track: a subtitle file of the video, or one inside the file (MKV), with its key. */
+    private fun chosenSubtitle(): Triple<String, MediaItem.SubtitleConfiguration?, Format>? {
+        val p = playerOrNull() ?: return null
+        if (p.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) return null
+        val item = p.currentMediaItem ?: return null
+        for (g in p.currentTracks.groups) {
+            if (g.type != C.TRACK_TYPE_TEXT) continue
+            for (i in 0 until g.length) {
+                if (!g.isTrackSelected(i)) continue
+                val f = g.getTrackFormat(i)
+                val configs = item.localConfiguration?.subtitleConfigurations.orEmpty()
+                val file = configs.firstOrNull { c -> c.id != null && c.id == f.id }
+                    ?: configs.firstOrNull { c -> c.label != null && c.label.toString() == f.label && (c.mimeType == null || c.mimeType == f.sampleMimeType) }
+                val key = item.mediaId + "|" + (file?.uri?.toString() ?: ("in:" + f.id + ":" + f.language + ":" + f.label))
+                return Triple(key, file, f)
+            }
+        }
+        return null
+    }
+
+    /** Reads the chosen subtitle's lines once (in the background) so they can be shown moved. */
+    private fun readSubLines() {
+        val chosen = chosenSubtitle()
+        if (chosen == null) {
+            subLines.value = null
+            subLinesKey = null
+            subSyncNote.value = "Turn a subtitle on first"
+            return
+        }
+        val (key, file, format) = chosen
+        if (key == subLinesKey && subLines.value != null) return
+        subLinesKey = key
+        subLines.value = null
+        subLinesJob?.cancel()
+        val p = playerOrNull() ?: return
+        val video = p.currentMediaItem?.localConfiguration?.uri
+        val mime = p.currentMediaItem?.localConfiguration?.mimeType
+        val site = headers
+        subSyncNote.value = "Reading the subtitle…"
+        subLinesJob = lifecycleScope.launch {
+            val vtt: String? = withContext(Dispatchers.IO) {
+                when {
+                    file != null -> subtitleAsVtt(file.uri, site)?.toString(Charsets.UTF_8)
+                    video != null && EmbeddedSubs.canHold(video, mime) && video.scheme != "http" && video.scheme != "https" -> {
+                        val all = embeddedSubs[video.toString()] ?: runCatching { embeddedRead(video.toString(), video, forCast = false).await() }.getOrNull().orEmpty()
+                        // the same track: by its language and name, else by its place among the text tracks
+                        (all.firstOrNull { it.language == format.language && (format.label == null || it.label == format.label) }
+                            ?: all.firstOrNull { it.language != null && it.language == format.language }
+                            ?: all.singleOrNull())?.vtt
+                    }
+                    else -> null
+                }
+            }
+            if (subLinesKey != key) return@launch
+            val lines = vtt?.let { SubSync.parse(it) }.orEmpty()
+            if (lines.isEmpty()) {
+                subSyncNote.value = if (format.sampleMimeType == MimeTypes.APPLICATION_PGS || format.sampleMimeType == MimeTypes.APPLICATION_VOBSUB)
+                    "This subtitle is pictures, it can't be moved" else "This subtitle can't be moved (only subtitle files and text subtitles inside MKV)"
+                subLines.value = null
+            } else {
+                subSyncNote.value = null
+                subLines.value = lines
+            }
+        }
     }
 
     fun setRotationMode(mode: Int) {
@@ -794,14 +895,15 @@ class VideoActivity : ComponentActivity() {
     private val embeddedReading = HashMap<String, kotlinx.coroutines.Deferred<List<EmbeddedSubs.Track>>>()
 
     /** Reads the subtitles inside [uri] once (in the background, with its progress under the cast controls). */
-    private fun embeddedRead(key: String, uri: Uri): kotlinx.coroutines.Deferred<List<EmbeddedSubs.Track>> {
+    private fun embeddedRead(key: String, uri: Uri, forCast: Boolean = true): kotlinx.coroutines.Deferred<List<EmbeddedSubs.Track>> {
         embeddedReading[key]?.takeIf { it.isActive }?.let { return it }
         val factory = dataSources ?: com.powersound.player.net.NetDataSourceFactory(this, DefaultDataSource.Factory(this))
         val d = lifecycleScope.async(Dispatchers.IO) {
             val out = runCatching {
                 EmbeddedSubs.extract(uri, factory, progress = { f ->
                     if (castingTo.value != null) castNote.value = "Reading the subtitles inside the video… ${(f * 100).toInt()}%"
-                }, cancelled = { castingTo.value == null })
+                    if (!forCast) subSyncNote.value = "Reading the subtitle… ${(f * 100).toInt()}%"
+                }, cancelled = { forCast && castingTo.value == null })
             }.getOrElse { e ->
                 com.powersound.player.data.CrashLog.note(this@VideoActivity, "embedded subtitles", e)
                 emptyList()
@@ -876,7 +978,7 @@ class VideoActivity : ComponentActivity() {
                     castNote.value = "The phone needs to be on Wi-Fi to cast its videos"
                     return@launch
                 }
-                mime = (if (uri.scheme == "smb") android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(uri.path.orEmpty().substringAfterLast('.', "").lowercase())
+                mime = (if (com.powersound.player.net.Remote.isRemote(uri)) com.powersound.player.net.Remote.mime(uri)
                     else runCatching { contentResolver.getType(uri) }.getOrNull()) ?: "video/mp4"
             }
             castViaPhone.value = phone
@@ -887,7 +989,10 @@ class VideoActivity : ComponentActivity() {
             var active = -1L
             item.localConfiguration?.subtitleConfigurations.orEmpty().forEachIndexed { i, sub ->
                 if (sub.mimeType == MimeTypes.APPLICATION_TTML) return@forEachIndexed
-                val address = server.textUrl { subtitleAsVtt(sub.uri, site) } ?: return@forEachIndexed
+                val move = subDelayMs.intValue
+                val address = server.textUrl {
+                    subtitleAsVtt(sub.uri, site)?.let { if (move == 0) it else SubSync.shift(it.toString(Charsets.UTF_8), move).toByteArray(Charsets.UTF_8) }
+                } ?: return@forEachIndexed
                 val id = 1000L + i
                 tracks += com.google.android.gms.cast.MediaTrack.Builder(id, com.google.android.gms.cast.MediaTrack.TYPE_TEXT)
                     .setName(sub.label?.toString() ?: "Subtitles ${i + 1}")
@@ -922,7 +1027,8 @@ class VideoActivity : ComponentActivity() {
                 val phoneLang = p.currentTracks.groups.firstOrNull { it.type == C.TRACK_TYPE_TEXT && it.isSelected }
                     ?.let { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it).language } }
                 inside.orEmpty().forEachIndexed { i, t ->
-                    val address = server.textUrl { t.vtt.toByteArray(Charsets.UTF_8) } ?: return@forEachIndexed
+                    val move = subDelayMs.intValue
+                    val address = server.textUrl { SubSync.shift(t.vtt, move).toByteArray(Charsets.UTF_8) } ?: return@forEachIndexed
                     val id = 2000L + i
                     tracks += com.google.android.gms.cast.MediaTrack.Builder(id, com.google.android.gms.cast.MediaTrack.TYPE_TEXT)
                         .setName(t.label)
@@ -1065,10 +1171,10 @@ class VideoActivity : ComponentActivity() {
 
     private fun openForCast(id: Long): ServedFile? = runCatching {
         val uri = castFiles[id] ?: return null
-        com.powersound.player.net.Smb.resolve(this, uri)?.let { (server, path) ->
-            val ch = com.powersound.player.net.Smb.open(server, path)
-            val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(path.substringAfterLast('.', "").lowercase()) ?: "video/mp4"
-            return ServedFile(ch, ch.size(), mime) { ch.close() }
+        if (com.powersound.player.net.Remote.isRemote(uri)) {
+            // a shared folder / FTP / WebDAV video: read from its server
+            val ch = com.powersound.player.net.Remote.open(this, uri) ?: return null
+            return ServedFile(ch, ch.size(), com.powersound.player.net.Remote.mime(uri) ?: "video/mp4") { ch.close() }
         }
         val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return null
         val stream = java.io.FileInputStream(pfd.fileDescriptor)

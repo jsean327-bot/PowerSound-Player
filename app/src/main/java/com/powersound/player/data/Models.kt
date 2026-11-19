@@ -23,7 +23,10 @@ data class Song(
     /** Full path of the file (may be empty on some phones). */
     val path: String = "",
     /** True when the file has its own album artist tag ([albumArtist] is otherwise the track artist). */
-    val hasAlbumArtist: Boolean = false
+    val hasAlbumArtist: Boolean = false,
+    /** A song of a CUE sheet: where it starts and ends in the long file (0 / 0: the whole file). */
+    val startMs: Long = 0,
+    val endMs: Long = 0
 ) {
     /** File name without extension, for "Filename as title". */
     val fileName: String
@@ -32,7 +35,11 @@ data class Song(
     /** The phone's songs: their MediaStore entry. Network songs (negative id): their http… / smb://… address. */
     val uri: Uri
         get() = if (id < 0 && (path.startsWith("http") || path.startsWith("smb:"))) Uri.parse(path)
-            else ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+            else ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, CueSheets.fileId(id))
+
+    /** A song of a CUE sheet (a part of a long file). */
+    val isCue: Boolean
+        get() = CueSheets.isCue(id)
 
     val formatLabel: String
         get() = formatFromMime(mimeType)

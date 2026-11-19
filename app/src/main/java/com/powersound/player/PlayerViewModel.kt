@@ -1493,7 +1493,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 private const val LARGE_LIST = 500
 
 private fun Song.toMediaItem(): MediaItem =
-    MediaItem.Builder()
+    with(com.powersound.player.data.CueSheets) { MediaItem.Builder().clipTo(this@toMediaItem) }
         .setMediaId(id.toString())
         .setUri(uri)
         .setRequestMetadata(

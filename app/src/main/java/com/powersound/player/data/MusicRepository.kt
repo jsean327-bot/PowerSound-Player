@@ -107,7 +107,8 @@ object MusicRepository {
         }
         // Library → Network → Add to Library: songs of media servers and shared folders
         songs.addAll(com.powersound.player.net.NetLibrary.songs(context))
-        songs
+        // albums in one long file with a CUE sheet: their own songs instead of the long file
+        runCatching { CueSheets.expand(context, songs) }.getOrDefault(songs)
     }
 
     private fun clean(s: String?): String? = s?.trim()?.takeUnless { it.isEmpty() || it == "<unknown>" }

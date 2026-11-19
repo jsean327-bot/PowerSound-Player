@@ -98,10 +98,20 @@ class CastItems(private val context: Context, private val server: MediaServer) :
         val url: String
         val mime: String
         val web = local?.scheme == "http" || local?.scheme == "https"
-        if (songId != null && !(songId < 0 && web)) {
+        // a song played straight from Library → Network (shared folder, FTP, WebDAV): through the phone
+        val remoteId = if (songId == null && local != null && com.powersound.player.net.Remote.isRemote(local)) com.powersound.player.net.Remote.castId(local) else null
+        if (remoteId != null) {
+            url = server.songUrl(remoteId) ?: ""
+            mime = mediaItem.localConfiguration?.mimeType ?: com.powersound.player.net.Remote.mime(local!!) ?: "audio/mpeg"
+        } else if (songId != null && !(songId < 0 && web)) {
             // the phone's songs and shared-folder songs: through the phone's server
             url = server.songUrl(songId) ?: ""
-            mime = if (songId < 0) com.powersound.player.net.NetLibrary.song(context, songId)?.mimeType ?: "audio/mpeg" else mimeOf(songId)
+            val cue = com.powersound.player.data.CueSheets.parentOf(songId)
+            mime = when {
+                cue != null -> mimeOf(cue) // a CUE song: its long file
+                songId < 0 -> com.powersound.player.net.NetLibrary.song(context, songId)?.mimeType ?: "audio/mpeg"
+                else -> mimeOf(songId)
+            }
         } else {
             // a radio stream: the Chromecast fetches it straight from the internet
             url = local?.toString() ?: ""
@@ -120,6 +130,13 @@ class CastItems(private val context: Context, private val server: MediaServer) :
         custom.put("id", mediaItem.mediaId)
         local?.let { custom.put("uri", it.toString()) }
         m.artworkUri?.let { custom.put("art", it.toString()) }
+        // a CUE song: only its part of the long file
+        val clip = mediaItem.clippingConfiguration
+        val clipped = clip.startPositionMs > 0 || clip.endPositionMs != C.TIME_END_OF_SOURCE
+        if (clipped) {
+            custom.put("st", clip.startPositionMs)
+            if (clip.endPositionMs != C.TIME_END_OF_SOURCE) custom.put("en", clip.endPositionMs)
+        }
         val info = MediaInfo.Builder(mediaItem.mediaId.ifEmpty { url })
             .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
             .setContentType(mime)
@@ -127,7 +144,12 @@ class CastItems(private val context: Context, private val server: MediaServer) :
             .setMetadata(md)
             .setCustomData(custom)
             .build()
-        return MediaQueueItem.Builder(info).build()
+        val q = MediaQueueItem.Builder(info)
+        if (clipped) {
+            q.setStartTime(clip.startPositionMs / 1000.0)
+            if (clip.endPositionMs != C.TIME_END_OF_SOURCE) q.setPlaybackDuration((clip.endPositionMs - clip.startPositionMs) / 1000.0)
+        }
+        return q.build()
     }
 
     override fun toMediaItem(mediaQueueItem: MediaQueueItem): MediaItem {
@@ -136,7 +158,7 @@ class CastItems(private val context: Context, private val server: MediaServer) :
         val md = info?.metadata
         val id = custom?.optString("id")?.takeIf { it.isNotEmpty() } ?: info?.contentId ?: ""
         val uri = custom?.optString("uri")?.takeIf { it.isNotEmpty() }
-            ?: id.toLongOrNull()?.let { ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, it).toString() }
+            ?: id.toLongOrNull()?.let { ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, com.powersound.player.data.CueSheets.fileId(it)).toString() }
             ?: info?.contentUrl ?: info?.contentId ?: ""
         val meta = androidx.media3.common.MediaMetadata.Builder()
         md?.getString(com.google.android.gms.cast.MediaMetadata.KEY_TITLE)?.let { meta.setTitle(it) }
@@ -144,9 +166,14 @@ class CastItems(private val context: Context, private val server: MediaServer) :
         md?.getString(com.google.android.gms.cast.MediaMetadata.KEY_ALBUM_TITLE)?.let { meta.setAlbumTitle(it) }
         md?.getString(com.google.android.gms.cast.MediaMetadata.KEY_ALBUM_ARTIST)?.let { meta.setAlbumArtist(it) }
         custom?.optString("art")?.takeIf { it.isNotEmpty() }?.let { meta.setArtworkUri(Uri.parse(it)) }
+        val st = custom?.optLong("st", 0L) ?: 0L
+        val en = custom?.optLong("en", 0L) ?: 0L
+        val clip = if (st > 0 || en > 0) MediaItem.ClippingConfiguration.Builder().setStartPositionMs(st)
+            .apply { if (en > st) setEndPositionMs(en) }.build() else MediaItem.ClippingConfiguration.UNSET
         return MediaItem.Builder()
             .setMediaId(id)
             .setUri(uri)
+            .setClippingConfiguration(clip)
             .setMimeType(info?.contentType)
             .setMediaMetadata(meta.build())
             .build()

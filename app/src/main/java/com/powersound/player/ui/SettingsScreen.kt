@@ -2234,8 +2234,19 @@ private fun SettingsPage20(page: SettingsPage?, args: PageArgs) {
         "Direct decoder-to-output path: no Equalizer, no Tone, no effects, no Replay Gain, no resampling, no fades",
         st.perfectBitPerfect
     ) { v -> set { it.copy(perfectBitPerfect = v) } }
+    val usbStatus by com.powersound.player.audio.UsbBitPerfect.status.collectAsState()
+    if (android.os.Build.VERSION.SDK_INT >= 34 && st.perfectBitPerfect) {
+        SwitchRow(
+            "USB DAC at the song's own rate",
+            usbStatus ?: "With Perfect Bit Perfect on: a USB DAC gets each song alone, at its own rate and bits (44.1, 96, 192 kHz…), " +
+                "nothing resampled. Other apps' sounds are muted while it plays; the volume is the DAC's",
+            st.usbBitPerfect
+        ) { v -> set { it.copy(usbBitPerfect = v) } }
+    } else if (android.os.Build.VERSION.SDK_INT < 34) {
+        NoteBlock("USB DAC at the song's own rate needs Android 14 or later")
+    }
     NoteBlock("Android still mixes the sound for the Bluetooth codec or the speaker; use a USB DAC for the cleanest path")
-    RestoreRow { set { it.copy(perfectBitPerfect = d.perfectBitPerfect) } }
+    RestoreRow { set { it.copy(perfectBitPerfect = d.perfectBitPerfect, usbBitPerfect = d.usbBitPerfect) } }
     }
 }
 

@@ -154,8 +154,8 @@ class CarLibrary(private val context: Context) {
 
     /** The item the player gets: the same as the app's own queue items. */
     fun playable(s: Song): MediaItem {
-        val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, s.id)
-        return MediaItem.Builder()
+        val uri = s.uri
+        return with(com.powersound.player.data.CueSheets) { MediaItem.Builder().clipTo(s) }
             .setMediaId(s.id.toString())
             .setUri(uri)
             .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())

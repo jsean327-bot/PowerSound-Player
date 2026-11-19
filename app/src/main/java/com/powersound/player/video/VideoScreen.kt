@@ -153,6 +153,7 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Picture size button: fit, fill (crop), stretch, the video's real pixel size. */
@@ -257,6 +258,23 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
         player.addListener(l)
         onDispose { player.removeListener(l) }
     }
+    // Subtitles → Synchronization: the subtitle's own lines, shown moved
+    val movedLines = activity.subLines.value
+    val subDelay = activity.subDelayMs.intValue
+    var movedCues by remember(player) { mutableStateOf<List<Cue>>(emptyList()) }
+    LaunchedEffect(player, movedLines, subDelay) {
+        if (movedLines == null || subDelay == 0) return@LaunchedEffect
+        var last: List<SubSync.Line>? = null
+        while (true) {
+            val now = SubSync.at(movedLines, player.currentPosition, subDelay)
+            if (now != last) {
+                last = now
+                movedCues = now.map { Cue.Builder().setText(it.text).build() }
+            }
+            delay(40)
+        }
+    }
+    val shownCues = if (movedLines != null && subDelay != 0) movedCues else cues
     LaunchedEffect(player) {
         while (true) {
             position = player.currentPosition
@@ -489,7 +507,7 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                 if (inPip) sv.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * scale)
                 else sv.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, vp.subSize * scale)
                 sv.setBottomPaddingFraction(if (inPip) 0.02f else 0.02f + bottom / 100f)
-                sv.setCues(alignCues(cues, vp.subAlign))
+                sv.setCues(alignCues(shownCues, vp.subAlign))
             },
             modifier = Modifier
                 .align(Alignment.Center)
@@ -937,6 +955,7 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                         if (repeat == Player.REPEAT_MODE_ONE) add("Loop 1") else if (repeat == Player.REPEAT_MODE_ALL) add("Loop all")
                         if (shuffle) add("Shuffle")
                         if (activity.audioDelayMs.intValue != 0) add("Audio ${if (activity.audioDelayMs.intValue > 0) "+" else ""}${activity.audioDelayMs.intValue} ms")
+                        if (activity.subDelayMs.intValue != 0) add("Subtitles ${if (activity.subDelayMs.intValue > 0) "+" else ""}${activity.subDelayMs.intValue} ms")
                         if (zoom != 1f) add("Zoom ${(zoom * 100).roundToInt()}%")
                         if (aspect != 0) add(ASPECTS[aspect])
                     }
@@ -1019,9 +1038,16 @@ fun VideoScreen(activity: VideoActivity, onBack: () -> Unit) {
                     dialog = null
                     pickSubtitle.launch(arrayOf("*/*"))
                 }) { Text("Open subtitle file (.srt / .ass / .vtt)…") }
+                TextButton(onClick = { dialog = "subsearch" }) { Text("Search online (OpenSubtitles)…") }
+                TextButton(onClick = { dialog = "subsync" }) {
+                    val d = activity.subDelayMs.intValue
+                    Text(if (d == 0) "Synchronization…" else "Synchronization (${if (d > 0) "+" else ""}$d ms)…")
+                }
                 TextButton(onClick = { dialog = "display" }) { Text("Subtitle look (Display Settings → Text)…") }
             }
         )
+        "subsync" -> SubSyncDialog(activity, onDismiss = { dialog = null })
+        "subsearch" -> OnlineSubsDialog(activity, player, onAdded = { show(Icons.Rounded.Subtitles, "Subtitles added") }, onDismiss = { dialog = null })
         "decoder" -> ChoiceDialog(
             title = "Select decoder",
             choices = DECODER_NAMES.mapIndexed { i, (name, about) ->
@@ -1340,6 +1366,178 @@ private fun AudioDialog(activity: VideoActivity, player: ExoPlayer, tracks: Trac
         confirmButton = {
             TextButton(onClick = { if (page != 0) page = 0 else onDismiss() }) { Text(if (page != 0) "Back" else "Close") }
         }
+    )
+}
+
+/** Subtitles → Search online: OpenSubtitles.com, by the video's fingerprint and its name. */
+@OptIn(UnstableApi::class)
+@Composable
+private fun OnlineSubsDialog(activity: VideoActivity, player: ExoPlayer, onAdded: () -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val primary = MaterialTheme.colorScheme.primary
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val item = player.currentMediaItem
+    val uri = item?.localConfiguration?.uri
+    val fileName = remember(item) {
+        uri?.lastPathSegment?.substringAfterLast('/')?.takeIf { it.contains('.') } ?: item?.mediaMetadata?.title?.toString() ?: ""
+    }
+    val guess = remember(fileName) { OnlineSubs.guess(fileName) }
+    var query by remember { mutableStateOf(guess.first) }
+    var langs by remember { mutableStateOf(OnlineSubs.languages(context)) }
+    var account by remember { mutableStateOf(OnlineSubs.account(context)) }
+    var editAccount by remember { mutableStateOf(account.apiKey.isBlank()) }
+    var key by remember { mutableStateOf(account.apiKey) }
+    var user by remember { mutableStateOf(account.user) }
+    var pass by remember { mutableStateOf(account.password) }
+    var results by remember { mutableStateOf<List<OnlineSubs.Result>?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+    val fieldColors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+        focusedLabelColor = primary, unfocusedLabelColor = Color.White.copy(alpha = 0.6f)
+    )
+
+    fun search() {
+        busy = true
+        note = null
+        OnlineSubs.saveLanguages(context, langs)
+        scope.launch {
+            val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val hash = uri?.let { OnlineSubs.hash(context, it) }
+                    OnlineSubs.search(context, query, hash, guess.second, guess.third, langs)
+                }
+            }
+            busy = false
+            r.onSuccess { results = it; if (it.isEmpty()) note = "Nothing found. Try a shorter name, or another language" }
+            r.onFailure { note = it.message ?: "No connection" }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1B1B22),
+        title = { Text("Search subtitles online", color = Color.White) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+                if (editAccount) {
+                    Text(
+                        "OpenSubtitles gives you a free API key: sign up on opensubtitles.com, then open your profile → API consumers → " +
+                            "New consumer, and copy its key here. Your user and password (optional) allow 20 downloads a day instead of 5.",
+                        color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(key, { key = it }, label = { Text("API key") }, singleLine = true, colors = fieldColors, modifier = Modifier.fillMaxWidth())
+                    androidx.compose.material3.OutlinedTextField(user, { user = it }, label = { Text("User (optional)") }, singleLine = true, colors = fieldColors, modifier = Modifier.fillMaxWidth())
+                    androidx.compose.material3.OutlinedTextField(
+                        pass, { pass = it }, label = { Text("Password (optional)") }, singleLine = true, colors = fieldColors,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextButton(onClick = {
+                        account = OnlineSubs.Account(key, user, pass)
+                        OnlineSubs.saveAccount(context, account)
+                        editAccount = key.isBlank()
+                    }) { Text("Save") }
+                } else {
+                    androidx.compose.material3.OutlinedTextField(query, { query = it }, label = { Text("Name") }, singleLine = true, colors = fieldColors, modifier = Modifier.fillMaxWidth())
+                    if (guess.second != null && guess.third != null) {
+                        Text("Season ${guess.second}, episode ${guess.third}", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                    }
+                    androidx.compose.material3.OutlinedTextField(langs, { langs = it }, label = { Text("Languages (ar,en,fr…)") }, singleLine = true, colors = fieldColors, modifier = Modifier.fillMaxWidth())
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { search() }, enabled = !busy) { Text("Search") }
+                        if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { editAccount = true }) { Text("Account") }
+                    }
+                    note?.let { Text(it, color = Color(0xFFFFB74D), fontSize = 13.sp) }
+                    results?.forEach { r ->
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable(enabled = !busy) {
+                                    busy = true
+                                    note = "Downloading…"
+                                    scope.launch {
+                                        val got = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            runCatching { OnlineSubs.download(context, r) }
+                                        }
+                                        busy = false
+                                        got.onSuccess { (file, left) ->
+                                            activity.addSubtitle(Uri.fromFile(file), "${r.language.uppercase()} • ${r.name}")
+                                            onAdded()
+                                            if (left != null && left <= 2) {
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    com.powersound.player.data.Lang.tr("Downloads left today: $left"),
+                                                    android.widget.Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                            onDismiss()
+                                        }
+                                        got.onFailure { note = it.message ?: "No connection" }
+                                    }
+                                }
+                                .padding(horizontal = 6.dp, vertical = 8.dp)
+                        ) {
+                            Text(r.name, color = Color.White, fontSize = 14.sp, maxLines = 2)
+                            val tags = listOfNotNull(
+                                r.language.uppercase(),
+                                if (r.exact) "Made for this file" else null,
+                                "${r.downloads} downloads",
+                                if (r.hearingImpaired) "Hearing impaired" else null,
+                                if (r.machine) "Machine translated" else null
+                            )
+                            Text(tags.joinToString(" • "), color = if (r.exact) primary else Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
+}
+
+/** Subtitles → Synchronization: + shows the subtitle later, − earlier. */
+@Composable
+private fun SubSyncDialog(activity: VideoActivity, onDismiss: () -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+    val d = activity.subDelayMs.intValue
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1B1B22),
+        title = { Text("Synchronization", color = Color.White) },
+        text = {
+            Column {
+                Text(
+                    "Move the subtitle when it doesn't match the speech. + shows it later, − earlier.",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 13.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(-1000, -100).forEach { step -> SmallButton("$step") { activity.setSubDelay(d + step) } }
+                    Text(
+                        "${if (d > 0) "+" else ""}$d ms",
+                        color = primary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                    listOf(100, 1000).forEach { step -> SmallButton("+$step") { activity.setSubDelay(d + step) } }
+                }
+                activity.subSyncNote.value?.let { note ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(note, color = Color(0xFFFFB74D), fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = { activity.setSubDelay(0) }) { Text("Reset") }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
     )
 }
 

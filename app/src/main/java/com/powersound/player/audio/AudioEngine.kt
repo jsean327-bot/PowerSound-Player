@@ -68,6 +68,10 @@ object AudioEngine {
     /** "Perfect Bit Perfect": no DSP, no resampling, no fades. */
     @Volatile var bitPerfect = false
         private set
+    /** Perfect Bit Perfect sends the sound to a USB DAC alone, at the song's rate ([UsbBitPerfect], Android 14+). */
+    @Volatile var usbExclusive = true
+    /** Goes up when the output path should be chosen again mid-song (output device, Bit Perfect, USB). */
+    @Volatile var outputVersion = 0
     /** "No Equ/Tone" for the current output. */
     @Volatile var eqBlocked = false
         private set

@@ -157,8 +157,8 @@ object Smb {
         SmbChannel(f, f.fileInformation.standardInformation.endOfFile)
     }
 
-    private val AUDIO = setOf("mp3", "flac", "m4a", "aac", "ogg", "oga", "opus", "wav", "wma", "alac", "ape", "wv", "aif", "aiff", "mka", "dsf", "dff")
-    private val VIDEO = setOf("mp4", "mkv", "avi", "mov", "webm", "m4v", "ts", "m2ts", "3gp", "wmv", "flv", "mpg", "mpeg")
+    val AUDIO = setOf("mp3", "flac", "m4a", "aac", "ogg", "oga", "opus", "wav", "wma", "alac", "ape", "wv", "aif", "aiff", "mka", "dsf", "dff")
+    val VIDEO = setOf("mp4", "mkv", "avi", "mov", "webm", "m4v", "ts", "m2ts", "3gp", "wmv", "flv", "mpg", "mpeg")
 
     /** A folder of the share as the Network screen's items: folders, songs and videos (other files are left out). */
     fun items(s: SmbServer, path: String): List<DlnaItem> = list(s, path).mapNotNull { e ->
@@ -208,13 +208,13 @@ object Smb {
 }
 
 /** An SMB file read like a local one (position, size, read), as the phone's media server and ExoPlayer need it. */
-class SmbChannel(private val file: com.hierynomus.smbj.share.File, private val length: Long) : SeekableByteChannel {
+class SmbChannel(private val file: com.hierynomus.smbj.share.File, private val length: Long) : RemoteFile {
     private var pos = 0L
     private var open = true
     private val chunk = ByteArray(64 * 1024)
 
     /** Reads up to [len] bytes at the current position into [dst]; -1 at the end. */
-    fun read(dst: ByteArray, off: Int, len: Int): Int {
+    override fun read(dst: ByteArray, off: Int, len: Int): Int {
         if (pos >= length) return -1
         val n = file.read(dst, pos, off, minOf(len, 64 * 1024, (length - pos).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
         if (n > 0) pos += n

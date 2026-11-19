@@ -1584,3 +1584,68 @@ This Windows account can't sign in from the network (an account without a passwo
 Computer not found. Use its IP address (e.g. 192.168.1.10)	ما لقينا الكمبيوتر. استخدم عنوان IP حقه (مثل 192.168.1.10)
 The computer didn't answer. Is it on, on the same Wi-Fi, with file sharing turned on?	الكمبيوتر ما رد. هل هو شغّال، وعلى نفس الواي فاي، ومشاركة الملفات مفعّلة؟
 Reading the subtitles inside the video… {n}%	جارٍ قراءة الترجمة اللي داخل الفيديو… {n}%
+USB DAC at the song's own rate	DAC عبر USB بتردد الأغنية الأصلي
+With Perfect Bit Perfect on: a USB DAC gets each song alone, at its own rate and bits (44.1, 96, 192 kHz…), nothing resampled. Other apps' sounds are muted while it plays; the volume is the DAC's	لما يكون Perfect Bit Perfect شغّال: الـDAC اللي على USB ياخذ كل أغنية لحالها بترددها وعدد بتاتها الأصلي (44.1، 96، 192 kHz…) بدون أي تحويل. أصوات التطبيقات الثانية تنكتم وقت التشغيل، والصوت يتحكم فيه الـDAC
+USB DAC at the song's own rate needs Android 14 or later	تشغيل الـDAC بتردد الأغنية الأصلي يحتاج أندرويد 14 أو أحدث
+USB DAC	DAC عبر USB
+USB DAC bit-perfect: {t}	DAC عبر USB بدون أي تغيير: {t}
+USB DAC: Android offers no bit-perfect output for it	DAC عبر USB: أندرويد ما يوفّر له إخراج Bit Perfect
+USB DAC doesn't take {t} (it takes {t}): normal output	الـDAC ما يقبل {t} (يقبل {t}): الإخراج العادي
+USB DAC: Android refused bit-perfect output ({t}), it mixes the sound as usual	DAC عبر USB: أندرويد رفض الإخراج Bit Perfect ({t})، ويخلط الصوت مثل العادة
+USB DAC: {t}	DAC عبر USB: {t}
+Songs of a CUE sheet can't be edited here (edit the .cue file)	أغاني ملف CUE ما تتعدّل هنا (عدّل ملف ‎.cue)
+Songs of a CUE sheet can't be deleted one by one (they are parts of one file)	أغاني ملف CUE ما تنحذف وحدة وحدة (كلها أجزاء من ملف واحد)
+Synchronization…	المزامنة…
+Synchronization ({t} ms)…	المزامنة ({t} ms)…
+Move the subtitle when it doesn't match the speech. + shows it later, − earlier.	حرّك الترجمة إذا ما كانت مطابقة للكلام. + تأخّرها، − تقدّمها.
+Turn a subtitle on first	شغّل ترجمة أول
+Reading the subtitle…	جارٍ قراءة الترجمة…
+Reading the subtitle… {n}%	جارٍ قراءة الترجمة… {n}%
+This subtitle is pictures, it can't be moved	هذي الترجمة صور، ما تنحرك
+This subtitle can't be moved (only subtitle files and text subtitles inside MKV)	هذي الترجمة ما تنحرك (بس ملفات الترجمة والترجمة النصية اللي داخل MKV)
+Subtitles {t} ms	الترجمة {t} ms
+Search online (OpenSubtitles)…	البحث في النت (OpenSubtitles)…
+Search subtitles online	البحث عن ترجمة في النت
+OpenSubtitles gives you a free API key: sign up on opensubtitles.com, then open your profile → API consumers → New consumer, and copy its key here. Your user and password (optional) allow 20 downloads a day instead of 5.	OpenSubtitles يعطيك مفتاح API مجاني: سجّل في opensubtitles.com، وبعدين افتح ملفك الشخصي ← API consumers ← New consumer، وانسخ المفتاح هنا. اسم المستخدم وكلمة المرور (اختياري) يعطونك 20 تنزيل باليوم بدل 5.
+API key	مفتاح API
+User (optional)	المستخدم (اختياري)
+Password (optional)	كلمة المرور (اختياري)
+Season {n}, episode {n}	الموسم {n}، الحلقة {n}
+Languages (ar,en,fr…)	اللغات (ar,en,fr…)
+Account	الحساب
+Nothing found. Try a shorter name, or another language	ما لقينا شي. جرّب اسم أقصر أو لغة ثانية
+No connection	ما فيه اتصال
+Downloading…	جارٍ التنزيل…
+Made for this file	مخصّصة لهذا الملف
+{n} downloads	{n} تنزيل
+Hearing impaired	لضعاف السمع
+Machine translated	ترجمة آلية
+Downloads left today: {n}	التنزيلات الباقية اليوم: {n}
+Add your OpenSubtitles API key first	أضف مفتاح OpenSubtitles API أول
+Wrong OpenSubtitles user name or password	اسم مستخدم أو كلمة مرور OpenSubtitles غلط
+OpenSubtitles didn't accept the API key	OpenSubtitles ما قبل مفتاح API
+Today's downloads are used up (5 a day without signing in, 20 with a free account)	خلصت تنزيلات اليوم (5 باليوم بدون تسجيل دخول، 20 مع حساب مجاني)
+Too many searches: wait a few seconds	بحث كثير: انتظر كم ثانية
+OpenSubtitles answered {n}	OpenSubtitles رد بـ {n}
+No download link	ما فيه رابط تنزيل
+The subtitle couldn't be downloaded ({n})	ما قدرنا ننزّل الترجمة ({n})
+FTP and WebDAV servers	سيرفرات FTP و WebDAV
+Add FTP / WebDAV server	إضافة سيرفر FTP / WebDAV
+The FTP server's address, like 192.168.1.5:2121/Music (a NAS, a router with a disk, a computer or a phone's "FTP server" app). Leave the user empty to sign in as a guest.	عنوان سيرفر FTP، مثل 192.168.1.5:2121/Music (NAS، أو راوتر فيه هارديسك، أو كمبيوتر، أو تطبيق "FTP server" على جوال). خلّ المستخدم فاضي للدخول كضيف.
+The WebDAV folder's address, like https://nas.local/dav/Music or http://192.168.1.5:8080/ (NAS, Nextcloud: …/remote.php/dav/files/USER/, computers' and phones' WebDAV servers).	عنوان مجلد WebDAV، مثل https://nas.local/dav/Music أو http://192.168.1.5:8080/ (NAS، أو Nextcloud: ‏…/remote.php/dav/files/USER/، أو سيرفرات WebDAV على الكمبيوتر والجوال).
+Address  (192.168.1.5:2121/Music)	العنوان  (192.168.1.5:2121/Music)
+Address  (https://nas.local/dav)	العنوان  (https://nas.local/dav)
+Write the server's address, like 192.168.1.5:2121	اكتب عنوان السيرفر، مثل 192.168.1.5:2121
+It is only taken out of PowerSound. Nothing changes on the server.	تنشال من PowerSound بس. ما يتغير شي على السيرفر.
+Server not found. Use its IP address (e.g. 192.168.1.10)	ما لقينا السيرفر. استخدم عنوان IP حقه (مثل 192.168.1.10)
+The server's https certificate isn't trusted by Android (a self-made certificate?). Try http:// on the home network	أندرويد ما يثق في شهادة https حق السيرفر (يمكن شهادة مسوّية يدوي؟). جرّب http://‎ على شبكة البيت
+The server didn't answer. Is it on, on the same Wi-Fi, and is the port right?	السيرفر ما رد. هل هو شغّال وعلى نفس الواي فاي، والمنفذ (Port) صح؟
+There is no such folder on the server	ما فيه مجلد بهذا الاسم على السيرفر
+This address isn't a WebDAV folder	هذا العنوان مو مجلد WebDAV
+The server answered {n}	السيرفر رد بـ {n}
+The server sends this folder elsewhere: write its full address	السيرفر يحوّل هذا المجلد لمكان ثاني: اكتب عنوانه كامل
+Not found on the FTP server: {t}	مو موجود على سيرفر FTP: {t}
+The FTP server can't start a file in the middle	سيرفر FTP ما يقدر يبدأ الملف من النص
+The FTP server closed the connection	سيرفر FTP قفل الاتصال
+Not an FTP server	هذا مو سيرفر FTP
+Not a web server	هذا مو سيرفر ويب
